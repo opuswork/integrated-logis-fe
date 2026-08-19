@@ -33,8 +33,19 @@ export function AuthGuard({
     }
 
     if (!allowedRoles.includes(current.role)) {
-      router.replace(getHomePathForRole(current.role));
-      return;
+      // Factory-G(인사장 승인)는 관리자 주문목록에서 인사장을 처리합니다.
+      const factoryGreetingOnAdmin =
+        current.role === "factory" &&
+        current.canApproveGreeting === true &&
+        allowedRoles.includes("admin");
+      if (!factoryGreetingOnAdmin) {
+        router.replace(
+          getHomePathForRole(current.role, {
+            canApproveGreeting: current.canApproveGreeting,
+          }),
+        );
+        return;
+      }
     }
 
     setUser(current);

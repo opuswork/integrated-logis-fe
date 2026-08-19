@@ -1,132 +1,109 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode, type ClipboardEvent, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
-import { Button } from "@/components/ui/button";
-import { Dropdown } from "@/components/ui/dropdown";
-import { Input } from "@/components/ui/input";
-import { Table, type TableColumn } from "@/components/ui/table";
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
+import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import {
+  getAuthUser,
+  type AdminRegion,
+  type AuthUser,
+} from "@/lib/auth";
+import {
+  canEditOrderStatus,
+  memberFacingStatusLabel,
+  type DeliveryOrderStatus,
+} from "@/lib/order-delivery";
+import {
+  parseBranchStoreFromNotes,
   parseOrderDateFromNotes,
   parseOrdererFromNotes,
-  parseOrdererPhoneFromNotes,
   parseOrderTypeFromNotes,
 } from "@/lib/order-notes";
 import { cn } from "@/lib/utils";
-import {
-  type DeliveryOrderStatus,
-  canEditOrderStatus,
-  isDispatchWaitingStatus,
-  isMemberShippingStatus,
-  isWaitingFactoryLoadStatus,
-  memberFacingStatusLabel,
-  resolveAdminDeliveryManageLabel,
-} from "@/lib/order-delivery";
 
-type OrderStatusCode = DeliveryOrderStatus;
-
-type DeliveryStatusFilter =
-  | "all"
-  | "PLACED"
-  | "PREPARED"
-  | "SHIPPING"
-  | "RECEIVED";
-
-type AdminManageFilter =
-  | "all"
-  | "관리자승인"
-  | "인수증수령"
-  | "출력완료";
+type PackagingWorker = "STORE" | "FACTORY" | null;
 
 type AdminOrderRow = {
-  [key: string]: string | number;
   id: number;
   orderNumber: string;
   name: string;
-  phone: string;
   type: string;
-  status: OrderStatusCode;
+  status: DeliveryOrderStatus;
   statusLabel: string;
-  deliveryStatusLabel: string;
-  productCount: number;
-  summary: string;
   orderDate: string;
+  storeRegion: AdminRegion | null;
+  packagingWorker: PackagingWorker;
+  orderConfirmedAt: string | null;
+  orderConfirmedBy: string | null;
+  paymentDone: boolean;
+  paymentAuthor: string | null;
+  greetingDone: boolean;
+  greetingCount: number;
+  slipDone: boolean;
+  slipAuthor: string | null;
+  readyForShipment: boolean;
+  fulfillmentType: string | null;
 };
 
-const DELIVERY_STATUS_FILTER_OPTIONS = [
-  { value: "all", label: "전체" },
-  { value: "PLACED", label: "접수완료" },
-  { value: "PREPARED", label: "발송대기" },
-  { value: "SHIPPING", label: "배송중" },
-  { value: "RECEIVED", label: "배송완료" },
-] as const;
+type DraftState = {
+  worker: "STORE" | "FACTORY" | "";
+  paymentDone: "Y" | "N";
+  paymentAuthor: string;
+  greetingDone: "Y" | "N";
+  slipDone: "Y" | "N";
+  slipAuthor: string;
+};
 
-const ADMIN_MANAGE_FILTER_OPTIONS = [
-  { value: "all", label: "전체" },
-  { value: "관리자승인", label: "관리자승인" },
-  { value: "인수증수령", label: "인수증수령" },
-  { value: "출력완료", label: "출력완료" },
-] as const;
-
-const dateInputClassName =
-  "min-h-9 w-full cursor-pointer rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-2 text-base text-ink [font-variant-ligatures:none] [font-variant-numeric:tabular-nums] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
-
-function openDatePicker(input: HTMLInputElement) {
-  try {
-    input.showPicker?.();
-  } catch {
-    // showPicker can throw if the input is not user-activated.
-  }
+function regionFromNotes(notes?: string | null): AdminRegion | null {
+  const branch = parseBranchStoreFromNotes(notes);
+  if (branch.includes("남부")) return "NAMBU";
+  if (branch.includes("중부")) return "JUNGBU";
+  if (branch.includes("서부")) return "SEOBU";
+  return null;
 }
 
-/** Block typing/paste; dates are filled via the calendar UI only.
- *  Avoid readOnly — Chrome hides the calendar icon when it is set. */
-function datePickerOnlyProps() {
-  return {
-    onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Tab" || event.key === "Escape") {
-        return;
-      }
-      event.preventDefault();
-    },
-    onPaste: (event: ClipboardEvent<HTMLInputElement>) => {
-      event.preventDefault();
-    },
-    onClick: (event: MouseEvent<HTMLInputElement>) => {
-      openDatePicker(event.currentTarget);
-    },
-  };
+function regionLabel(region: AdminRegion | null) {
+  if (region === "NAMBU") return "남부";
+  if (region === "JUNGBU") return "중부";
+  if (region === "SEOBU") return "서부";
+  return "—";
 }
 
-function formatOrderDate(value: string) {
-  return value.slice(0, 10);
+function regionClass(region: AdminRegion | null) {
+  if (region === "NAMBU") return "bg-[#dbeafe] text-[#1d4ed8]";
+  if (region === "JUNGBU") return "bg-[#ede9fe] text-[#6d28d9]";
+  if (region === "SEOBU") return "bg-[#dcfce7] text-[#15803d]";
+  return "bg-[#f1f5f9] text-[#64748b]";
 }
 
-function formatFulfillmentType(type?: string | null, notes?: string | null) {
-  const fromNotes = parseOrderTypeFromNotes(notes);
-  if (fromNotes !== "택배" || notes) {
-    return fromNotes;
-  }
-
-  if (type === "PICKUP") {
-    return "픽업";
-  }
-  return "택배";
+function statusChipClass(status: DeliveryOrderStatus) {
+  if (status === "CANCELLED") return "bg-[#fee2e2] text-[#b91c1c]";
+  if (status === "PRINTING_COMPLETE") return "bg-[#e0e7ff] text-[#3730a3]";
+  if (status === "SHIPPING" || status === "RECEIVED")
+    return "bg-[#fce7f3] text-[#9d174d]";
+  if (status === "PREPARED" || status === "LOAD_NOTIFIED")
+    return "bg-[#fef3c7] text-[#92400e]";
+  return "bg-[#f8fafc] text-ink border border-[#cbd5e1]";
 }
 
-function buildSummary(
-  items: Array<{ productName: string; quantity: number }> | undefined,
-) {
-  if (!items || items.length === 0) {
-    return "-";
-  }
+function isParcelType(type: string, fulfillmentType: string | null) {
+  return type.startsWith("택배") || fulfillmentType === "PARCEL";
+}
 
-  const [first, ...rest] = items;
-  const head = `${first.productName} ${first.quantity}개`;
-  return rest.length > 0 ? `${head} 외 ${rest.length}건` : head;
+function canMutateRow(user: AuthUser | null, row: AdminOrderRow) {
+  if (!user || user.role !== "admin") return false;
+  if (user.isSuperAdmin || !user.adminRegion) return true;
+  if (!row.storeRegion) return true;
+  return row.storeRegion === user.adminRegion;
 }
 
 function Panel({
@@ -137,149 +114,44 @@ function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("min-w-0 rounded-lg border border-line bg-panel p-3.5", className)}>
+    <section
+      className={cn(
+        "min-w-0 rounded-lg border border-line bg-panel p-3.5",
+        className,
+      )}
+    >
       {children}
     </section>
   );
 }
 
-function PeriodInputs({
-  startDate,
-  endDate,
-  onStartDateChange,
-  onEndDateChange,
+function CellBtn({
+  children,
+  disabled,
+  onClick,
+  variant = "confirm",
 }: {
-  startDate: string;
-  endDate: string;
-  onStartDateChange: (value: string) => void;
-  onEndDateChange: (value: string) => void;
+  children: ReactNode;
+  disabled?: boolean;
+  onClick?: () => void;
+  variant?: "confirm" | "ghost";
 }) {
   return (
-    <div>
-      <label className="mb-1.5 block text-2xl font-bold text-ink">기간</label>
-      <div className="flex min-h-9 items-center gap-2">
-        <input
-          type="date"
-          value={startDate}
-          onChange={(event) => onStartDateChange(event.target.value)}
-          className={dateInputClassName}
-          {...datePickerOnlyProps()}
-        />
-        <span className="shrink-0 text-lg text-[#64748b]">~</span>
-        <input
-          type="date"
-          value={endDate}
-          onChange={(event) => onEndDateChange(event.target.value)}
-          className={dateInputClassName}
-          {...datePickerOnlyProps()}
-        />
-      </div>
-    </div>
-  );
-}
-
-function filterOrders({
-  orders,
-  startDate,
-  endDate,
-  deliveryStatus,
-  adminManage,
-  keyword,
-}: {
-  orders: AdminOrderRow[];
-  startDate: string;
-  endDate: string;
-  deliveryStatus: DeliveryStatusFilter;
-  adminManage: AdminManageFilter;
-  keyword: string;
-}) {
-  const normalizedKeyword = keyword.trim().toLowerCase();
-  const keywordDigits = normalizedKeyword.replaceAll("-", "");
-
-  return orders.filter((order) => {
-    const matchesDeliveryStatus =
-      deliveryStatus === "all" ||
-      (deliveryStatus === "RECEIVED"
-        ? order.status === "RECEIVED" || order.status === "PRINTING_COMPLETE"
-        : deliveryStatus === "PLACED"
-          ? order.status === "PLACED" || isWaitingFactoryLoadStatus(order.status)
-          : deliveryStatus === "PREPARED"
-            ? isDispatchWaitingStatus(order.status)
-            : deliveryStatus === "SHIPPING"
-              ? isMemberShippingStatus(order.status)
-              : order.status === deliveryStatus);
-
-    const matchesAdminManage =
-      adminManage === "all" || order.deliveryStatusLabel === adminManage;
-
-    const matchesDate =
-      (!startDate || order.orderDate >= startDate) &&
-      (!endDate || order.orderDate <= endDate);
-    const matchesKeyword =
-      normalizedKeyword.length === 0 ||
-      order.orderNumber.toLowerCase().includes(normalizedKeyword) ||
-      order.name.toLowerCase().includes(normalizedKeyword) ||
-      order.phone.replaceAll("-", "").includes(keywordDigits);
-
-    return (
-      matchesDeliveryStatus &&
-      matchesAdminManage &&
-      matchesDate &&
-      matchesKeyword
-    );
-  });
-}
-
-function MobileOrderCard({
-  order,
-  onView,
-  onEdit,
-}: {
-  order: AdminOrderRow;
-  onView: () => void;
-  onEdit?: () => void;
-}) {
-  const editable = canEditOrderStatus(order.status);
-
-  return (
-    <article className="rounded-xl border border-[#d8e0ea] bg-white px-3.5 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-lg font-bold text-ink">
-            {editable && onEdit ? (
-              <button
-                type="button"
-                className="text-left text-brand underline-offset-2 hover:underline"
-                onClick={onEdit}
-              >
-                {order.orderNumber}
-              </button>
-            ) : (
-              order.orderNumber
-            )}
-          </p>
-          <p className="mt-0.5 text-lg font-bold text-ink">
-            {order.name} · {order.type}
-          </p>
-          <p className="mt-0.5 text-base text-[#64748b]">{order.summary}</p>
-          <p className="mt-1 text-base text-[#64748b]">
-            {order.orderDate} · {order.statusLabel}
-            {order.deliveryStatusLabel !== "-"
-              ? ` · ${order.deliveryStatusLabel}`
-              : ""}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 border-[#93c5fd] bg-[#eff6ff] text-base text-brand hover:bg-[#dbeafe]"
-          onClick={onView}
-        >
-          보기
-        </Button>
-      </div>
-    </article>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors",
+        variant === "confirm" &&
+          "bg-[#2563eb] text-white hover:bg-[#1d4ed8] disabled:bg-[#cbd5e1] disabled:text-[#64748b]",
+        variant === "ghost" &&
+          "border border-[#cbd5e1] bg-white text-ink hover:bg-soft disabled:opacity-40",
+        disabled && "cursor-not-allowed",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -290,369 +162,672 @@ export function AdminOrderList({
   onNewOrder: () => void;
   onEditOrder?: (orderNumber: string) => void;
 }) {
+  const authUser = getAuthUser();
+  const canApproveGreeting = authUser?.canApproveGreeting === true;
+
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
+  const [drafts, setDrafts] = useState<Record<number, DraftState>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [deliveryStatusFilter, setDeliveryStatusFilter] =
-    useState<DeliveryStatusFilter>("all");
-  const [adminManageFilter, setAdminManageFilter] =
-    useState<AdminManageFilter>("all");
+  const [actionError, setActionError] = useState("");
+  const [regionFilter, setRegionFilter] = useState<"all" | AdminRegion>("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [orderDate, setOrderDate] = useState("");
   const [keyword, setKeyword] = useState("");
   const [viewingOrderNumber, setViewingOrderNumber] = useState<string | null>(
     null,
   );
 
-  const loadOrders = async (silent = false) => {
-    if (!silent) {
-      setIsLoading(true);
-      setError("");
-    }
+  const mapApiOrder = useCallback(
+    (order: {
+      id: number;
+      orderNumber: string;
+      status: DeliveryOrderStatus;
+      createdAt: string;
+      notes?: string | null;
+      storeRegion?: AdminRegion | null;
+      packagingWorker?: PackagingWorker;
+      orderConfirmedAt?: string | null;
+      orderConfirmedBy?: string | null;
+      paymentDone?: boolean;
+      paymentAuthor?: string | null;
+      greetingDone?: boolean;
+      slipDone?: boolean;
+      slipAuthor?: string | null;
+      readyForShipment?: boolean;
+      items?: unknown[];
+      greetingForms?: unknown[];
+      shipment?: { fulfillmentType?: string | null } | null;
+      user?: { fullname?: string | null } | null;
+    }): AdminOrderRow => {
+      const type = parseOrderTypeFromNotes(order.notes);
+      return {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        name:
+          parseOrdererFromNotes(order.notes) || order.user?.fullname || "-",
+        type,
+        status: order.status,
+        statusLabel:
+          order.orderConfirmedAt || order.status !== "PLACED"
+            ? memberFacingStatusLabel(order.status)
+            : "접수",
+        orderDate:
+          parseOrderDateFromNotes(order.notes) ||
+          order.createdAt.slice(0, 10),
+        storeRegion: order.storeRegion ?? regionFromNotes(order.notes),
+        packagingWorker: order.packagingWorker ?? null,
+        orderConfirmedAt: order.orderConfirmedAt ?? null,
+        orderConfirmedBy: order.orderConfirmedBy ?? null,
+        paymentDone: order.paymentDone === true,
+        paymentAuthor: order.paymentAuthor ?? null,
+        greetingDone: order.greetingDone === true,
+        greetingCount: order.greetingForms?.length ?? 0,
+        slipDone: order.slipDone === true,
+        slipAuthor: order.slipAuthor ?? null,
+        readyForShipment: order.readyForShipment === true,
+        fulfillmentType: order.shipment?.fulfillmentType ?? null,
+      };
+    },
+    [],
+  );
 
-    try {
-      const response = await apiFetch("/api/orders");
-      const data = (await response.json()) as
-        | Array<{
-            id: number;
-            orderNumber: string;
-            status: OrderStatusCode;
-            createdAt: string;
-            notes?: string | null;
-            items?: Array<{ productName: string; quantity: number }>;
-            shipment?: {
-              fulfillmentType?: string | null;
-              shippedAt?: string | null;
-              deliveredAt?: string | null;
-            } | null;
-            user?: {
-              fullname?: string | null;
-              phone?: string | null;
-            } | null;
-          }>
-        | { message?: string };
-
-      if (!response.ok || !Array.isArray(data)) {
+  const loadOrders = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setIsLoading(true);
+        setError("");
+      }
+      try {
+        const response = await apiFetch("/api/orders");
+        const data = (await response.json()) as unknown;
+        if (!response.ok || !Array.isArray(data)) {
+          if (!silent) {
+            setError("주문 목록을 불러오지 못했습니다.");
+            setOrders([]);
+          }
+          return;
+        }
+        const rows = (data as Parameters<typeof mapApiOrder>[0][])
+          .filter((order) => order.status !== "CANCELLED")
+          .map(mapApiOrder);
+        setOrders(rows);
+        setDrafts((prev) => {
+          const next = { ...prev };
+          for (const row of rows) {
+            if (!next[row.id]) {
+              next[row.id] = {
+                worker: row.packagingWorker ?? "",
+                paymentDone: row.paymentDone ? "Y" : "N",
+                paymentAuthor: row.paymentAuthor ?? "",
+                greetingDone: row.greetingDone ? "Y" : "N",
+                slipDone: row.slipDone ? "Y" : "N",
+                slipAuthor: row.slipAuthor ?? "",
+              };
+            }
+          }
+          return next;
+        });
+      } catch {
         if (!silent) {
-          setError(
-            !Array.isArray(data) && data.message
-              ? data.message
-              : "주문 목록을 불러오지 못했습니다.",
-          );
+          setError("주문 목록을 불러오지 못했습니다.");
           setOrders([]);
         }
-        return;
+      } finally {
+        if (!silent) setIsLoading(false);
       }
-
-      setOrders(
-        data
-          .filter((order) => order.status !== "CANCELLED")
-          .map((order) => {
-          const status = order.status;
-          const ordererName =
-            parseOrdererFromNotes(order.notes) ||
-            order.user?.fullname ||
-            "-";
-          const ordererPhone =
-            parseOrdererPhoneFromNotes(order.notes) ||
-            order.user?.phone ||
-            "";
-          const orderDateFromNotes = parseOrderDateFromNotes(order.notes);
-
-          return {
-            id: order.id,
-            orderNumber: order.orderNumber,
-            name: ordererName,
-            phone: ordererPhone,
-            type: formatFulfillmentType(
-              order.shipment?.fulfillmentType,
-              order.notes,
-            ),
-            status,
-            statusLabel: memberFacingStatusLabel(status),
-            deliveryStatusLabel: resolveAdminDeliveryManageLabel({
-              status,
-              deliveredAt: order.shipment?.deliveredAt,
-            }),
-            productCount: order.items?.length ?? 0,
-            summary: buildSummary(order.items),
-            orderDate: orderDateFromNotes || formatOrderDate(order.createdAt),
-          };
-        }),
-      );
-    } catch {
-      if (!silent) {
-        setError("주문 목록을 불러오지 못했습니다.");
-        setOrders([]);
-      }
-    } finally {
-      if (!silent) {
-        setIsLoading(false);
-      }
-    }
-  };
+    },
+    [mapApiOrder],
+  );
 
   useEffect(() => {
     void loadOrders();
-  }, []);
+  }, [loadOrders]);
 
   useEffect(() => {
-    if (viewingOrderNumber) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      void loadOrders(true);
-    }, 4000);
+    if (viewingOrderNumber) return;
+    const timer = window.setInterval(() => void loadOrders(true), 5000);
     return () => window.clearInterval(timer);
-  }, [viewingOrderNumber]);
+  }, [viewingOrderNumber, loadOrders]);
 
-  const filteredOrders = useMemo(
-    () =>
-      filterOrders({
-        orders,
-        startDate,
-        endDate,
-        deliveryStatus: deliveryStatusFilter,
-        adminManage: adminManageFilter,
-        keyword,
-      }),
-    [
-      orders,
-      startDate,
-      endDate,
-      deliveryStatusFilter,
-      adminManageFilter,
-      keyword,
-    ],
-  );
+  const filteredOrders = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    return orders.filter((order) => {
+      if (regionFilter !== "all" && order.storeRegion !== regionFilter) {
+        return false;
+      }
+      if (statusFilter !== "all") {
+        if (statusFilter === "접수") {
+          if (
+            !(
+              order.status === "PLACED" ||
+              order.status === "WAITING_FOR_SHIPMENT"
+            )
+          ) {
+            return false;
+          }
+        } else if (statusFilter === "발송대기") {
+          if (
+            !(
+              order.status === "PREPARED" || order.status === "LOAD_NOTIFIED"
+            )
+          ) {
+            return false;
+          }
+        } else if (statusFilter === "출력완료") {
+          if (order.status !== "PRINTING_COMPLETE") return false;
+        } else if (statusFilter === "발송완료") {
+          if (
+            !(order.status === "SHIPPING" || order.status === "RECEIVED")
+          ) {
+            return false;
+          }
+        } else if (statusFilter === "취소") {
+          if (order.status !== "CANCELLED") return false;
+        }
+      }
+      if (orderDate && order.orderDate !== orderDate) return false;
+      if (
+        q &&
+        !order.orderNumber.toLowerCase().includes(q) &&
+        !order.name.toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [orders, regionFilter, statusFilter, orderDate, keyword]);
 
-  const orderColumns: TableColumn<AdminOrderRow>[] = [
-    {
-      key: "orderNumber",
-      header: "주문번호",
-      className: "w-[18%] overflow-hidden text-center align-middle",
-      render: (row) => {
-        const editable = canEditOrderStatus(row.status);
-        return editable && onEditOrder ? (
-          <button
-            type="button"
-            className="mx-auto block w-full max-w-full break-all text-center text-[13px] font-medium leading-snug text-brand underline-offset-2 hover:underline"
-            onClick={() => onEditOrder(row.orderNumber)}
-          >
-            {row.orderNumber}
-          </button>
-        ) : (
-          <span className="mx-auto block w-full max-w-full break-all text-center text-[13px] leading-snug">
-            {row.orderNumber}
-          </span>
+  const patchChecklist = async (
+    orderId: number,
+    body: Record<string, unknown>,
+    key: string,
+  ) => {
+    setSavingId(key);
+    setActionError("");
+    try {
+      const response = await apiFetch(`/api/orders/${orderId}/admin-checklist`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await response.json()) as
+        | Parameters<typeof mapApiOrder>[0]
+        | { message?: string };
+      if (!response.ok) {
+        setActionError(
+          "message" in data && data.message
+            ? data.message
+            : "저장에 실패했습니다.",
         );
-      },
-    },
-    {
-      key: "name",
-      header: "성명",
-      className: "w-[10%] overflow-hidden text-center",
-      render: (row) => (
-        <span className="block truncate" title={row.name}>
-          {row.name}
-        </span>
-      ),
-    },
-    { key: "type", header: "구분", className: "w-[8%] overflow-hidden text-center" },
-    {
-      key: "statusLabel",
-      header: "배송상태",
-      className: "w-[10%] overflow-hidden text-center",
-      render: (row) => (
-        <span className="block truncate" title={row.statusLabel}>
-          {row.statusLabel}
-        </span>
-      ),
-    },
-    {
-      key: "productCount",
-      header: "상품",
-      className: "w-[7%] overflow-hidden text-center",
-      render: (row) => `${row.productCount}건`,
-    },
-    {
-      key: "orderDate",
-      header: "주문일",
-      className: "w-[12%] overflow-hidden whitespace-nowrap text-center",
-    },
-    {
-      key: "deliveryStatusLabel",
-      header: "관리자상태표시",
-      className: "w-[15%] overflow-hidden text-center",
-      render: (row) => (
-        <span className="block truncate" title={row.deliveryStatusLabel}>
-          {row.deliveryStatusLabel}
-        </span>
-      ),
-    },
-    {
-      key: "action",
-      header: "보기",
-      className: "w-[10%] overflow-hidden text-center",
-      render: (row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setViewingOrderNumber(row.orderNumber)}
-        >
-          보기
-        </Button>
-      ),
-    },
-  ];
+        return;
+      }
+      const mapped = mapApiOrder(data as Parameters<typeof mapApiOrder>[0]);
+      setOrders((prev) =>
+        prev.map((row) => (row.id === orderId ? mapped : row)),
+      );
+      setDrafts((prev) => ({
+        ...prev,
+        [orderId]: {
+          worker: mapped.packagingWorker ?? "",
+          paymentDone: mapped.paymentDone ? "Y" : "N",
+          paymentAuthor: mapped.paymentAuthor ?? "",
+          greetingDone: mapped.greetingDone ? "Y" : "N",
+          slipDone: mapped.slipDone ? "Y" : "N",
+          slipAuthor: mapped.slipAuthor ?? "",
+        },
+      }));
+    } catch {
+      setActionError("저장에 실패했습니다.");
+    } finally {
+      setSavingId(null);
+    }
+  };
 
-  if (isLoading) {
-    return (
-      <Panel>
-        <p className="text-sm text-muted-foreground">주문 목록을 불러오는 중...</p>
-      </Panel>
-    );
-  }
-
-  if (error) {
-    return (
-      <Panel>
-        <p className="text-sm text-red">{error}</p>
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-3"
-          onClick={() => void loadOrders()}
-        >
-          다시 시도
-        </Button>
-      </Panel>
-    );
-  }
+  const updateDraft = (id: number, patch: Partial<DraftState>) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? {
+        worker: "",
+        paymentDone: "N",
+        paymentAuthor: "",
+        greetingDone: "N",
+        slipDone: "N",
+        slipAuthor: "",
+      }), ...patch },
+    }));
+  };
 
   return (
     <div className="space-y-3">
-      <div className="hidden items-center justify-between gap-3 min-[1040px]:flex">
+        <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-[22px] font-semibold text-ink">주문 목록</h3>
+          <h3 className="text-lg font-semibold text-ink min-[1040px]:text-[22px]">
+            주문관리
+          </h3>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            등록된 주문을 조회하고 상태를 확인할 수 있습니다.
+            {canApproveGreeting && authUser?.role === "factory"
+              ? "인사장완료(Y/N)만 저장할 수 있습니다. 그 외 항목은 관리자가 처리합니다."
+              : "담당 지역 외 주문의 확인·저장 버튼은 비활성화됩니다. (출력·보기·주문번호는 가능)"}
           </p>
         </div>
-        <Button
-          className="border-brand bg-brand text-white hover:bg-[#1856bf]"
-          onClick={onNewOrder}
-        >
-          <Plus className="size-4" />
-          신규 주문
-        </Button>
-      </div>
-
-      <div className="min-[1040px]:hidden">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-base font-bold text-ink">주문 목록</h3>
-          <Button
-            size="sm"
-            className="border-brand bg-brand text-white hover:bg-[#1856bf]"
-            onClick={onNewOrder}
-          >
+        {authUser?.role === "admin" ? (
+          <Button type="button" onClick={onNewOrder}>
             <Plus className="size-4" />
-            신규
+            신규작성
           </Button>
-        </div>
+        ) : null}
       </div>
 
       <Panel>
-        <div className="grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.7fr)_minmax(0,0.85fr)_minmax(0,1.1fr)]">
-          <PeriodInputs
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-          />
-          <Dropdown
-            label="배송상태"
-            value={deliveryStatusFilter}
-            options={[...DELIVERY_STATUS_FILTER_OPTIONS]}
-            onChange={(value) =>
-              setDeliveryStatusFilter(value as DeliveryStatusFilter)
-            }
-          />
-          <Dropdown
-            label="관리자상태표시"
-            value={adminManageFilter}
-            options={[...ADMIN_MANAGE_FILTER_OPTIONS]}
-            onChange={(value) =>
-              setAdminManageFilter(value as AdminManageFilter)
-            }
-          />
-          <Input
-            label="검색어"
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            placeholder="성명 / 연락처 / 주문번호"
-          />
-        </div>
-        <p className="mt-2 text-lg text-[#64748b]">
-          총 {filteredOrders.length}건
-          {keyword.trim() ||
-          startDate ||
-          endDate ||
-          deliveryStatusFilter !== "all" ||
-          adminManageFilter !== "all"
-            ? ` (전체 ${orders.length}건 중)`
-            : ""}
-        </p>
-      </Panel>
-
-      <div className="max-h-[28rem] space-y-2.5 overflow-y-auto min-[1040px]:hidden">
-        {filteredOrders.length === 0 ? (
-          <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-lg text-muted-foreground">
-            {orders.length === 0
-              ? "등록된 주문이 없습니다."
-              : "검색 결과가 없습니다."}
-          </p>
-        ) : (
-          filteredOrders.map((order) => (
-            <MobileOrderCard
-              key={order.id}
-              order={order}
-              onView={() => setViewingOrderNumber(order.orderNumber)}
-              onEdit={
-                onEditOrder
-                  ? () => onEditOrder(order.orderNumber)
-                  : undefined
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={regionFilter}
+              onChange={(e) =>
+                setRegionFilter(e.target.value as "all" | AdminRegion)
               }
+              className="rounded-[7px] border border-line bg-white px-2.5 py-2 text-sm"
+            >
+              <option value="all">전체 지역</option>
+              <option value="NAMBU">남부</option>
+              <option value="JUNGBU">중부</option>
+              <option value="SEOBU">서부</option>
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-[7px] border border-line bg-white px-2.5 py-2 text-sm"
+            >
+              <option value="all">전체 상태</option>
+              <option value="접수">접수</option>
+              <option value="발송대기">발송대기</option>
+              <option value="출력완료">출력완료</option>
+              <option value="발송완료">발송완료</option>
+              <option value="취소">취소</option>
+            </select>
+            <input
+              type="date"
+              value={orderDate}
+              onChange={(e) => setOrderDate(e.target.value)}
+              className="rounded-[7px] border border-line bg-white px-2.5 py-2 text-sm"
             />
-          ))
-        )}
-      </div>
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="주문번호 · 성명 검색"
+              className="w-[180px] rounded-[7px] border border-line bg-white px-2.5 py-2 text-sm"
+            />
+          </div>
+          <div className="text-[11.5px] text-[#64748b]">
+            총 {filteredOrders.length}건
+          </div>
+        </div>
 
-      <Panel className="hidden min-[1040px]:block">
-        <Table
-          caption="관리자 주문 목록"
-          columns={orderColumns}
-          data={filteredOrders}
-          emptyMessage={
-            orders.length === 0
-              ? "등록된 주문이 없습니다."
-              : "검색 결과가 없습니다."
-          }
-          scrollable
-          visibleRows={6}
-          rowHeightRem={3.5}
-          className="min-w-[720px] text-base min-[1200px]:text-lg"
-        />
+        {error ? (
+          <p className="mb-2 rounded-[7px] border border-red/30 bg-[#fff0ed] px-3 py-2 text-sm text-red">
+            {error}
+          </p>
+        ) : null}
+        {actionError ? (
+          <p className="mb-2 rounded-[7px] border border-red/30 bg-[#fff0ed] px-3 py-2 text-sm text-red">
+            {actionError}
+          </p>
+        ) : null}
+
+        {isLoading ? (
+          <p className="py-8 text-center text-sm text-[#64748b]">불러오는 중…</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[1100px] w-full border-collapse text-[12.5px]">
+              <thead>
+                <tr className="border-b border-line bg-[#f8fafc] text-left text-[12px] text-[#64748b]">
+                  <th className="px-2 py-2 font-semibold">작업자</th>
+                  <th className="px-2 py-2 font-semibold">주문매장</th>
+                  <th className="px-2 py-2 font-semibold">주문번호</th>
+                  <th className="px-2 py-2 font-semibold">성명</th>
+                  <th className="px-2 py-2 font-semibold">구분</th>
+                  <th className="px-2 py-2 font-semibold">주문확인</th>
+                  <th className="px-2 py-2 font-semibold">상태</th>
+                  <th className="px-2 py-2 font-semibold">결제완료</th>
+                  <th className="px-2 py-2 font-semibold">인사장완료</th>
+                  <th className="px-2 py-2 font-semibold">기표지완료</th>
+                  <th className="px-2 py-2 font-semibold">출력</th>
+                  <th className="px-2 py-2 font-semibold">보기</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrders.map((row) => {
+                  const mutable = canMutateRow(authUser, row);
+                  const locked = !mutable;
+                  const draft = drafts[row.id] ?? {
+                    worker: row.packagingWorker ?? "",
+                    paymentDone: row.paymentDone ? "Y" : "N",
+                    paymentAuthor: row.paymentAuthor ?? "",
+                    greetingDone: row.greetingDone ? "Y" : "N",
+                    slipDone: row.slipDone ? "Y" : "N",
+                    slipAuthor: row.slipAuthor ?? "",
+                  };
+                  const parcel = isParcelType(row.type, row.fulfillmentType);
+                  const needsGreeting = row.greetingCount > 0;
+                  const confirmed = Boolean(row.orderConfirmedAt);
+
+                  return (
+                    <tr
+                      key={row.id}
+                      className={cn(
+                        "border-b border-[#eef2f7]",
+                        locked && "bg-[#f8fafc]",
+                      )}
+                    >
+                      <td className="px-2 py-2 align-top">
+                        {row.packagingWorker && locked ? (
+                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                            {row.packagingWorker === "STORE" ? "매장" : "공장"}
+                          </span>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            <select
+                              disabled={locked || Boolean(row.packagingWorker)}
+                              value={draft.worker ?? ""}
+                              onChange={(e) =>
+                                updateDraft(row.id, {
+                                  worker: (e.target.value || "") as
+                                    | "STORE"
+                                    | "FACTORY"
+                                    | "",
+                                })
+                              }
+                              className="rounded border border-line px-1.5 py-1 disabled:opacity-50"
+                            >
+                              <option value="">선택</option>
+                              <option value="STORE">매장</option>
+                              <option value="FACTORY">공장</option>
+                            </select>
+                            {!row.packagingWorker ? (
+                              <CellBtn
+                                disabled={
+                                  locked ||
+                                  !draft.worker ||
+                                  savingId === `w-${row.id}`
+                                }
+                                onClick={() =>
+                                  void patchChecklist(
+                                    row.id,
+                                    {
+                                      action: "worker",
+                                      packagingWorker: draft.worker,
+                                    },
+                                    `w-${row.id}`,
+                                  )
+                                }
+                              >
+                                저장
+                              </CellBtn>
+                            ) : (
+                              <span className="text-[11px] text-[#64748b]">
+                                {row.packagingWorker === "STORE"
+                                  ? "매장"
+                                  : "공장"}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 align-middle">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                            regionClass(row.storeRegion),
+                          )}
+                        >
+                          {regionLabel(row.storeRegion)}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 align-middle font-medium">
+                        {canEditOrderStatus(row.status) && onEditOrder ? (
+                          <button
+                            type="button"
+                            className="text-left text-brand underline-offset-2 hover:underline"
+                            onClick={() => onEditOrder(row.orderNumber)}
+                          >
+                            {row.orderNumber}
+                          </button>
+                        ) : (
+                          row.orderNumber
+                        )}
+                      </td>
+                      <td className="px-2 py-2 align-middle">{row.name}</td>
+                      <td className="px-2 py-2 align-middle">{row.type}</td>
+                      <td className="px-2 py-2 align-middle">
+                        {confirmed ? (
+                          <span className="rounded bg-[#f1f5f9] px-2 py-1 text-[11px] text-[#64748b]">
+                            확인
+                          </span>
+                        ) : (
+                          <CellBtn
+                            disabled={locked || savingId === `c-${row.id}`}
+                            onClick={() =>
+                              void patchChecklist(
+                                row.id,
+                                { action: "confirm" },
+                                `c-${row.id}`,
+                              )
+                            }
+                          >
+                            확인
+                          </CellBtn>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 align-middle">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                            statusChipClass(row.status),
+                          )}
+                        >
+                          {row.statusLabel}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 align-top">
+                        {row.paymentDone && locked ? (
+                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                            Y
+                          </span>
+                        ) : (
+                          <div className="flex min-w-[120px] flex-col gap-1">
+                            <div className="flex gap-1">
+                              <select
+                                disabled={locked}
+                                value={draft.paymentDone}
+                                onChange={(e) =>
+                                  updateDraft(row.id, {
+                                    paymentDone: e.target.value as "Y" | "N",
+                                  })
+                                }
+                                className="rounded border border-line px-1.5 py-1 disabled:opacity-50"
+                              >
+                                <option value="N">N</option>
+                                <option value="Y">Y</option>
+                              </select>
+                              <input
+                                disabled={locked}
+                                value={draft.paymentAuthor}
+                                onChange={(e) =>
+                                  updateDraft(row.id, {
+                                    paymentAuthor: e.target.value,
+                                  })
+                                }
+                                placeholder="작성자"
+                                className="w-[72px] rounded border border-line px-1.5 py-1 disabled:opacity-50"
+                              />
+                            </div>
+                            <CellBtn
+                              disabled={locked || savingId === `p-${row.id}`}
+                              onClick={() =>
+                                void patchChecklist(
+                                  row.id,
+                                  {
+                                    action: "payment",
+                                    done: draft.paymentDone === "Y",
+                                    author: draft.paymentAuthor,
+                                  },
+                                  `p-${row.id}`,
+                                )
+                              }
+                            >
+                              저장
+                            </CellBtn>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 align-top">
+                        {!needsGreeting ? (
+                          <span className="rounded bg-[#f1f5f9] px-2 py-0.5 text-[11px] font-semibold text-[#64748b]">
+                            X
+                          </span>
+                        ) : row.greetingDone && !canApproveGreeting ? (
+                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                            Y
+                          </span>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            <select
+                              disabled={!canApproveGreeting}
+                              value={draft.greetingDone}
+                              onChange={(e) =>
+                                updateDraft(row.id, {
+                                  greetingDone: e.target.value as "Y" | "N",
+                                })
+                              }
+                              className="rounded border border-line px-1.5 py-1 disabled:opacity-50"
+                            >
+                              <option value="N">N</option>
+                              <option value="Y">Y</option>
+                            </select>
+                            <CellBtn
+                              disabled={
+                                !canApproveGreeting ||
+                                savingId === `g-${row.id}`
+                              }
+                              onClick={() =>
+                                void patchChecklist(
+                                  row.id,
+                                  {
+                                    action: "greeting",
+                                    done: draft.greetingDone === "Y",
+                                  },
+                                  `g-${row.id}`,
+                                )
+                              }
+                            >
+                              저장
+                            </CellBtn>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 align-top">
+                        {!parcel ? (
+                          <span className="rounded bg-[#f1f5f9] px-2 py-0.5 text-[11px] font-semibold text-[#64748b]">
+                            X
+                          </span>
+                        ) : row.slipDone && locked ? (
+                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                            Y
+                          </span>
+                        ) : (
+                          <div className="flex min-w-[120px] flex-col gap-1">
+                            <div className="flex gap-1">
+                              <select
+                                disabled={locked}
+                                value={draft.slipDone}
+                                onChange={(e) =>
+                                  updateDraft(row.id, {
+                                    slipDone: e.target.value as "Y" | "N",
+                                  })
+                                }
+                                className="rounded border border-line px-1.5 py-1 disabled:opacity-50"
+                              >
+                                <option value="N">N</option>
+                                <option value="Y">Y</option>
+                              </select>
+                              <input
+                                disabled={locked}
+                                value={draft.slipAuthor}
+                                onChange={(e) =>
+                                  updateDraft(row.id, {
+                                    slipAuthor: e.target.value,
+                                  })
+                                }
+                                placeholder="작성자"
+                                className="w-[72px] rounded border border-line px-1.5 py-1 disabled:opacity-50"
+                              />
+                            </div>
+                            <CellBtn
+                              disabled={locked || savingId === `s-${row.id}`}
+                              onClick={() =>
+                                void patchChecklist(
+                                  row.id,
+                                  {
+                                    action: "slip",
+                                    done: draft.slipDone === "Y",
+                                    author: draft.slipAuthor,
+                                  },
+                                  `s-${row.id}`,
+                                )
+                              }
+                            >
+                              저장
+                            </CellBtn>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 align-middle">
+                        <CellBtn
+                          variant="ghost"
+                          disabled
+                          onClick={() => undefined}
+                        >
+                          출력
+                        </CellBtn>
+                      </td>
+                      <td className="px-2 py-2 align-middle">
+                        <CellBtn
+                          variant="ghost"
+                          onClick={() => setViewingOrderNumber(row.orderNumber)}
+                        >
+                          보기
+                        </CellBtn>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredOrders.length === 0 ? (
+              <p className="py-8 text-center text-sm text-[#64748b]">
+                표시할 주문이 없습니다.
+              </p>
+            ) : null}
+          </div>
+        )}
+
+        <p className="mt-3 text-[11px] leading-relaxed text-[#64748b]">
+          관할 외 주문은 회색(잠금) 처리됩니다. 인사장이 없으면 인사장완료는 X,
+          택배가 아니면 기표지완료는 X입니다. 작업자·주문확인·결제·인사장·기표지
+          5항목이 모두 충족되면 배송관리 후보(readyForShipment)로 표시됩니다.
+        </p>
       </Panel>
 
       <OrderPrintPreviewModal
         open={Boolean(viewingOrderNumber)}
         orderNumber={viewingOrderNumber}
-        onClose={() => {
-          setViewingOrderNumber(null);
-          void loadOrders(true);
-        }}
+        onClose={() => setViewingOrderNumber(null)}
       />
     </div>
   );
 }
+
+export default AdminOrderList;

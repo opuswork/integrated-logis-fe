@@ -17,6 +17,7 @@ import { OrderDataMng } from "@/app/admin/OrderManagement/OrderDataMng";
 import { OrderPrintPreview } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { OrderListInput } from "@/app/OrderManagement/OrderListInput";
 import { LogoutButton } from "@/components/auth-guard";
+import { AdminTopBar } from "@/components/admin-top-bar";
 import { Button } from "@/components/ui/button";
 import { formatAdminSidebarTitle, getAuthUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -56,13 +57,15 @@ function Panel({
 function AdminNavList({
   activeMenu,
   onMenuChange,
+  items = ADMIN_NAV,
 }: {
   activeMenu: AdminView;
   onMenuChange: (menu: AdminNav) => void;
+  items?: readonly AdminNav[];
 }) {
   return (
     <nav className="space-y-1.5">
-      {ADMIN_NAV.map((item) => (
+      {items.map((item) => (
         <button
           key={item}
           type="button"
@@ -85,10 +88,12 @@ function AdminSidebar({
   activeMenu,
   onMenuChange,
   onOpenProfile,
+  navItems = ADMIN_NAV,
 }: {
   activeMenu: AdminView;
   onMenuChange: (menu: AdminNav) => void;
   onOpenProfile: () => void;
+  navItems?: readonly AdminNav[];
 }) {
   const sidebarTitle = formatAdminSidebarTitle(getAuthUser());
 
@@ -101,7 +106,11 @@ function AdminSidebar({
         <AdminSettingsButton onClick={onOpenProfile} />
       </div>
       <div className="flex-1">
-        <AdminNavList activeMenu={activeMenu} onMenuChange={onMenuChange} />
+        <AdminNavList
+          activeMenu={activeMenu}
+          onMenuChange={onMenuChange}
+          items={navItems}
+        />
       </div>
       <LogoutButton className="mt-4 w-full rounded-[7px] border border-line px-2.5 py-2 text-left text-[13px] text-[#64748b] hover:bg-soft" />
     </aside>
@@ -114,12 +123,14 @@ function MobileAdminHeader({
   onToggle,
   onMenuChange,
   onOpenProfile,
+  navItems = ADMIN_NAV,
 }: {
   activeMenu: AdminView;
   isOpen: boolean;
   onToggle: () => void;
   onMenuChange: (menu: AdminNav) => void;
   onOpenProfile: () => void;
+  navItems?: readonly AdminNav[];
 }) {
   const title = activeMenu === "프로필" ? "관리자 프로필" : activeMenu;
   const adminLabel = formatAdminSidebarTitle(getAuthUser());
@@ -167,6 +178,7 @@ function MobileAdminHeader({
                 onMenuChange(menu);
                 onToggle();
               }}
+              items={navItems}
             />
             <LogoutButton className="mt-3 w-full rounded-[7px] border border-line px-2.5 py-2.5 text-left text-[13px] text-[#64748b] hover:bg-soft" />
           </div>
@@ -180,6 +192,13 @@ const ORDER_LEAVE_CONFIRM_MESSAGE =
   "주문서를 벗어나면 데이터가 소실됩니다. 주문서 작성을 먼저 완료해주세요.\n\n그래도 다른 메뉴로 이동하시겠습니까?";
 
 export function OrderListMng() {
+  const authUser = getAuthUser();
+  const isFactoryGreetingOnly =
+    authUser?.role === "factory" && authUser.canApproveGreeting === true;
+  const navItems = isFactoryGreetingOnly
+    ? (["주문 목록"] as const satisfies readonly AdminNav[])
+    : ADMIN_NAV;
+
   const [activeMenu, setActiveMenu] = useState<AdminView>("주문 목록");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [orderDraftDirty, setOrderDraftDirty] = useState(false);
@@ -341,6 +360,7 @@ export function OrderListMng() {
         activeMenu={activeMenu}
         onMenuChange={handleMenuChange}
         onOpenProfile={handleOpenProfile}
+        navItems={navItems}
       />
 
       <section className="bg-[#f7f9fc] p-4">
@@ -350,7 +370,10 @@ export function OrderListMng() {
           onToggle={() => setIsMobileMenuOpen((open) => !open)}
           onMenuChange={handleMenuChange}
           onOpenProfile={handleOpenProfile}
+          navItems={navItems}
         />
+
+        <AdminTopBar />
 
         {renderContent()}
       </section>

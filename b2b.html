@@ -1,0 +1,2154 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B2B 통합 관리 시스템</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#1A365D;
+    --navy-light:#24487C;
+    --navy-lighter:#2B4E86;
+    --blue:#3182CE;
+    --blue-soft:#EBF4FD;
+    --bg:#F5F7FA;
+    --panel:#EDF2F7;
+    --surface:#FFFFFF;
+    --border:#E2E8F0;
+    --text:#1A202C;
+    --text-mid:#64748B;
+    --text-muted:#A0AEC0;
+    --orange:#FFEDD5;
+    --orange-strong:#F6AD55;
+    --orange-text:#9C4221;
+    --red:#E53E3E;
+    --red-bg:#FDEEEE;
+    --red-text:#9B2C2C;
+    --green:#2F855A;
+    --green-bg:#E9F8EF;
+    --gray-bg:#F1F3F5;
+    --gray-text:#718096;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    font-size:14px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .shell{display:flex;flex-direction:column;height:100vh;}
+
+  /* ---------- Topbar ---------- */
+  .topbar{
+    height:56px;flex:0 0 56px;background:var(--navy);color:#fff;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px;
+    border-bottom:1px solid rgba(255,255,255,0.08);
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{
+    width:28px;height:28px;border-radius:7px;background:var(--blue);
+    display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;letter-spacing:-0.5px;
+  }
+  .brand .name{font-weight:700;font-size:15px;letter-spacing:-0.2px;}
+  .brand .name span{color:#9DC3EE;font-weight:400;font-size:12px;margin-left:6px;}
+  .topbar-right{display:flex;align-items:center;gap:18px;}
+  .region-pill{
+    display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.14);border-radius:20px;padding:5px 12px 5px 6px;
+  }
+  .region-pill .avatar{
+    width:22px;height:22px;border-radius:50%;background:var(--orange-strong);
+    display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#7C2D12;
+  }
+  .region-pill .who{font-size:12.5px;font-weight:500;}
+  .region-pill .who b{font-weight:700;}
+  .bell{position:relative;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .bell:hover{background:rgba(255,255,255,0.08);}
+  .bell svg{width:17px;height:17px;stroke:#DDE7F3;}
+  .bell .dot{position:absolute;top:6px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--red);border:1.5px solid var(--navy);}
+
+  /* ---------- Body layout ---------- */
+  .body{display:flex;flex:1;min-height:0;position:relative;}
+  .sidebar{
+    width:220px;flex:0 0 220px;background:var(--surface);
+    border-right:1px solid var(--border);
+    padding:18px 12px;overflow-y:auto;position:relative;
+    transition:width .22s ease, flex-basis .22s ease, padding .22s ease, opacity .18s ease;
+  }
+  .sidebar.collapsed{
+    width:0;flex:0 0 0;padding:0;border-right:none;overflow:hidden;opacity:0;white-space:nowrap;
+  }
+  .sidebar-toggle-btn{
+    position:absolute;top:14px;right:-14px;width:28px;height:28px;border-radius:50%;
+    background:var(--surface);border:1px solid var(--border);box-shadow:0 2px 6px rgba(0,0,0,0.12);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:20;
+    color:var(--text-mid);padding:0;
+  }
+  .sidebar-toggle-btn:hover{background:var(--bg);color:var(--text);}
+  .sidebar-toggle-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;}
+  .sidebar.collapsed .sidebar-toggle-btn{display:none;}
+  .sidebar-expand-btn{
+    display:none;position:absolute;top:14px;left:10px;width:30px;height:30px;border-radius:50%;
+    background:var(--navy);color:#fff;border:none;box-shadow:0 3px 10px rgba(0,0,0,0.28);
+    align-items:center;justify-content:center;cursor:pointer;z-index:30;padding:0;
+  }
+  .sidebar-expand-btn.visible{display:flex;}
+  .sidebar-expand-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;}
+  .sidebar-expand-btn:hover{background:var(--navy-light);}
+  .side-group{margin-bottom:4px;}
+  .side-label{
+    font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:0.04em;
+    padding:10px 10px 6px;text-transform:uppercase;
+  }
+  .nav-item{
+    display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;
+    color:var(--text-mid);font-size:13.5px;font-weight:500;cursor:pointer;
+    border-left:3px solid transparent;margin-bottom:2px;
+    transition:background .12s ease;
+  }
+  .nav-item svg{width:17px;height:17px;flex:0 0 17px;stroke:currentColor;fill:none;}
+  .nav-item:hover{background:var(--bg);color:var(--text);}
+  .nav-item.active{
+    background:var(--blue-soft);color:var(--navy);font-weight:700;
+    border-left:3px solid var(--blue);
+  }
+  .nav-sub{padding-left:29px;margin-top:2px;margin-bottom:6px;}
+  .nav-sub-item{
+    padding:6px 10px;font-size:12.5px;color:var(--text-muted);cursor:pointer;border-radius:6px;
+  }
+  .nav-sub-item:hover{color:var(--text);background:var(--bg);}
+  .nav-sub-item.active{color:var(--blue);font-weight:700;}
+
+  .main{flex:1;min-width:0;overflow-y:auto;padding:26px 30px 60px;}
+  .page{display:none;}
+  .page.active{display:block;}
+
+  .page-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;}
+  .page-title{font-size:19px;font-weight:700;letter-spacing:-0.2px;}
+  .page-sub{font-size:12.5px;color:var(--text-muted);margin-top:3px;font-weight:400;}
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;border-radius:7px;font-size:12.5px;font-weight:700;
+    padding:8px 14px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);
+  }
+  .btn:hover{background:var(--bg);}
+  .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue);}
+  .btn.primary:hover{background:#2B6CB0;}
+  .btn svg{width:14px;height:14px;stroke:currentColor;fill:none;}
+
+  /* ---------- Metric cards ---------- */
+  .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  .metric-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .metric-top{display:flex;align-items:center;justify-content:space-between;}
+  .metric-label{font-size:12px;color:var(--text-mid);font-weight:700;}
+  .metric-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+  .metric-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;}
+  .metric-value{font-size:25px;font-weight:900;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;}
+  .metric-value small{font-size:13px;font-weight:700;color:var(--text-mid);margin-left:2px;}
+  .metric-delta{font-size:11.5px;font-weight:700;}
+
+  .icon-blue{background:var(--blue-soft);color:var(--blue);}
+  .icon-orange{background:var(--orange);color:var(--orange-text);}
+  .icon-red{background:var(--red-bg);color:var(--red);}
+  .icon-green{background:var(--green-bg);color:var(--green);}
+
+  /* ---------- Panels / cards ---------- */
+  .grid-2{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:16px;}
+  .grid-2b{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
+  .card-title{font-size:13.5px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
+  .toggle-pair{display:flex;background:var(--panel);border-radius:7px;padding:2px;font-size:11.5px;font-weight:700;}
+  .toggle-pair span{padding:4px 10px;border-radius:5px;color:var(--text-mid);cursor:pointer;}
+  .toggle-pair span.active{background:var(--surface);color:var(--navy);box-shadow:0 1px 2px rgba(0,0,0,0.08);}
+
+  /* trend chart */
+  .chart-wrap{position:relative;height:150px;}
+  .chart-wrap svg{width:100%;height:100%;overflow:visible;}
+  .chart-labels{display:flex;justify-content:space-between;margin-top:6px;font-size:10.5px;color:var(--text-muted);}
+
+  /* bar list */
+  .bar-row{display:grid;grid-template-columns:88px 1fr 46px;align-items:center;gap:10px;margin-bottom:11px;}
+  .bar-row:last-child{margin-bottom:0;}
+  .bar-name{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar-track{height:16px;background:var(--panel);border-radius:4px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:4px;}
+  .bar-value{font-size:11.5px;font-weight:700;color:var(--text-mid);text-align:right;font-variant-numeric:tabular-nums;}
+
+  /* ---------- Table ---------- */
+  .table-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .table-toolbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;}
+  .filters select,.filters input{
+    font-family:inherit;font-size:12.5px;border:1px solid var(--border);border-radius:7px;
+    padding:7px 10px;background:var(--surface);color:var(--text);
+  }
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{
+    background:var(--panel);color:var(--text-mid);font-weight:700;text-align:left;
+    padding:10px 12px;white-space:nowrap;font-size:11.5px;border-bottom:1px solid var(--border);
+  }
+  tbody td{padding:11px 12px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover td{background:#FAFBFD;}
+  tbody tr.locked td{color:var(--text-muted);}
+  tbody tr.urgent{position:relative;}
+  tbody tr.urgent td{background:var(--orange);}
+  tbody tr.urgent:hover td{background:#FDE3C2;}
+  tbody tr.urgent td:first-child{box-shadow:inset 3px 0 0 var(--orange-strong);}
+  tbody tr.empty-row td{text-align:center;color:var(--text-muted);padding:28px 12px;font-size:12.5px;}
+  tbody tr.low-stock td{background:var(--red-bg);}
+  tbody tr.low-stock:hover td{background:#FBD9D9;}
+  tbody tr.low-stock td:first-child{box-shadow:inset 3px 0 0 var(--red);}
+
+  .region-tag{
+    display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+    padding:3px 9px;border-radius:20px;
+  }
+  .region-남부{background:#E6F1FB;color:#1A5A96;}
+  .region-중부{background:#F0EAFB;color:#5B3FA0;}
+  .region-서부{background:#EAF7EE;color:#276749;}
+
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;}
+  .badge-y{background:var(--green-bg);color:var(--green);}
+  .badge-n{background:var(--gray-bg);color:var(--gray-text);}
+  .badge-cancel{background:var(--red-bg);color:var(--red-text);}
+  .badge-x{background:#F1F3F5;color:#A0AEC0;border:1px dashed #CBD5E0;}
+
+  /* 주문관리: 결제완료/인사장완료/기표지완료 승인 셀 */
+  .appr-cell{display:flex;flex-direction:column;gap:5px;align-items:flex-start;}
+  .appr-row{display:flex;gap:5px;}
+  .appr-select{
+    font-family:inherit;font-size:11.5px;border:1px solid var(--border);border-radius:5px;
+    padding:3px 5px;background:var(--surface);color:var(--text);width:52px;
+  }
+  .appr-author-input{
+    font-family:inherit;font-size:11.5px;border:1px solid var(--border);border-radius:5px;
+    padding:3px 6px;background:var(--surface);color:var(--text);width:64px;
+  }
+  .appr-save-btn{padding:3px 10px;font-size:11px;}
+  .status-chip{font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;display:inline-block;}
+  .st-접수{background:#EAF1FB;color:#2B6CB0;}
+  .st-발송대기{background:#FDF3E3;color:#B7791F;}
+  .st-출력완료{background:#EDEBFB;color:#5941A9;}
+  .st-발송완료{background:var(--green-bg);color:var(--green);}
+  .st-취소{background:var(--gray-bg);color:var(--gray-text);}
+
+  .im-badge{
+    display:inline-flex;align-items:center;gap:5px;background:var(--red);color:#fff;font-size:10.5px;
+    font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px;
+  }
+  .im-badge .dot{width:5px;height:5px;border-radius:50%;background:#fff;animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .low-badge{
+    display:inline-flex;align-items:center;font-size:10.5px;background:var(--red);color:#fff;
+    font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px;
+  }
+
+  .cell-btn{
+    font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid transparent;
+  }
+  .cell-btn.confirm{background:var(--blue);color:#fff;}
+  .cell-btn.confirm:hover{background:#2B6CB0;}
+  .cell-btn.confirm.disabled{
+    background:var(--gray-bg);color:var(--text-muted);cursor:not-allowed;border-color:var(--border);
+  }
+  .cell-btn.ghost{background:var(--surface);color:var(--text-mid);border-color:var(--border);}
+  .cell-btn.ghost:hover{background:var(--bg);}
+  .lock-icon{display:inline-flex;vertical-align:-3px;margin-right:5px;color:var(--text-muted);}
+  .lock-icon svg{width:12px;height:12px;stroke:currentColor;fill:none;}
+
+  .name-cell{font-weight:700;}
+  .sub-cell{display:block;font-size:11px;color:var(--text-muted);font-weight:400;margin-top:1px;}
+
+  .legend{display:flex;gap:16px;padding:10px 18px;font-size:11.5px;color:var(--text-mid);border-top:1px solid var(--border);background:var(--bg);}
+  .legend-item{display:flex;align-items:center;gap:6px;}
+  .legend-dot{width:9px;height:9px;border-radius:3px;}
+
+  .foot-note{
+    display:flex;align-items:center;gap:8px;margin-top:14px;font-size:11.5px;color:var(--text-muted);
+    background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:10px 14px;
+  }
+  .foot-note svg{width:14px;height:14px;stroke:var(--blue);flex:0 0 14px;}
+
+  /* ---------- 출고관리 서브탭 ---------- */
+  .sub-tag{
+    display:inline-block;font-size:9px;background:var(--blue-soft);color:var(--blue);
+    padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;vertical-align:1px;
+  }
+  .subtab-bar{display:flex;gap:26px;border-bottom:1px solid var(--border);margin-bottom:18px;}
+  .subtab-bar.small{margin-bottom:14px;gap:20px;}
+  .subtab{
+    padding:9px 2px 10px;font-size:13.5px;font-weight:700;color:var(--text-mid);
+    cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1px;
+  }
+  .subtab:hover{color:var(--text);}
+  .subtab.active{color:var(--navy);border-bottom-color:var(--blue);}
+  .subtab2{
+    padding:7px 2px 8px;font-size:12.5px;font-weight:700;color:var(--text-mid);
+    cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;
+  }
+  .subtab2:hover{color:var(--text);}
+  .subtab2.active{color:var(--navy);border-bottom-color:var(--orange-strong);}
+  .subpage{display:none;}
+  .subpage.active{display:block;}
+  .subpage2{display:none;}
+  .subpage2.active{display:block;}
+
+  /* 출고전용 상단 툴바 */
+  .release-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .date-nav{display:flex;align-items:center;gap:10px;}
+  .date-arrow{
+    width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--surface);
+    color:var(--text-mid);font-size:14px;cursor:pointer;
+  }
+  .date-arrow:hover{background:var(--bg);}
+  .date-current{
+    font-size:13.5px;font-weight:700;color:var(--navy);background:var(--surface);
+    border:1px solid var(--border);border-radius:8px;padding:7px 14px;display:flex;align-items:center;
+  }
+  .summary-chips{display:flex;gap:8px;}
+  .summary-chip{
+    font-size:12px;font-weight:600;color:var(--text-mid);background:var(--surface);
+    border:1px solid var(--border);border-radius:20px;padding:6px 13px;
+  }
+  .summary-chip b{color:var(--navy);font-weight:800;margin-left:3px;}
+  .summary-chip.warn{background:var(--red-bg);border-color:#F5C6C6;color:var(--red-text);}
+  .summary-chip.warn b{color:var(--red);}
+
+  /* PT 셀 */
+  .table-scroll{overflow-x:auto;}
+  .pt-cell{
+    display:inline-block;min-width:34px;text-align:center;font-size:12px;font-weight:800;
+    padding:4px 8px;border-radius:6px;font-variant-numeric:tabular-nums;
+  }
+  .pt-filled{background:var(--green-bg);color:var(--green);}
+  .pt-empty{
+    background:#FFF6EC;border:1.5px dashed var(--orange-strong);color:var(--orange-text);
+    min-width:26px;cursor:text;
+  }
+  .pt-empty:empty::before{content:attr(data-placeholder);color:var(--orange-strong);font-weight:600;}
+  .pt-empty:focus{outline:2px solid var(--blue);background:#fff;}
+
+  /* 양말부포장 주간 캘린더 */
+  .week-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .wc-cell{
+    background:var(--panel);border-radius:8px;padding:9px 8px 8px;
+    min-height:88px;display:flex;flex-direction:column;gap:4px;align-items:stretch;
+  }
+  .wc-date{font-size:12.5px;font-weight:800;color:var(--text);text-align:center;}
+  .wc-head{background:transparent;color:var(--text-mid);font-size:11.5px;padding:2px 0 6px;font-weight:700;min-height:0;text-align:center;}
+  .wc-sat .wc-date{color:#2B6CB0;}
+  .wc-sun .wc-date{color:var(--red);}
+  .wc-head.wc-sat{color:#2B6CB0;}
+  .wc-head.wc-sun{color:var(--red);}
+  .wc-today{background:var(--blue);}
+  .wc-today .wc-date{color:#fff;}
+  .wc-chips{display:flex;flex-direction:column;gap:3px;}
+  .wc-chip{
+    background:#fff;border:1px solid var(--border);border-radius:5px;padding:3px 6px;
+    font-size:9.5px;font-weight:600;color:var(--text-mid);white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;line-height:1.35;
+  }
+  .wc-today .wc-chip{background:rgba(255,255,255,0.16);border-color:rgba(255,255,255,0.32);color:#fff;}
+
+  /* 포장구분 선택 */
+  .pack-dept-select{
+    font-family:inherit;font-size:12px;border:1px solid var(--border);border-radius:6px;
+    padding:5px 8px;background:var(--surface);color:var(--text);
+  }
+  .pack-method-input{
+    font-family:inherit;font-size:12px;border:1px solid var(--border);border-radius:6px;
+    padding:5px 8px;background:var(--surface);color:var(--text);width:104px;
+  }
+
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:#CBD5E0;border-radius:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  @media (max-width:1080px){
+    .grid-2,.grid-2b{grid-template-columns:1fr;}
+    .metric-row{grid-template-columns:repeat(2,1fr);}
+  }
+  /* ---- 최종확인 / 작업자 / 수정경고 배지 ---- */
+  .final-confirm-btn{}
+  .worker-cell{display:flex;flex-direction:column;gap:4px;align-items:flex-start;}
+  .worker-select{
+    font-family:inherit;font-size:11.5px;border:1px solid var(--border);border-radius:5px;
+    padding:3px 6px;background:var(--surface);color:var(--text);width:70px;
+  }
+  .worker-save-btn{padding:3px 10px;font-size:11px;}
+  .edit-badge{
+    display:inline-flex;align-items:center;gap:5px;background:var(--orange-strong);color:#7C2D12;font-size:10.5px;
+    font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px;
+  }
+  .edit-badge .dot{width:5px;height:5px;border-radius:50%;background:#7C2D12;animation:pulse 1.4s infinite;}
+  .order-no-link{
+    background:none;border:none;padding:0;font:inherit;color:var(--blue);font-weight:700;
+    cursor:pointer;text-decoration:underline;text-underline-offset:2px;
+  }
+  .order-no-link:hover{color:#2B6CB0;}
+
+  /* ---- 제품주문서 모달 ---- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(26,32,44,0.55);z-index:200;
+    display:none;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto;
+  }
+  .modal-overlay.active{display:flex;}
+  .order-modal{
+    width:420px;max-width:100%;background:var(--bg);border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);position:relative;
+  }
+  .om-header{
+    background:var(--navy);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;
+  }
+  .om-header .om-user{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;}
+  .om-header .om-user svg{width:26px;height:26px;stroke:#fff;fill:none;}
+  .om-close{
+    position:absolute;top:14px;right:16px;width:28px;height:28px;border-radius:8px;border:none;
+    background:rgba(255,255,255,0.12);color:#fff;font-size:16px;cursor:pointer;z-index:2;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .om-close:hover{background:rgba(255,255,255,0.22);}
+  .om-body{padding:18px 20px 22px;max-height:78vh;overflow-y:auto;}
+  .om-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:14px;}
+  .om-highlight{
+    border:2px solid var(--orange-strong);border-radius:12px;background:var(--surface);
+    padding:16px;margin-bottom:16px;
+  }
+  .om-store-tabs{display:flex;background:var(--panel);border-radius:8px;padding:3px;margin-bottom:14px;}
+  .om-store-tab{
+    flex:1;text-align:center;padding:8px 4px;border-radius:6px;font-size:12.5px;font-weight:700;
+    color:var(--text-mid);cursor:pointer;border:none;background:none;
+  }
+  .om-store-tab.active{background:var(--navy);color:#fff;}
+  .om-label{font-size:12px;font-weight:700;color:var(--text-mid);margin-bottom:5px;display:block;}
+  .om-input{
+    width:100%;font-family:inherit;font-size:13px;border:1px solid var(--border);border-radius:8px;
+    padding:9px 11px;background:var(--surface);color:var(--text);margin-bottom:12px;
+  }
+  .om-input:disabled{background:var(--panel);color:var(--text-muted);}
+  .om-row{display:flex;gap:12px;}
+  .om-row > div{flex:1;}
+  .om-row-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;}
+  .om-row-top .om-input{margin-bottom:0;}
+  .om-gwanjang-check{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;padding-top:24px;}
+  .om-gwanjang-check input{width:16px;height:16px;accent-color:var(--blue);}
+  .om-delivery-tabs{display:flex;background:var(--panel);border-radius:8px;padding:3px;margin-bottom:16px;}
+  .om-delivery-tab{
+    flex:1;text-align:center;padding:9px 4px;border-radius:6px;font-size:13px;font-weight:700;
+    color:var(--text-mid);cursor:pointer;border:none;background:none;
+  }
+  .om-delivery-tab.active{background:var(--navy);color:#fff;}
+  .om-addr-row{display:flex;gap:8px;align-items:flex-start;}
+  .om-addr-row .om-input{flex:1;}
+  .om-time-row{display:flex;gap:8px;}
+  .om-time-row select, .om-time-row input{
+    font-family:inherit;font-size:12.5px;border:1px solid var(--border);border-radius:8px;padding:9px 8px;background:var(--surface);
+  }
+  .om-product-actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .om-product-box{border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--bg);}
+  .om-product-box-title{font-size:12.5px;font-weight:800;color:var(--text);margin-bottom:8px;}
+  .om-product-empty{font-size:11px;color:var(--text-muted);padding:8px 2px 0;font-style:italic;}
+  .om-product-table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px;}
+  .om-product-table th{background:var(--panel);color:var(--text-mid);font-weight:700;text-align:left;padding:8px 8px;font-size:11px;}
+  .om-product-table td{padding:8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .om-product-table input[type="text"], .om-product-table input[type="number"]{
+    width:100%;font-family:inherit;font-size:12px;border:1px solid var(--border);border-radius:6px;padding:5px 6px;
+  }
+  .om-insa-badge{
+    display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;
+    background:var(--gray-bg);color:var(--gray-text);cursor:pointer;border:none;
+  }
+  .om-insa-badge.active{background:#DCF0DC;color:#2F855A;}
+  .om-editor-box{
+    background:var(--orange);border:1px solid var(--orange-strong);border-radius:10px;padding:12px 14px;margin-bottom:16px;
+  }
+  .om-editor-box .om-label{color:#9C4221;}
+  .om-editor-box .om-input{margin-bottom:0;border-color:var(--orange-strong);}
+  .om-submit-btn{
+    width:100%;padding:13px;border-radius:10px;border:none;font-size:14.5px;font-weight:700;
+    background:var(--green);color:#fff;cursor:pointer;
+  }
+  .om-submit-btn:disabled{background:#CBD5E0;color:#fff;cursor:not-allowed;}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ===== Topbar ===== -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark">B2B</div>
+      <div class="name">통합 물류·주문 관리 시스템<span>Admin Console</span></div>
+    </div>
+    <div class="topbar-right">
+      <div class="region-pill">
+        <div class="avatar">남부</div>
+        <div class="who">남부매장 관리자 <b>님</b></div>
+      </div>
+      <div class="bell"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><div class="dot"></div></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- ===== Sidebar ===== -->
+    <div class="sidebar">
+      <button class="sidebar-toggle-btn" id="sidebar-collapse-btn" title="메뉴바 숨기기">
+        <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="side-group">
+        <div class="nav-item active" data-page="dash">
+          <svg viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="15" rx="1"/><rect x="17" y="9" width="4" height="12" rx="1"/></svg>
+          데이터 관리
+        </div>
+        <div class="nav-item" data-page="order">
+          <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
+          주문관리
+        </div>
+        <div class="nav-item" data-page="ship">
+          <svg viewBox="0 0 24 24"><rect x="1" y="7" width="14" height="10" rx="1"/><path d="M15 10h4l3 3v4h-7z"/><circle cx="6" cy="19" r="1.6"/><circle cx="18" cy="19" r="1.6"/></svg>
+          배송관리
+        </div>
+        <div class="nav-item" data-page="factory">
+          <svg viewBox="0 0 24 24"><path d="M3 21V10l5 3V10l5 3V10l5 3v8z"/><path d="M3 21h18"/></svg>
+          출고관리
+        </div>
+      </div>
+      <div class="nav-sub">
+        <div class="nav-sub-item active" data-sub="miss">누락체크</div>
+        <div class="nav-sub-item" data-sub="release">출고관리 <span class="sub-tag">출고전용</span></div>
+        <div class="nav-sub-item" data-sub="pack">포장관리</div>
+      </div>
+      <div class="side-group">
+        <div class="nav-item" data-page="inventory">
+          <svg viewBox="0 0 24 24"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 13h18"/></svg>
+          재고관리
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+          회원관리
+        </div>
+      </div>
+    </div>
+
+    <button class="sidebar-expand-btn" id="sidebar-expand-btn" title="메뉴바 펼치기">
+      <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+
+    <!-- ===== Main ===== -->
+    <div class="main">
+
+      <!-- ================= PAGE: 데이터관리(대시보드) ================= -->
+      <div class="page active" id="page-dash">
+        <div class="page-head">
+          <div>
+            <div class="page-title">주문현황 대시보드</div>
+            <div class="page-sub">전 지역 실시간 집계 · 자동 갱신</div>
+          </div>
+          <button class="btn"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>엑셀 다운로드</button>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-card">
+            <div class="metric-top"><div class="metric-label">총 주문수량</div><div class="metric-icon icon-blue"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/></svg></div></div>
+            <div class="metric-value">15,230<small>건</small></div>
+            <div class="metric-delta" style="color:var(--green)">▲ 전일 대비 4.2%</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-top"><div class="metric-label">총 재고수량</div><div class="metric-icon icon-green"><svg viewBox="0 0 24 24"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div></div>
+            <div class="metric-value">120,450<small>개</small></div>
+            <div class="metric-delta" style="color:var(--text-mid)">3개 매장 합산</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-top"><div class="metric-label">출고 임박</div><div class="metric-icon icon-orange"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div></div>
+            <div class="metric-value">5<small>건</small></div>
+            <div class="metric-delta" style="color:var(--orange-text)">3일 이내 출고 필요</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-top"><div class="metric-label">공정 누락</div><div class="metric-icon icon-red"><svg viewBox="0 0 24 24"><path d="M12 9v4"/><circle cx="12" cy="16.5" r="0.6"/><path d="M10.3 3.9 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div></div>
+            <div class="metric-value">2<small>건</small></div>
+            <div class="metric-delta" style="color:var(--red)">확인 필요</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">일자별 주문 추이
+              <div class="toggle-pair"><span class="active" id="tg7">일주일</span><span id="tg30">30일</span></div>
+            </div>
+            <div class="chart-wrap">
+              <svg viewBox="0 0 620 150" preserveAspectRatio="none">
+                <line x1="0" y1="0" x2="620" y2="0" stroke="#EEF1F5" stroke-width="1"/>
+                <line x1="0" y1="50" x2="620" y2="50" stroke="#EEF1F5" stroke-width="1"/>
+                <line x1="0" y1="100" x2="620" y2="100" stroke="#EEF1F5" stroke-width="1"/>
+                <line x1="0" y1="149" x2="620" y2="149" stroke="#EEF1F5" stroke-width="1"/>
+                <polyline fill="none" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                  points="10,64 108,32 206,40 304,72 402,112 500,86 590,124"/>
+                <g fill="#3182CE">
+                  <circle cx="10" cy="64" r="3.5"/><circle cx="108" cy="32" r="3.5"/><circle cx="206" cy="40" r="3.5"/>
+                  <circle cx="304" cy="72" r="3.5"/><circle cx="402" cy="112" r="3.5"/><circle cx="500" cy="86" r="3.5"/>
+                  <circle cx="590" cy="124" r="3.5"/>
+                </g>
+              </svg>
+            </div>
+            <div class="chart-labels"><span>7일</span><span>6일</span><span>5일</span><span>4일</span><span>3일</span><span>2일</span><span>1일</span></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">저재고 경고 상품 Top 5</div>
+            <div class="bar-row"><div class="bar-name">발효명가1호</div><div class="bar-track"><div class="bar-fill" style="width:22%;background:#F6AD55"></div></div><div class="bar-value">27개</div></div>
+            <div class="bar-row"><div class="bar-name">감사1호</div><div class="bar-track"><div class="bar-fill" style="width:12%;background:#ED8936"></div></div><div class="bar-value">12개</div></div>
+            <div class="bar-row"><div class="bar-name">명품S1호</div><div class="bar-track"><div class="bar-fill" style="width:18%;background:#DD6B20"></div></div><div class="bar-value">18개</div></div>
+            <div class="bar-row"><div class="bar-name">명품S2호</div><div class="bar-track"><div class="bar-fill" style="width:26%;background:#E53E3E"></div></div><div class="bar-value">22개</div></div>
+            <div class="bar-row"><div class="bar-name">명품S5호</div><div class="bar-track"><div class="bar-fill" style="width:30%;background:#C53030"></div></div><div class="bar-value">25개</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">상품별 주문 상위 5</div>
+          <div class="bar-row"><div class="bar-name">감사1호</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:#2B4E86"></div></div><div class="bar-value">15,230</div></div>
+          <div class="bar-row"><div class="bar-name">명품S5호</div><div class="bar-track"><div class="bar-fill" style="width:34%;background:#3B6BAA"></div></div><div class="bar-value">842</div></div>
+          <div class="bar-row"><div class="bar-name">명품S1호</div><div class="bar-track"><div class="bar-fill" style="width:25%;background:#4E82C4"></div></div><div class="bar-value">620</div></div>
+          <div class="bar-row"><div class="bar-name">기쁨1호</div><div class="bar-track"><div class="bar-fill" style="width:17%;background:#6C9BD6"></div></div><div class="bar-value">428</div></div>
+          <div class="bar-row"><div class="bar-name">발효명가1호</div><div class="bar-track"><div class="bar-fill" style="width:13%;background:#8FB4E3"></div></div><div class="bar-value">337</div></div>
+        </div>
+      </div>
+
+      <!-- ================= PAGE: 주문관리 ================= -->
+      <div class="page" id="page-order">
+        <div class="page-head">
+          <div>
+            <div class="page-title">주문관리</div>
+            <div class="page-sub">로그인 계정: 남부매장 관리자 — 담당 지역 외 주문의 확인 버튼은 비활성화됩니다</div>
+          </div>
+          <button class="btn primary" id="new-order-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>신규작성</button>
+        </div>
+
+        <div class="table-card">
+          <div class="table-toolbar">
+            <div class="filters">
+              <select><option>전체 지역</option><option>남부</option><option>중부</option><option>서부</option></select>
+              <select><option>전체 상태</option><option>접수</option><option>발송대기</option><option>출력완료</option><option>발송완료</option><option>취소</option></select>
+              <input type="date" class="filter-date" title="주문일 검색" style="font-size:12.5px;border:1px solid var(--border);border-radius:7px;padding:7px 10px;">
+              <input type="text" placeholder="주문번호 · 성명 검색" style="width:180px;">
+            </div>
+            <div style="font-size:11.5px;color:var(--text-muted);">총 4건</div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>작업자<span class="sub-tag">신규</span></th><th>주문매장</th><th>주문번호</th><th>성명</th><th>구분</th><th>주문확인</th>
+                  <th>상태</th><th>결제완료</th><th>인사장완료</th><th>기표지완료</th><th>출력</th><th>보기</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr data-order="order1">
+                  <td>
+                    <div class="worker-cell">
+                      <select class="worker-select" id="worker-select-order1">
+                        <option value="">선택</option>
+                        <option value="매장">매장</option>
+                        <option value="공장">공장</option>
+                      </select>
+                      <button class="cell-btn confirm worker-save-btn" data-order="order1" style="padding:3px 10px;font-size:11px;">저장</button>
+                    </div>
+                  </td>
+                  <td><span class="region-tag region-남부">남부</span></td>
+                  <td class="name-cell"><button class="order-no-link" data-order="order1">2607160001-001</button></td>
+                  <td>이순희</td><td>택배</td>
+                  <td><button class="cell-btn confirm">확인</button></td>
+                  <td><span class="status-chip st-접수">접수</span></td>
+                  <td>
+                    <div class="appr-cell">
+                      <div class="appr-row">
+                        <select class="appr-select" id="ord-payment-select-order1">
+                          <option value="N" selected>N</option>
+                          <option value="Y">Y</option>
+                        </select>
+                        <input type="text" class="appr-author-input" id="ord-payment-author-order1" placeholder="작성자">
+                      </div>
+                      <button class="cell-btn confirm appr-save-btn" data-field="payment" data-order="order1" data-need-author="1">저장</button>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="appr-cell">
+                      <select class="appr-select" id="ord-insa-select-order1">
+                        <option value="N" selected>N</option>
+                        <option value="Y">Y</option>
+                      </select>
+                      <button class="cell-btn confirm appr-save-btn" data-field="insa" data-order="order1">저장</button>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="appr-cell">
+                      <div class="appr-row">
+                        <select class="appr-select" id="ord-pyo-select-order1">
+                          <option value="N" selected>N</option>
+                          <option value="Y">Y</option>
+                        </select>
+                        <input type="text" class="appr-author-input" id="ord-pyo-author-order1" placeholder="작성자">
+                      </div>
+                      <button class="cell-btn confirm appr-save-btn" data-field="pyo" data-order="order1" data-need-author="1">저장</button>
+                    </div>
+                  </td>
+                  <td><button class="cell-btn ghost" disabled style="opacity:.4;cursor:not-allowed;">출력</button></td>
+                  <td><button class="cell-btn ghost">보기</button></td>
+                </tr>
+                <tr class="locked" data-order="order2">
+                  <td><span class="badge badge-y">매장</span></td>
+                  <td><span class="region-tag region-중부">중부</span></td>
+                  <td class="name-cell"><button class="order-no-link" data-order="order2">2607160002-001</button></td>
+                  <td>김주문</td><td>배달</td>
+                  <td><button class="cell-btn confirm disabled">확인</button></td>
+                  <td><span class="status-chip st-발송대기">발송대기</span></td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td><span class="badge badge-x">X</span></td>
+                  <td><span class="badge badge-x">X</span></td>
+                  <td><button class="cell-btn ghost"><span class="lock-icon"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg></span>출력</button></td>
+                  <td><button class="cell-btn ghost">보기</button></td>
+                </tr>
+                <tr class="locked" data-order="order3">
+                  <td><span class="badge badge-x">—</span></td>
+                  <td><span class="region-tag region-남부">남부</span></td>
+                  <td class="name-cell"><button class="order-no-link" data-order="order3">2607160003-001</button></td>
+                  <td>박보내</td><td>택배</td>
+                  <td><button class="cell-btn ghost" style="background:var(--gray-bg);color:var(--text-muted);border:none;">취소</button></td>
+                  <td><span class="status-chip st-취소">취소</span></td>
+                  <td><span class="badge badge-cancel">취소</span></td>
+                  <td><span class="badge badge-x">X</span></td>
+                  <td><span class="badge badge-x">X</span></td>
+                  <td><button class="cell-btn ghost"><span class="lock-icon"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg></span>출력</button></td>
+                  <td><button class="cell-btn ghost">보기</button></td>
+                </tr>
+                <tr class="locked" data-order="order4">
+                  <td><span class="badge badge-y">공장</span></td>
+                  <td><span class="region-tag region-서부">서부</span></td>
+                  <td class="name-cell"><button class="order-no-link" data-order="order4">2607160004-001</button></td>
+                  <td>최접수</td><td>택배</td>
+                  <td><button class="cell-btn confirm disabled">확인</button></td>
+                  <td><span class="status-chip st-출력완료">출력완료</span></td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td><button class="cell-btn ghost"><span class="lock-icon"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg></span>재출력</button></td>
+                  <td><button class="cell-btn ghost">보기</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="legend">
+            <div class="legend-item"><svg width="12" height="12" viewBox="0 0 24 24" style="stroke:var(--text-muted);fill:none;"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg> 확인 처리된 행은 읽기 전용으로 잠깁니다</div>
+            <div class="legend-item">타 지역 주문의 확인 버튼은 회색으로 비활성화됩니다</div>
+            <div class="legend-item">인사장·기표지를 요청하지 않은 주문은 'X'로 표시되며 선택이 필요 없습니다</div>
+            <div class="legend-item">작업자 필드는 매장 관리자만 사용 가능하며, '공장' 선택 시에만 출고관리로 데이터가 전송됩니다</div>
+          </div>
+        </div>
+
+        <div class="foot-note">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M12 11v5"/></svg>
+          '확인' 클릭 시 회원 앱 상태가 '접수완료'로 즉시 전환되고, 데이터가 배송관리로 자동 전송됩니다. 주문번호를 클릭하면 주문서 수정 팝업이 열립니다.
+        </div>
+      </div>
+
+      <!-- ================= PAGE: 배송관리 ================= -->
+      <div class="page" id="page-ship">
+        <div class="page-head">
+          <div>
+            <div class="page-title">배송관리</div>
+            <div class="page-sub">현재일 + 3일 ≥ 출고요청일 이고 미출고 상태인 건은 주황색으로 강조됩니다</div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-toolbar">
+            <div class="filters">
+              <select><option>전체 매장</option><option>남부</option><option>중부</option><option>서부</option></select>
+              <select><option>전체 상태</option><option>접수</option><option>발송대기</option><option>출력완료</option><option>발송완료</option></select>
+              <select id="ship-worker-filter"><option value="">전체 작업자</option><option value="매장">매장</option><option value="공장">공장</option></select>
+            </div>
+            <div style="font-size:11.5px;color:var(--text-muted);">
+              <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:3px;background:var(--orange-strong);display:inline-block;"></span>출고 임박 3건</span>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>작업자<span class="sub-tag">신규</span></th>
+                  <th>주문번호</th><th>매장</th>
+                  <th>중앙<span class="sub-tag">동일</span></th><th>이름<span class="sub-tag">동일</span></th><th>거래처</th>
+                  <th>품목<span class="sub-tag">동일</span></th><th>수량<span class="sub-tag">동일</span></th>
+                  <th>출고요청일</th>
+                  <th>상차/택배<span class="sub-tag">동일</span></th><th>개별/박스<span class="sub-tag">동일</span></th>
+                  <th>출고중 여부</th>
+                  <th>결제완료</th><th>기표지완료</th><th>출고확인<span class="sub-tag">자동</span></th><th>인사장완료</th><th>상태</th>
+                  <th>최종완료<span class="sub-tag">신규</span></th>
+                  <th>최종확인<span class="sub-tag">신규</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr data-order="order1" data-worker="ship-row" data-delivery="상차">
+                  <td id="ship-worker-order1"><span class="badge badge-n">—</span></td>
+                  <td class="name-cell">2607160001-001</td>
+                  <td><span class="region-tag region-남부">남부</span></td>
+                  <td>장유중앙</td>
+                  <td>김민수 관</td>
+                  <td>(주)한일체육<span class="edit-badge" id="editwarn-order1" style="display:none;"><span class="dot"></span>수정됨</span></td>
+                  <td>명진1호</td>
+                  <td>300</td>
+                  <td>2026.08.14</td>
+                  <td>상차</td>
+                  <td>박스</td>
+                  <td><span class="badge badge-n">미출고</span></td>
+                  <td id="ship-payment-order1"><span class="badge badge-n">N</span></td>
+                  <td id="ship-pyo-order1"><span class="badge badge-n">N</span></td>
+                  <td class="shipdate-cell" id="shipdate-order1">—</td>
+                  <td id="ship-insa-order1"><span class="badge badge-n">N</span></td>
+                  <td class="ship-status-cell"><span class="status-chip st-접수">접수</span></td>
+                  <td><button class="cell-btn ghost final-complete-btn" disabled style="opacity:.4;cursor:not-allowed;">최종완료</button></td>
+                  <td><button class="cell-btn ghost final-confirm-ship-btn" id="finalconfirm-ship-order1" data-order="order1" disabled style="opacity:.4;cursor:not-allowed;">최종확인</button></td>
+                </tr>
+                <tr class="urgent" data-order="order2" data-delivery="택배">
+                  <td id="ship-worker-order2"><span class="badge badge-n">—</span></td>
+                  <td class="name-cell">2607160003-001</td>
+                  <td><span class="region-tag region-남부">남부</span></td>
+                  <td>김해점</td>
+                  <td>이순희</td>
+                  <td>대동물류<span class="im-badge"><span class="dot"></span>임박</span><span class="edit-badge" id="editwarn-order2" style="display:none;"><span class="dot"></span>수정됨</span></td>
+                  <td>감사1호</td>
+                  <td>120</td>
+                  <td>2026.08.14</td>
+                  <td>택배</td>
+                  <td>개별</td>
+                  <td><span class="badge badge-n">미출고</span></td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td><span class="badge badge-n">N</span></td>
+                  <td class="shipdate-cell" id="shipdate-order2">—</td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td class="ship-status-cell"><span class="status-chip st-발송대기">발송대기</span></td>
+                  <td><button class="cell-btn ghost final-complete-btn" disabled style="opacity:.4;cursor:not-allowed;">최종완료</button></td>
+                  <td id="ship-finalconfirm-status-order2"><span class="badge badge-cancel">미완료</span></td>
+                </tr>
+                <tr data-order="order4" data-delivery="택배">
+                  <td id="ship-worker-order4"><span class="badge badge-y">공장</span></td>
+                  <td class="name-cell">2607150955-002</td>
+                  <td><span class="region-tag region-서부">서부</span></td>
+                  <td>장유중앙</td>
+                  <td>최영도</td>
+                  <td>동아상사<span class="edit-badge" id="editwarn-order4" style="display:none;"><span class="dot"></span>수정됨</span></td>
+                  <td>기쁨1호</td>
+                  <td>90</td>
+                  <td>2026.08.14</td>
+                  <td>택배</td>
+                  <td>개별</td>
+                  <td><span class="badge badge-y">완료</span></td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td class="shipdate-cell" id="shipdate-order4"><span class="badge badge-y">2026.08.11</span></td>
+                  <td><span class="badge badge-y">Y</span></td>
+                  <td class="ship-status-cell"><span class="status-chip st-발송완료">발송완료</span></td>
+                  <td><button class="cell-btn ghost final-complete-btn" disabled style="opacity:.5;cursor:not-allowed;">완료됨</button></td>
+                  <td id="ship-finalconfirm-status-order4"><span class="badge badge-cancel">미완료</span></td>
+                </tr>
+                <tr class="urgent" data-order="order3" data-delivery="상차">
+                  <td id="ship-worker-order3"><span class="badge badge-n">—</span></td>
+                  <td class="name-cell">2607160007-001</td>
+                  <td><span class="region-tag region-중부">중부</span></td>
+                  <td>부산중앙</td>
+                  <td>박정훈 관</td>
+                  <td>서울상사<span class="im-badge"><span class="dot"></span>임박</span><span class="edit-badge" id="editwarn-order3" style="display:none;"><span class="dot"></span>수정됨</span></td>
+                  <td>명품S1호</td>
+                  <td>200</td>
+                  <td>2026.08.14</td>
+                  <td>상차</td>
+                  <td>박스</td>
+                  <td><span class="badge badge-n">미출고</span></td>
+                  <td><span class="badge badge-n">N</span></td>
+                  <td><span class="badge badge-n">N</span></td>
+                  <td class="shipdate-cell" id="shipdate-order3">—</td>
+                  <td><span class="badge badge-n">N</span></td>
+                  <td class="ship-status-cell"><span class="status-chip st-발송대기">발송대기</span></td>
+                  <td><button class="cell-btn ghost final-complete-btn" disabled style="opacity:.4;cursor:not-allowed;">최종완료</button></td>
+                  <td><button class="cell-btn ghost final-confirm-ship-btn" id="finalconfirm-ship-order3" data-order="order3" disabled style="opacity:.4;cursor:not-allowed;">최종확인</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="foot-note">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M12 11v5"/></svg>
+          '발송완료' 상태인 건은 조건을 충족해도 임박 경고 대상에서 자동 제외됩니다. '출고확인'은 출고관리에서 공장 관리자가 '출고완료'를 누르면 그 날짜가 자동으로 기록되는 필드이며, 이 값이 있는 건에 한해서만 '최종완료' 버튼이 활성화됩니다. '최종완료'는 매장 관리자가 물건을 받아 최종 납품했을 때 누르는 버튼입니다. '최종확인'은 '상차/택배'가 '상차'인 건에 한해 이 화면에서 매장 관리자가 직접 처리하는 버튼이며, '택배' 건은 출고관리 화면에서 공장 관리자가 처리하고 이 화면에는 그 처리 여부가 '완료'/'미완료'로 표시만 됩니다. 취소 건을 제외한 모든 주문 데이터가 배송관리로 전송되어 전체 배송 현황을 관리합니다.
+        </div>
+      </div>
+
+      <!-- ================= PAGE: 출고관리 (누락체크 / 출고전용 / 포장관리) ================= -->
+      <div class="page" id="page-factory">
+        <div class="page-head">
+          <div>
+            <div class="page-title">출고관리</div>
+            <div class="page-sub">실제 운영 시트 구조(출고전용 · 포장 전 · 공장포장 · 양말부포장)를 반영한 화면입니다</div>
+          </div>
+        </div>
+
+        <div class="subtab-bar">
+          <div class="subtab active" data-subtab="miss">누락체크</div>
+          <div class="subtab" data-subtab="release">출고관리 <span class="sub-tag">출고전용</span></div>
+          <div class="subtab" data-subtab="pack">포장관리</div>
+        </div>
+
+        <!-- ---- 서브: 누락체크 ---- -->
+        <div class="subpage active" id="sub-miss">
+          <div class="metric-row">
+            <div class="metric-card">
+              <div class="metric-top"><div class="metric-label">총 주문 건수</div><div class="metric-icon icon-blue"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/></svg></div></div>
+              <div class="metric-value">142<small>건</small></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-top"><div class="metric-label">출고완료</div><div class="metric-icon icon-green"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div></div>
+              <div class="metric-value">118<small>건</small></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-top"><div class="metric-label">포장완료</div><div class="metric-icon icon-blue"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg></div></div>
+              <div class="metric-value">126<small>건</small></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-top"><div class="metric-label">미출고 · 미포장</div><div class="metric-icon icon-red"><svg viewBox="0 0 24 24"><path d="M12 9v4"/><circle cx="12" cy="16.5" r="0.6"/><path d="M10.3 3.9 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div></div>
+              <div class="metric-value">24 / 16</div>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-toolbar">
+              <div style="font-weight:700;font-size:13px;">실시간 공정 누락 경고 <span style="color:var(--red)">(2건)</span></div>
+            </div>
+            <table>
+              <thead>
+                <tr><th>주문일자</th><th>거래처</th><th>수량</th><th>누락된 확인내용</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>2026.08.10</td>
+                  <td class="name-cell">(주)한일체육</td>
+                  <td>50</td>
+                  <td><span class="badge badge-cancel">결제완료 미클릭</span> <span class="badge badge-cancel">인사장완료 미클릭</span></td>
+                </tr>
+                <tr>
+                  <td>2026.08.10</td>
+                  <td class="name-cell">대흥아이티</td>
+                  <td>200</td>
+                  <td><span class="badge badge-cancel">공장출고일 미입력</span></td>
+                </tr>
+                <tr>
+                  <td>2026.08.10</td>
+                  <td class="name-cell">태양산업</td>
+                  <td>80</td>
+                  <td><span class="badge badge-cancel">PT 미입력(미작업)</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ---- 서브: 출고관리(출고전용) ---- -->
+        <div class="subpage" id="sub-release">
+          <div class="release-toolbar">
+            <div class="filters">
+              <div class="date-nav">
+                <button class="date-arrow" title="이전 날짜">‹</button>
+                <label class="date-current" style="cursor:pointer;">
+                  <svg viewBox="0 0 24 24" width="14" height="14" style="stroke:var(--navy);fill:none;vertical-align:-2px;margin-right:5px;"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+                  <input type="date" class="release-date-input" value="2026-08-14" style="border:none;background:transparent;font:inherit;font-size:13.5px;font-weight:700;color:var(--navy);padding:0;width:118px;">
+                </label>
+                <button class="date-arrow" title="다음 날짜">›</button>
+                <button class="btn" id="release-show-all">전체보기</button>
+              </div>
+              <select id="release-filter-store"><option value="">전체 매장</option><option value="남부">남부</option><option value="중부">중부</option><option value="서부">서부</option></select>
+              <select id="release-filter-pack"><option value="">전체 포장완료</option><option value="완료">완료</option><option value="미완료">미완료</option></select>
+              <select id="release-filter-ship"><option value="">전체 출고완료</option><option value="완료">완료</option><option value="미완료">미완료</option></select>
+            </div>
+            <div class="summary-chips">
+              <div class="summary-chip">총 <b>4</b>건</div>
+              <div class="summary-chip">포장완료 <b id="release-done-count">2</b>/4건</div>
+              <div class="summary-chip warn">미완료 <b id="release-undone-count">2</b>건</div>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>No</th><th>주문일자</th><th>매장</th><th>중앙</th><th>이름</th><th>거래처</th><th>품목</th><th>수량</th>
+                    <th>출고요청일</th><th>상차/택배</th><th>개별/박스</th><th>특이사항</th>
+                    <th>포장일자<span class="sub-tag">자동</span></th>
+                    <th>PT<span class="sub-tag">자동</span></th>
+                    <th>보관장소<span class="sub-tag">자동</span></th>
+                    <th>포장완료<span class="sub-tag">신규</span></th>
+                    <th>출고완료</th>
+                    <th>최종확인<span class="sub-tag">신규</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr data-order="order1" data-delivery="상차">
+                    <td>1</td>
+                    <td>2026.08.12</td>
+                    <td><span class="region-tag region-남부">남부</span></td>
+                    <td>장유중앙</td>
+                    <td class="name-cell">김민수 관</td>
+                    <td>(주)한일체육</td>
+                    <td>명진1호</td>
+                    <td>300</td>
+                    <td>2026.08.14</td>
+                    <td>상차</td>
+                    <td>박스</td>
+                    <td>—</td>
+                    <td id="pkdate-order1">2026.08.13</td>
+                    <td id="pt-order1"><span class="pt-cell pt-filled">180</span></td>
+                    <td id="storage-order1"><span class="badge badge-y">공장</span></td>
+                    <td id="packstatus-order1"><span class="badge badge-y">완료</span></td>
+                    <td><button class="cell-btn confirm ship-complete-btn" data-order="order1">완료</button></td>
+                    <td><button class="cell-btn ghost final-confirm-out-btn" id="finalconfirm-out-order1" disabled style="opacity:.35;cursor:not-allowed;" title="상차 건은 배송관리에서 매장 관리자가 처리">— (상차)</button></td>
+                  </tr>
+                  <tr data-order="order2" data-delivery="택배">
+                    <td>2</td>
+                    <td>2026.08.12</td>
+                    <td><span class="region-tag region-남부">남부</span></td>
+                    <td>김해점</td>
+                    <td class="name-cell">이순희</td>
+                    <td>대동물류</td>
+                    <td>감사1호</td>
+                    <td>120</td>
+                    <td>2026.08.14</td>
+                    <td>택배</td>
+                    <td>개별</td>
+                    <td>냉장 보관 요청</td>
+                    <td id="pkdate-order2">—</td>
+                    <td id="pt-order2"><span class="pt-cell" style="color:var(--text-muted);">—</span></td>
+                    <td id="storage-order2"><span class="badge badge-n">—</span></td>
+                    <td id="packstatus-order2"><span class="badge badge-cancel">미완료</span></td>
+                    <td><button class="cell-btn ghost ship-complete-btn" data-order="order2" disabled style="opacity:.4;cursor:not-allowed;">완료</button></td>
+                    <td><button class="cell-btn ghost final-confirm-out-btn" id="finalconfirm-out-order2" disabled style="opacity:.4;cursor:not-allowed;">최종확인</button></td>
+                  </tr>
+                  <tr data-order="order3" data-delivery="상차">
+                    <td>3</td>
+                    <td>2026.08.13</td>
+                    <td><span class="region-tag region-중부">중부</span></td>
+                    <td>부산중앙</td>
+                    <td class="name-cell">박정훈 관</td>
+                    <td>서울상사</td>
+                    <td>명품S1호</td>
+                    <td>200</td>
+                    <td>2026.08.14</td>
+                    <td>상차</td>
+                    <td>박스</td>
+                    <td>—</td>
+                    <td id="pkdate-order3">—</td>
+                    <td id="pt-order3"><span class="pt-cell" style="color:var(--text-muted);">—</span></td>
+                    <td id="storage-order3"><span class="badge badge-n">—</span></td>
+                    <td id="packstatus-order3"><span class="badge badge-cancel">미완료</span></td>
+                    <td><button class="cell-btn ghost ship-complete-btn" data-order="order3" disabled style="opacity:.4;cursor:not-allowed;">완료</button></td>
+                    <td><button class="cell-btn ghost final-confirm-out-btn" id="finalconfirm-out-order3" disabled style="opacity:.35;cursor:not-allowed;" title="상차 건은 배송관리에서 매장 관리자가 처리">— (상차)</button></td>
+                  </tr>
+                  <tr data-order="order4" data-delivery="택배">
+                    <td>4</td>
+                    <td>2026.08.13</td>
+                    <td><span class="region-tag region-서부">서부</span></td>
+                    <td>장유중앙</td>
+                    <td class="name-cell">최영도</td>
+                    <td>동아상사</td>
+                    <td>기쁨1호</td>
+                    <td>90</td>
+                    <td>2026.08.14</td>
+                    <td>택배</td>
+                    <td>개별</td>
+                    <td>—</td>
+                    <td id="pkdate-order4">2026.08.13</td>
+                    <td id="pt-order4"><span class="pt-cell pt-filled">92</span></td>
+                    <td id="storage-order4"><span class="badge badge-y">양말</span></td>
+                    <td id="packstatus-order4"><span class="badge badge-y">완료</span></td>
+                    <td><button class="cell-btn ghost ship-complete-btn" data-order="order4" disabled style="opacity:.5;cursor:not-allowed;">출고완료됨</button></td>
+                    <td><button class="cell-btn confirm final-confirm-out-btn" id="finalconfirm-out-order4">최종확인</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="legend">
+              <div class="legend-item">'상차/택배'가 '택배'인 건은 이 화면에서 공장 관리자가 최종확인을 처리하며, '상차'인 건은 배송관리에서 매장 관리자가 처리합니다</div>
+            </div>
+            <div class="legend">
+              <div class="legend-item">포장일자·PT·보관장소·포장완료는 포장관리에서 입력된 값이 자동 반영되는 조회 전용 필드입니다</div>
+              <div class="legend-item">'출고완료' 버튼은 포장완료가 '완료'인 건에 한해 활성화됩니다 (공장 관리자 처리)</div>
+              <div class="legend-item">'출고완료' 클릭 시 배송관리의 출고확인 일자가 자동 기록되고, 그 건의 '최종완료' 버튼이 활성화됩니다</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- 서브: 포장관리 (포장 전 / 공장포장 / 양말부포장) ---- -->
+        <div class="subpage" id="sub-pack">
+          <div class="subtab-bar small">
+            <div class="subtab2 active" data-subtab2="pre">포장 전</div>
+            <div class="subtab2" data-subtab2="factory-pack">공장포장</div>
+            <div class="subtab2" data-subtab2="sock-pack">양말부포장</div>
+          </div>
+
+          <!-- 포장 전 -->
+          <div class="subpage2 active" id="sub2-pre">
+            <div class="table-card">
+              <div class="table-toolbar">
+                <div style="font-weight:700;font-size:13px;">포장 대기 목록 (포장 미완료 건)</div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn" data-goto-subtab2="factory-pack">공장포장 바로가기</button>
+                  <button class="btn" data-goto-subtab2="sock-pack">양말부포장 바로가기</button>
+                </div>
+              </div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>출고요청일</th><th>상세내역</th><th>상차/택배</th><th>개별/박스</th><th>인사장소재</th><th>인사장위치</th>
+                      <th>기표지</th><th>특이사항</th><th>포장구분</th><th>저장</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pre-pack-body">
+                    <tr data-order="order2" data-detail="이순희 대동물류 : 감사1호" data-qty="120세트" data-request-date="2026-08-14"
+                        data-sangcha="택배" data-box="개별" data-insa="감사1호" data-insaloc="박스 상단" data-pyo="이순희 대동물류 : 감사1호 120세트" data-note="냉장 보관 요청">
+                      <td>2026.08.14</td>
+                      <td class="name-cell">이순희 대동물류 : 감사1호 120세트</td>
+                      <td>택배</td>
+                      <td>개별</td>
+                      <td>감사1호</td>
+                      <td>박스 상단</td>
+                      <td>이순희 대동물류 : 감사1호 120세트</td>
+                      <td>냉장 보관 요청</td>
+                      <td>
+                        <select class="pack-dept-select">
+                          <option value="">선택</option>
+                          <option value="factory">공장포장</option>
+                          <option value="sock">양말부포장</option>
+                        </select>
+                      </td>
+                      <td><button class="cell-btn confirm pack-save-btn">저장</button></td>
+                    </tr>
+                    <tr data-order="order3" data-detail="박정훈 관 서울상사 : 명품S1호" data-qty="200세트" data-request-date="2026-08-14"
+                        data-sangcha="상차" data-box="박스" data-insa="박정훈 관" data-insaloc="정문 앞" data-pyo="무" data-note="—">
+                      <td>2026.08.14</td>
+                      <td class="name-cell">박정훈 관 서울상사 : 명품S1호 200세트</td>
+                      <td>상차</td>
+                      <td>박스</td>
+                      <td>박정훈 관</td>
+                      <td>정문 앞</td>
+                      <td>무</td>
+                      <td>—</td>
+                      <td>
+                        <select class="pack-dept-select">
+                          <option value="">선택</option>
+                          <option value="factory">공장포장</option>
+                          <option value="sock">양말부포장</option>
+                        </select>
+                      </td>
+                      <td><button class="cell-btn confirm pack-save-btn">저장</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="legend">
+                <div class="legend-item">포장구분은 언제든 다시 선택해 저장할 수 있으며, 저장해도 목록에서 사라지지 않습니다. 공장포장·양말부포장에서 '완료'를 누르기 전까지 계속 표시됩니다</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 공장포장 -->
+          <div class="subpage2" id="sub2-factory-pack">
+            <div class="table-card">
+              <div class="table-toolbar">
+                <div style="font-weight:700;font-size:13px;">공장포장 현황 <span style="font-weight:400;color:var(--text-muted);">· 출고요청일 빠른순 정렬</span></div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn" title="출고일 순으로 정렬되어 출력됩니다"><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/></svg>인쇄</button>
+                  <button class="btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>화면캡쳐</button>
+                </div>
+              </div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>출고요청일</th><th>상세내역</th><th>상차/택배</th><th>개별/박스</th><th>인사장소재</th><th>인사장위치</th>
+                      <th>기표지</th><th>특이사항</th><th>PT</th><th>포장완료일</th><th>완료</th>
+                    </tr>
+                  </thead>
+                  <tbody id="factory-pack-body">
+                    <tr class="empty-row"><td colspan="11">포장 대기 중인 항목이 없습니다</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="legend">
+                <div class="legend-item">완료 처리된 건은 이 목록과 포장 전 대기목록에서 함께 사라지고, 출고관리의 포장완료가 '완료'로 표시됩니다</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 양말부포장 -->
+          <div class="subpage2" id="sub2-sock-pack">
+            <div class="table-card">
+              <div class="table-toolbar">
+                <div style="font-weight:700;font-size:13px;">양말부포장 현황 <span style="font-weight:400;color:var(--text-muted);">· 출고요청일 빠른순 정렬</span></div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn" title="출고일 순으로 정렬되어 출력됩니다"><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/></svg>인쇄</button>
+                  <button class="btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>화면캡쳐</button>
+                </div>
+              </div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>출고요청일</th><th>상세내역</th><th>상차/택배</th><th>개별/박스</th><th>인사장소재</th><th>인사장위치</th>
+                      <th>기표지</th><th>특이사항</th><th>PT</th><th>포장완료일</th><th>완료</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sock-pack-body">
+                    <tr class="empty-row"><td colspan="11">포장 대기 중인 항목이 없습니다</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="legend">
+                <div class="legend-item">완료 처리된 건은 이 목록과 포장 전 대기목록에서 함께 사라지고, 출고관리의 포장완료가 '완료'로 표시됩니다</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================= PAGE: 재고관리 ================= -->
+      <div class="page" id="page-inventory">
+        <div class="page-head">
+          <div>
+            <div class="page-title">재고관리</div>
+            <div class="page-sub">현재재고 = 초기재고 + 추가재고 − 주문 차감. 저재고 임계값 이하 품목은 데이터관리 대시보드에도 자동 반영됩니다</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>초기재고 업로드</button>
+            <button class="btn primary"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>추가재고 업로드</button>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-card">
+            <div class="metric-top"><div class="metric-label">현재재고 합계</div><div class="metric-icon icon-blue"><svg viewBox="0 0 24 24"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div></div>
+            <div class="metric-value">120,450<small>개</small></div>
+            <div class="metric-delta" style="color:var(--text-mid)">전체 128개 품목 합산</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-top"><div class="metric-label">누적 추가재고</div><div class="metric-icon icon-green"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div></div>
+            <div class="metric-value">8,420<small>개</small></div>
+            <div class="metric-delta" style="color:var(--text-mid)">이번달 업로드 6건</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-top"><div class="metric-label">누적 주문 차감</div><div class="metric-icon icon-orange"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></div></div>
+            <div class="metric-value">15,230<small>개</small></div>
+            <div class="metric-delta" style="color:var(--text-mid)">주문관리 실시간 연동</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-top"><div class="metric-label">저재고 품목</div><div class="metric-icon icon-red"><svg viewBox="0 0 24 24"><path d="M12 9v4"/><circle cx="12" cy="16.5" r="0.6"/><path d="M10.3 3.9 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div></div>
+            <div class="metric-value">5<small>개</small></div>
+            <div class="metric-delta" style="color:var(--red)">임계값 이하</div>
+          </div>
+        </div>
+
+        <div class="table-card" style="margin-bottom:16px;">
+          <div class="table-toolbar">
+            <div class="filters">
+              <input type="text" placeholder="품목명 검색" style="width:180px;">
+              <select><option>전체 품목</option><option>저재고만 보기</option></select>
+            </div>
+            <div style="font-size:11.5px;color:var(--text-muted);">총 128개 품목</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>품목명</th><th>초기재고</th><th>누적 추가</th><th>누적 차감(주문)</th><th>현재재고</th><th>임계값</th><th>최종 업데이트</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="low-stock">
+                <td class="name-cell">감사1호<span class="low-badge">저재고</span></td>
+                <td>500</td><td>+200</td><td>-688</td>
+                <td style="font-weight:800;color:var(--red-text);">12</td>
+                <td>30</td><td>2026.08.10</td>
+              </tr>
+              <tr class="low-stock">
+                <td class="name-cell">명품S1호<span class="low-badge">저재고</span></td>
+                <td>400</td><td>+100</td><td>-482</td>
+                <td style="font-weight:800;color:var(--red-text);">18</td>
+                <td>30</td><td>2026.08.11</td>
+              </tr>
+              <tr class="low-stock">
+                <td class="name-cell">명품S2호<span class="low-badge">저재고</span></td>
+                <td>350</td><td>+0</td><td>-328</td>
+                <td style="font-weight:800;color:var(--red-text);">22</td>
+                <td>30</td><td>2026.08.09</td>
+              </tr>
+              <tr class="low-stock">
+                <td class="name-cell">명품S5호<span class="low-badge">저재고</span></td>
+                <td>300</td><td>+0</td><td>-275</td>
+                <td style="font-weight:800;color:var(--red-text);">25</td>
+                <td>30</td><td>2026.08.09</td>
+              </tr>
+              <tr class="low-stock">
+                <td class="name-cell">발효명가1호<span class="low-badge">저재고</span></td>
+                <td>200</td><td>+150</td><td>-323</td>
+                <td style="font-weight:800;color:var(--red-text);">27</td>
+                <td>30</td><td>2026.08.10</td>
+              </tr>
+              <tr>
+                <td class="name-cell">기쁨1호</td>
+                <td>600</td><td>+0</td><td>-172</td>
+                <td style="font-weight:800;">428</td>
+                <td>50</td><td>2026.08.08</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="legend">
+            <div class="legend-item"><span style="width:9px;height:9px;border-radius:3px;background:var(--red-bg);border:1px solid var(--red);display:inline-block;"></span> 현재재고가 임계값 이하인 품목은 붉은색으로 강조되며, 데이터관리 대시보드의 '저재고 경고 상품 Top 5'에도 동일하게 반영됩니다</div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-toolbar">
+            <div style="font-weight:700;font-size:13px;">재고 변동 이력</div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>일시</th><th>유형</th><th>품목</th><th>변동량</th><th>담당자</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>2026.08.11 09:12</td>
+                <td><span class="badge badge-cancel">주문차감</span></td>
+                <td class="name-cell">감사1호</td>
+                <td style="color:var(--red);font-weight:700;">-12</td>
+                <td>자동(주문관리 연동)</td>
+              </tr>
+              <tr>
+                <td>2026.08.10 14:30</td>
+                <td><span class="badge badge-y">추가재고</span></td>
+                <td class="name-cell">감사1호</td>
+                <td style="color:var(--green);font-weight:700;">+200</td>
+                <td>공장 관리자</td>
+              </tr>
+              <tr>
+                <td>2026.08.05 10:00</td>
+                <td><span class="badge" style="background:var(--blue-soft);color:var(--blue);">초기재고</span></td>
+                <td class="name-cell">전체 128개 품목</td>
+                <td>—</td>
+                <td>공장 관리자</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ================= 제품주문서 모달 (신규작성 / 수정 공용) ================= -->
+<div class="modal-overlay" id="order-modal-overlay">
+  <div class="order-modal">
+    <button class="om-close" id="om-close-btn">✕</button>
+    <div class="om-header">
+      <div class="om-user">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+        개인회원
+      </div>
+      <!-- 메뉴바(햄버거) 숨김 처리됨 -->
+    </div>
+    <div class="om-body">
+      <div class="om-title" id="om-title">제품주문서</div>
+
+      <div class="om-highlight">
+        <div class="om-store-tabs">
+          <button class="om-store-tab active" data-store="남부">남부매장</button>
+          <button class="om-store-tab" data-store="중부">중부매장</button>
+          <button class="om-store-tab" data-store="서부">서부매장</button>
+        </div>
+
+        <div class="om-row-top">
+          <div style="flex:1;">
+            <label class="om-label">주문자 성명</label>
+            <input type="text" class="om-input" id="om-name" style="margin-bottom:0;">
+          </div>
+          <div class="om-gwanjang-check">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="om-gwanjang"> 관장님
+            </label>
+          </div>
+        </div>
+
+        <label class="om-label">주문자 연락처</label>
+        <input type="text" class="om-input" id="om-phone">
+
+        <div class="om-row">
+          <div>
+            <label class="om-label">주문자일자</label>
+            <input type="text" class="om-input" value="2026.08.14 (오늘 날짜 자동 반영)" disabled>
+          </div>
+          <div>
+            <label class="om-label">중앙</label>
+            <input type="text" class="om-input" id="om-jungang">
+          </div>
+        </div>
+      </div>
+
+      <div class="om-delivery-tabs">
+        <button class="om-delivery-tab active" data-mode="택배">택배</button>
+        <button class="om-delivery-tab" data-mode="배달">배달</button>
+      </div>
+
+      <!-- 택배 필드 -->
+      <div id="om-fields-택배">
+        <label class="om-label">택배발송일</label>
+        <input type="date" class="om-input">
+        <label class="om-label">업체명</label>
+        <input type="text" class="om-input">
+        <label class="om-label">보내는 사람 (택배기표지)</label>
+        <input type="text" class="om-input">
+        <label class="om-label">보내는 사람 전화번호 (택배기표지)</label>
+        <input type="text" class="om-input">
+        <label class="om-label">보내는 사람 주소 (택배기표지)</label>
+        <div class="om-addr-row">
+          <input type="text" class="om-input" style="margin-bottom:0;">
+          <button class="btn" style="background:var(--navy);color:#fff;border-color:var(--navy);white-space:nowrap;">주소검색</button>
+        </div>
+      </div>
+
+      <!-- 배달 필드 -->
+      <div id="om-fields-배달" style="display:none;">
+        <label class="om-label">배달일</label>
+        <input type="date" class="om-input">
+        <label class="om-label">배달시간</label>
+        <div class="om-time-row" style="margin-bottom:12px;">
+          <select><option>오전</option><option>오후</option></select>
+          <select><option>9시</option><option>10시</option><option>11시</option></select>
+          <input type="text" placeholder="요청 시간 메모" style="flex:1;">
+        </div>
+        <label class="om-label">업체명</label>
+        <input type="text" class="om-input">
+        <label class="om-label">받는 분 성함</label>
+        <input type="text" class="om-input">
+        <label class="om-label">받는 분 전화번호</label>
+        <input type="text" class="om-input">
+        <label class="om-label">받는 분 주소</label>
+        <div class="om-addr-row">
+          <input type="text" class="om-input" style="margin-bottom:0;">
+          <button class="btn" style="background:var(--navy);color:#fff;border-color:var(--navy);white-space:nowrap;">주소검색</button>
+        </div>
+      </div>
+
+      <!-- 택배: 기존과 동일 (상품추가 1개 + 인사장 배지) -->
+      <div id="om-product-taebae">
+        <div class="om-product-actions">
+          <button class="btn" id="om-add-product-taebae">+ 상품추가</button>
+          <button class="btn" id="om-apply-insa-all-taebae" style="background:var(--blue-soft);color:var(--blue);border-color:var(--blue-soft);">인사장주문 동일적용</button>
+        </div>
+        <table class="om-product-table">
+          <thead><tr><th>상품명</th><th style="width:60px;">수량</th><th>요청사항</th><th style="width:78px;">인사장</th></tr></thead>
+          <tbody id="om-product-body-taebae">
+            <tr data-category="선물세트">
+              <td>명진1호</td>
+              <td><input type="number" value="1" min="1"></td>
+              <td><input type="text" value="개별택배"></td>
+              <td><button class="om-insa-badge">인사장주문</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 배달: 상품추가 세션 2개로 분리 (① 박스상품 - 인사장 없음, ② 선물세트 낱개 - 인사장 있음) -->
+      <div id="om-product-baedal" style="display:none;">
+        <div class="om-product-box">
+          <div class="om-product-box-title">① 박스 상품</div>
+          <div class="om-product-actions">
+            <button class="btn" id="om-add-box-baedal">+ 박스상품 추가</button>
+          </div>
+          <table class="om-product-table">
+            <thead><tr><th>상품명</th><th style="width:60px;">수량</th><th>요청사항</th></tr></thead>
+            <tbody id="om-box-body-baedal"></tbody>
+          </table>
+          <div class="om-product-empty" id="om-box-empty-baedal">박스단위로만 주문 가능합니다 (인사장 없음). '+ 박스상품 추가'로 담아주세요.</div>
+        </div>
+
+        <div class="om-product-box" style="margin-top:14px;">
+          <div class="om-product-box-title">② 선물세트 (인사장 주문)</div>
+          <div class="om-product-actions">
+            <button class="btn" id="om-add-giftset-baedal" style="background:var(--green-bg);color:var(--green);border-color:var(--green-bg);">+ 선물세트 낱개 추가</button>
+            <button class="btn" id="om-apply-insa-all-baedal" style="background:var(--blue-soft);color:var(--blue);border-color:var(--blue-soft);">인사장주문 동일적용</button>
+          </div>
+          <table class="om-product-table">
+            <thead><tr><th>상품명</th><th style="width:60px;">수량</th><th>요청사항</th><th style="width:78px;">인사장</th></tr></thead>
+            <tbody id="om-giftset-body-baedal"></tbody>
+          </table>
+          <div class="om-product-empty" id="om-giftset-empty-baedal">선물세트 낱개 상품만 검색·주문할 수 있습니다. '+ 선물세트 낱개 추가'로 담아주세요.</div>
+        </div>
+      </div>
+
+      <div class="om-editor-box" id="om-editor-box" style="display:none;">
+        <label class="om-label">수정자 이름 <span style="color:var(--red);">*필수</span></label>
+        <input type="text" class="om-input" id="om-editor-name" placeholder="수정자 이름을 입력해야 저장할 수 있습니다">
+      </div>
+
+      <button class="om-submit-btn" id="om-submit-btn">주문접수완료</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const TODAY_LABEL = '2026.08.14';
+
+  /* ---- 좌측 메뉴바 전체 숨김/펼치기 ---- */
+  const sidebarEl = document.querySelector('.sidebar');
+  const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
+  const sidebarExpandBtn = document.getElementById('sidebar-expand-btn');
+  sidebarCollapseBtn.addEventListener('click', ()=>{
+    sidebarEl.classList.add('collapsed');
+    sidebarExpandBtn.classList.add('visible');
+  });
+  sidebarExpandBtn.addEventListener('click', ()=>{
+    sidebarEl.classList.remove('collapsed');
+    sidebarExpandBtn.classList.remove('visible');
+  });
+
+  const navItems = document.querySelectorAll('.nav-item[data-page]');
+  const pages = document.querySelectorAll('.page');
+  navItems.forEach(item=>{
+    item.addEventListener('click', ()=>{
+      navItems.forEach(n=>n.classList.remove('active'));
+      item.classList.add('active');
+      const target = item.getAttribute('data-page');
+      pages.forEach(p=>p.classList.remove('active'));
+      document.getElementById('page-'+target).classList.add('active');
+    });
+  });
+  document.getElementById('tg7').addEventListener('click', function(){
+    this.classList.add('active');
+    document.getElementById('tg30').classList.remove('active');
+  });
+  document.getElementById('tg30').addEventListener('click', function(){
+    this.classList.add('active');
+    document.getElementById('tg7').classList.remove('active');
+  });
+
+  /* ---- 출고관리 서브탭 (누락체크 / 출고관리 / 포장관리) ---- */
+  const subNavItems = document.querySelectorAll('.nav-sub-item[data-sub]');
+  const subtabs = document.querySelectorAll('.subtab[data-subtab]');
+  const subpages = document.querySelectorAll('.subpage');
+
+  function activateSub(key){
+    subtabs.forEach(t=>t.classList.toggle('active', t.dataset.subtab===key));
+    subpages.forEach(p=>p.classList.remove('active'));
+    document.getElementById('sub-'+key).classList.add('active');
+    subNavItems.forEach(n=>n.classList.toggle('active', n.dataset.sub===key));
+  }
+
+  subNavItems.forEach(item=>{
+    item.addEventListener('click', ()=>{
+      navItems.forEach(n=>n.classList.remove('active'));
+      document.querySelector('.nav-item[data-page="factory"]').classList.add('active');
+      pages.forEach(p=>p.classList.remove('active'));
+      document.getElementById('page-factory').classList.add('active');
+      activateSub(item.dataset.sub);
+    });
+  });
+  subtabs.forEach(tab=>{
+    tab.addEventListener('click', ()=> activateSub(tab.dataset.subtab));
+  });
+
+  /* 출고관리 nav-item 자체를 눌렀을 때도 현재 활성 서브탭 유지 */
+  document.querySelector('.nav-item[data-page="factory"]').addEventListener('click', ()=>{
+    const current = document.querySelector('.subtab.active');
+    if(!current) activateSub('miss');
+  });
+
+  /* ---- 포장관리 내부 서브탭 (포장 전 / 공장포장 / 양말부포장) ---- */
+  const subtabs2 = document.querySelectorAll('.subtab2[data-subtab2]');
+  function activateSubtab2(key){
+    subtabs2.forEach(t=>t.classList.toggle('active', t.dataset.subtab2===key));
+    document.querySelectorAll('.subpage2').forEach(p=>p.classList.remove('active'));
+    document.getElementById('sub2-'+key).classList.add('active');
+  }
+  subtabs2.forEach(tab=>{
+    tab.addEventListener('click', ()=> activateSubtab2(tab.dataset.subtab2));
+  });
+  document.querySelectorAll('[data-goto-subtab2]').forEach(btn=>{
+    btn.addEventListener('click', ()=> activateSubtab2(btn.dataset.gotoSubtab2));
+  });
+
+  /* ---- PT 셀 인라인 입력: 값 입력 시 미작업(경고) 스타일 자동 해제 (동적 생성 행 포함, 이벤트 위임) ---- */
+  document.addEventListener('input', (e)=>{
+    if(e.target.classList && e.target.classList.contains('pt-empty')){
+      if(e.target.textContent.trim().length>0){
+        e.target.classList.remove('pt-empty');
+        e.target.classList.add('pt-filled');
+        e.target.style.borderColor = '';
+      }
+    }
+  });
+
+  /* ---- 포장 전 → 공장포장/양말부포장: 포장구분 선택 + 저장 ---- */
+  const factoryBody = document.getElementById('factory-pack-body');
+  const sockBody = document.getElementById('sock-pack-body');
+  const prePackBody = document.getElementById('pre-pack-body');
+
+  function fmtDateLabel(iso){
+    if(!iso) return '';
+    const [y,m,d] = iso.split('-');
+    return y+'.'+m+'.'+d;
+  }
+
+  function removeEmptyRow(tbody){
+    const er = tbody.querySelector('.empty-row');
+    if(er) er.remove();
+  }
+  function ensureEmptyRow(tbody, colspan, message){
+    if(tbody.querySelectorAll('tr:not(.empty-row)').length === 0 && !tbody.querySelector('.empty-row')){
+      const tr = document.createElement('tr');
+      tr.className = 'empty-row';
+      tr.innerHTML = '<td colspan="'+colspan+'">'+message+'</td>';
+      tbody.appendChild(tr);
+    }
+  }
+
+  function insertSortedByRequestDate(tbody, tr){
+    const newDate = tr.dataset.requestDate || '';
+    const rows = Array.from(tbody.querySelectorAll('tr:not(.empty-row)'));
+    let inserted = false;
+    for(const r of rows){
+      if(newDate < (r.dataset.requestDate || '')){
+        tbody.insertBefore(tr, r);
+        inserted = true;
+        break;
+      }
+    }
+    if(!inserted) tbody.appendChild(tr);
+  }
+
+  function findPackRowByOrder(tbody, orderId){
+    return tbody.querySelector('tr[data-order="'+orderId+'"]');
+  }
+
+  function updateReleaseStorage(orderId, deptLabel){
+    const cell = document.getElementById('storage-'+orderId);
+    if(cell) cell.innerHTML = deptLabel ? '<span class="badge badge-y">'+deptLabel+'</span>' : '<span class="badge badge-n">—</span>';
+  }
+
+  function recomputeReleaseSummary(){
+    const orders = ['order1','order2','order3','order4'];
+    let done = 0;
+    orders.forEach(id=>{
+      const el = document.getElementById('packstatus-'+id);
+      if(el && el.textContent.trim() === '완료') done++;
+    });
+    const doneEl = document.getElementById('release-done-count');
+    const undoneEl = document.getElementById('release-undone-count');
+    if(doneEl) doneEl.textContent = done;
+    if(undoneEl) undoneEl.textContent = orders.length - done;
+  }
+
+  function buildPackRow(sourceRow){
+    const tr = document.createElement('tr');
+    tr.dataset.order = sourceRow.dataset.order;
+    tr.dataset.requestDate = sourceRow.dataset.requestDate;
+    const orderId = sourceRow.dataset.order;
+    tr.innerHTML =
+      '<td>'+fmtDateLabel(sourceRow.dataset.requestDate)+'</td>'+
+      '<td class="name-cell">'+sourceRow.dataset.detail+' '+sourceRow.dataset.qty+'</td>'+
+      '<td>'+sourceRow.dataset.sangcha+'</td>'+
+      '<td>'+sourceRow.dataset.box+'</td>'+
+      '<td>'+sourceRow.dataset.insa+'</td>'+
+      '<td>'+sourceRow.dataset.insaloc+'</td>'+
+      '<td>'+sourceRow.dataset.pyo+'</td>'+
+      '<td>'+sourceRow.dataset.note+'</td>'+
+      '<td><span class="pt-cell pt-empty" contenteditable="true" data-placeholder="입력"></span></td>'+
+      '<td><input type="date" class="pack-date-input" style="width:132px;font-size:12px;border:1px solid var(--border);border-radius:6px;padding:5px 6px;"></td>'+
+      '<td><button class="cell-btn confirm pack-complete-btn" data-order="'+orderId+'">완료</button></td>';
+    return tr;
+  }
+
+  document.querySelectorAll('.pack-save-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const row = btn.closest('tr');
+      const select = row.querySelector('.pack-dept-select');
+      const dept = select.value;
+
+      if(!dept){
+        select.style.borderColor = 'var(--red)';
+        return;
+      }
+      select.style.borderColor = '';
+
+      const orderId = row.dataset.order;
+      const prevDept = row.dataset.assignedDept || '';
+
+      // 저장 피드백 (행은 대기목록에서 사라지지 않음 — 수정 가능해야 하므로 유지)
+      row.style.transition = 'background .5s ease';
+      row.style.background = 'var(--green-bg)';
+      setTimeout(()=>{ row.style.background = ''; }, 700);
+
+      if(prevDept === dept){
+        // 동일한 구분으로 재저장: 이동 없이 그대로 유지
+        return;
+      }
+
+      // 이전에 다른 구분으로 배정되어 있었다면 그 목록에서 제거
+      if(prevDept === 'factory'){
+        const oldRow = findPackRowByOrder(factoryBody, orderId);
+        if(oldRow) oldRow.remove();
+        ensureEmptyRow(factoryBody, 11, '포장 대기 중인 항목이 없습니다');
+      } else if(prevDept === 'sock'){
+        const oldRow = findPackRowByOrder(sockBody, orderId);
+        if(oldRow) oldRow.remove();
+        ensureEmptyRow(sockBody, 11, '포장 대기 중인 항목이 없습니다');
+      }
+
+      const newRow = buildPackRow(row);
+      if(dept === 'factory'){
+        removeEmptyRow(factoryBody);
+        insertSortedByRequestDate(factoryBody, newRow);
+        updateReleaseStorage(orderId, '공장');
+      } else if(dept === 'sock'){
+        removeEmptyRow(sockBody);
+        insertSortedByRequestDate(sockBody, newRow);
+        updateReleaseStorage(orderId, '양말');
+      }
+      row.dataset.assignedDept = dept;
+      bindPackCompleteButtons();
+    });
+  });
+
+  /* ---- 공장포장/양말부포장: PT·포장완료일 입력 후 완료 → 출고관리에 반영, 목록(포장전 포함)에서 숨김 ---- */
+  function bindPackCompleteButtons(){
+    document.querySelectorAll('.pack-complete-btn').forEach(btn=>{
+      if(btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', ()=>{
+        const row = btn.closest('tr');
+        const orderId = btn.dataset.order;
+        const ptCell = row.querySelector('.pt-cell');
+        const dateInput = row.querySelector('.pack-date-input');
+        const ptVal = ptCell.textContent.trim();
+        const dateVal = dateInput.value;
+
+        if(!ptVal){ ptCell.style.borderColor = 'var(--red)'; return; }
+        if(!dateVal){ dateInput.style.borderColor = 'var(--red)'; return; }
+
+        const parentBody = row.parentElement;
+        row.style.transition = 'background .3s ease, opacity .3s ease';
+        row.style.background = 'var(--green-bg)';
+
+        setTimeout(()=>{
+          row.remove();
+          ensureEmptyRow(parentBody, 11, '포장 대기 중인 항목이 없습니다');
+
+          // 완료된 건은 포장 전 대기목록에서도 제거 (완료 전까지는 계속 노출됨)
+          const preRow = findPackRowByOrder(prePackBody, orderId);
+          if(preRow) preRow.remove();
+          ensureEmptyRow(prePackBody, 10, '포장 대기 중인 항목이 없습니다');
+
+          const pkdateCell = document.getElementById('pkdate-'+orderId);
+          const ptTargetCell = document.getElementById('pt-'+orderId);
+          const statusCell = document.getElementById('packstatus-'+orderId);
+          const shipBtn = document.querySelector('.ship-complete-btn[data-order="'+orderId+'"]');
+
+          if(pkdateCell) pkdateCell.textContent = fmtDateLabel(dateVal);
+          if(ptTargetCell) ptTargetCell.innerHTML = '<span class="pt-cell pt-filled">'+ptVal+'</span>';
+          if(statusCell) statusCell.innerHTML = '<span class="badge badge-y">완료</span>';
+          if(shipBtn){
+            shipBtn.disabled = false;
+            shipBtn.style.opacity = '1';
+            shipBtn.style.cursor = 'pointer';
+            shipBtn.classList.remove('ghost');
+            shipBtn.classList.add('confirm');
+          }
+          recomputeReleaseSummary();
+        }, 280);
+      });
+    });
+  }
+
+  /* ---- 출고관리: '출고완료' 버튼 클릭 시 완료 표시 + 배송관리 출고완료일 자동 반영 ---- */
+  document.querySelectorAll('.ship-complete-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(btn.disabled) return;
+      const orderId = btn.dataset.order;
+      btn.textContent = '출고완료됨';
+      btn.disabled = true;
+      btn.style.opacity = '.6';
+      btn.style.cursor = 'default';
+
+      // 배송관리: 출고확인 자동 기록(공장 출고완료일) + 최종완료 버튼 활성화 (공장관리자 처리 → 매장관리자 액션 가능해짐)
+      const shipDateCell = document.getElementById('shipdate-'+orderId);
+      if(shipDateCell) shipDateCell.textContent = TODAY_LABEL;
+
+      const finalRow = document.querySelector('#page-ship tr[data-order="'+orderId+'"] .final-complete-btn');
+      if(finalRow){
+        finalRow.disabled = false;
+        finalRow.style.opacity = '1';
+        finalRow.style.cursor = 'pointer';
+        finalRow.classList.remove('ghost');
+        finalRow.classList.add('confirm');
+      }
+    });
+  });
+
+  /* ---- 주문관리: 결제완료/인사장완료/기표지완료 저장 → 배송관리에 반영 (작성자명은 배송관리에 표시 안 함) ---- */
+  document.querySelectorAll('.appr-save-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const field = btn.dataset.field;       // payment | insa | pyo
+      const orderId = btn.dataset.order;
+      const needAuthor = btn.dataset.needAuthor === '1';
+      const select = document.getElementById('ord-'+field+'-select-'+orderId);
+      const value = select.value;             // 'Y' or 'N'
+
+      if(needAuthor){
+        const authorInput = document.getElementById('ord-'+field+'-author-'+orderId);
+        if(!authorInput.value.trim()){
+          authorInput.style.borderColor = 'var(--red)';
+          return;
+        }
+        authorInput.style.borderColor = '';
+      }
+
+      // 저장 피드백
+      const cell = btn.closest('.appr-cell');
+      cell.style.transition = 'background .5s ease';
+      cell.style.background = 'var(--green-bg)';
+      setTimeout(()=>{ cell.style.background = ''; }, 700);
+
+      // 배송관리에 Y/N 배지만 반영 (작성자명은 배송관리에 노출하지 않음)
+      const targetCell = document.getElementById('ship-'+field+'-'+orderId);
+      if(targetCell){
+        const badgeClass = value === 'Y' ? 'badge-y' : 'badge-n';
+        targetCell.innerHTML = '<span class="badge '+badgeClass+'">'+value+'</span>';
+      }
+    });
+  });
+
+  /* ---- 배송관리: '최종완료' 버튼 클릭 시 상태를 '발송완료'로 전환 ---- */
+  document.querySelectorAll('.final-complete-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(btn.disabled) return;
+      const row = btn.closest('tr');
+      const statusCell = row.querySelector('.ship-status-cell');
+      if(statusCell){
+        statusCell.innerHTML = '<span class="status-chip st-발송완료">발송완료</span>';
+      }
+      row.classList.remove('urgent');
+      btn.textContent = '완료됨';
+      btn.disabled = true;
+      btn.classList.remove('confirm');
+      btn.classList.add('ghost');
+      btn.style.opacity = '.5';
+      btn.style.cursor = 'not-allowed';
+    });
+  });
+
+  /* ---- 출고관리(출고전용): 전체보기 토글 ---- */
+  const showAllBtn = document.getElementById('release-show-all');
+  if(showAllBtn){
+    showAllBtn.addEventListener('click', ()=>{
+      const dateInput = document.querySelector('.release-date-input');
+      const isAll = showAllBtn.classList.toggle('primary');
+      if(isAll){
+        dateInput.disabled = true;
+        dateInput.style.opacity = '0.4';
+      } else {
+        dateInput.disabled = false;
+        dateInput.style.opacity = '1';
+      }
+    });
+  }
+
+  /* ==================================================================
+     제품주문서 모달 (신규작성 / 주문번호 클릭 시 수정 — 공용 팝업)
+     ================================================================== */
+  const omOverlay = document.getElementById('order-modal-overlay');
+  const omTitle = document.getElementById('om-title');
+  const omEditorBox = document.getElementById('om-editor-box');
+  const omEditorName = document.getElementById('om-editor-name');
+  const omSubmitBtn = document.getElementById('om-submit-btn');
+  let omMode = 'create'; // 'create' | 'edit'
+  let omEditingOrder = null;
+
+  function openOrderModal(mode, orderId){
+    omMode = mode;
+    omEditingOrder = orderId || null;
+    if(mode === 'edit'){
+      omTitle.textContent = '제품주문서 (수정) — ' + (orderId ? orderId : '');
+      omEditorBox.style.display = 'block';
+      omEditorName.value = '';
+      omSubmitBtn.textContent = '수정완료';
+      omSubmitBtn.disabled = true;
+    } else {
+      omTitle.textContent = '제품주문서 (신규작성)';
+      omEditorBox.style.display = 'none';
+      omSubmitBtn.textContent = '주문접수완료';
+      omSubmitBtn.disabled = false;
+    }
+    // 택배 탭을 기본값으로 초기화
+    document.querySelectorAll('.om-delivery-tab').forEach(t=>t.classList.toggle('active', t.dataset.mode === '택배'));
+    document.getElementById('om-fields-택배').style.display = 'block';
+    document.getElementById('om-fields-배달').style.display = 'none';
+    document.getElementById('om-product-taebae').style.display = 'block';
+    document.getElementById('om-product-baedal').style.display = 'none';
+    omOverlay.classList.add('active');
+  }
+  function closeOrderModal(){
+    omOverlay.classList.remove('active');
+  }
+
+  document.getElementById('om-close-btn').addEventListener('click', closeOrderModal);
+  omOverlay.addEventListener('click', (e)=>{ if(e.target === omOverlay) closeOrderModal(); });
+
+  // 신규작성 버튼
+  const newOrderBtn = document.getElementById('new-order-btn');
+  if(newOrderBtn) newOrderBtn.addEventListener('click', ()=> openOrderModal('create'));
+
+  // 주문번호 클릭 → 수정 팝업
+  document.querySelectorAll('.order-no-link').forEach(el=>{
+    el.addEventListener('click', ()=> openOrderModal('edit', el.dataset.order));
+  });
+
+  // 매장 탭 전환
+  document.querySelectorAll('.om-store-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.om-store-tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+
+  // 택배/배달 탭 전환 — 택배: 기존 상품추가 영역 / 배달: 박스·선물세트 2개 영역으로 분리
+  document.querySelectorAll('.om-delivery-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.om-delivery-tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      const mode = tab.dataset.mode;
+      document.getElementById('om-fields-택배').style.display = (mode === '택배') ? 'block' : 'none';
+      document.getElementById('om-fields-배달').style.display = (mode === '배달') ? 'block' : 'none';
+      document.getElementById('om-product-taebae').style.display = (mode === '택배') ? 'block' : 'none';
+      document.getElementById('om-product-baedal').style.display = (mode === '배달') ? 'block' : 'none';
+    });
+  });
+
+  function toggleEmptyHint(tbodyId, hintId){
+    const tbody = document.getElementById(tbodyId);
+    const hint = document.getElementById(hintId);
+    if(hint) hint.style.display = tbody.querySelectorAll('tr').length > 0 ? 'none' : 'block';
+  }
+
+  // ---- 택배: 상품추가(기존과 동일, 인사장 배지는 선물세트 카테고리에서만) ----
+  document.getElementById('om-add-product-taebae').addEventListener('click', ()=>{
+    const tbody = document.getElementById('om-product-body-taebae');
+    const tr = document.createElement('tr');
+    tr.dataset.category = '일반';
+    tr.innerHTML =
+      '<td><input type="text" placeholder="상품명"></td>' +
+      '<td><input type="number" value="1" min="1"></td>' +
+      '<td><input type="text" placeholder="요청사항"></td>' +
+      '<td style="color:var(--text-muted);font-size:11px;text-align:center;">—</td>';
+    tbody.appendChild(tr);
+  });
+  document.getElementById('om-apply-insa-all-taebae').addEventListener('click', ()=>{
+    document.querySelectorAll('#om-product-body-taebae tr[data-category="선물세트"] .om-insa-badge').forEach(btn=>{
+      btn.classList.add('active');
+    });
+  });
+
+  // ---- 배달 ① 박스 상품: 인사장 옵션 없음 ----
+  document.getElementById('om-add-box-baedal').addEventListener('click', ()=>{
+    const tbody = document.getElementById('om-box-body-baedal');
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><input type="text" placeholder="박스 상품 검색"></td>' +
+      '<td><input type="number" value="1" min="1"></td>' +
+      '<td><input type="text" placeholder="요청사항"></td>';
+    tbody.appendChild(tr);
+    toggleEmptyHint('om-box-body-baedal', 'om-box-empty-baedal');
+  });
+
+  // ---- 배달 ② 선물세트 낱개: 인사장 옵션 있음 ----
+  document.getElementById('om-add-giftset-baedal').addEventListener('click', ()=>{
+    const tbody = document.getElementById('om-giftset-body-baedal');
+    const tr = document.createElement('tr');
+    tr.dataset.category = '선물세트';
+    tr.innerHTML =
+      '<td><input type="text" placeholder="선물세트 낱개 검색"></td>' +
+      '<td><input type="number" value="1" min="1"></td>' +
+      '<td><input type="text" placeholder="요청사항"></td>' +
+      '<td><button class="om-insa-badge">인사장주문</button></td>';
+    tbody.appendChild(tr);
+    bindInsaBadges();
+    toggleEmptyHint('om-giftset-body-baedal', 'om-giftset-empty-baedal');
+  });
+  document.getElementById('om-apply-insa-all-baedal').addEventListener('click', ()=>{
+    document.querySelectorAll('#om-giftset-body-baedal .om-insa-badge').forEach(btn=>{
+      btn.classList.add('active');
+    });
+  });
+
+  // 인사장주문 배지 토글 (선물세트 상품에만 존재)
+  function bindInsaBadges(){
+    document.querySelectorAll('.om-insa-badge').forEach(btn=>{
+      if(btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', ()=> btn.classList.toggle('active'));
+    });
+  }
+  bindInsaBadges();
+
+  // 수정 모드: 수정자 이름 입력해야 저장 버튼 활성화
+  omEditorName.addEventListener('input', ()=>{
+    if(omMode === 'edit'){
+      omSubmitBtn.disabled = omEditorName.value.trim().length === 0;
+    }
+  });
+
+  // 주문접수완료 / 수정완료
+  omSubmitBtn.addEventListener('click', ()=>{
+    if(omMode === 'edit' && omSubmitBtn.disabled) return;
+
+    if(omMode === 'edit' && omEditingOrder){
+      // 배송관리에 '수정됨' 경고 표시 (해당 건이 아직 출고완료 전인 경우)
+      const shipBtn = document.querySelector('#page-factory .ship-complete-btn[data-order="'+omEditingOrder+'"]');
+      const alreadyShipped = shipBtn && shipBtn.disabled && shipBtn.textContent.trim() === '출고완료됨';
+      if(!alreadyShipped){
+        const warnBadge = document.getElementById('editwarn-'+omEditingOrder);
+        if(warnBadge) warnBadge.style.display = 'inline-flex';
+      }
+    }
+    closeOrderModal();
+  });
+
+  /* ---- 주문관리: 작업자 필드 저장 → 배송관리 반영, '공장' 선택 시에만 출고관리로 전송 안내 ---- */
+  /* ---- 배송관리: 최종확인 버튼 상태 재계산 (작업자=매장이면 무조건 활성화, 공장이면 기존 상차+출고완료 조건) ---- */
+  function refreshFinalConfirmShip(orderId){
+    const btn = document.getElementById('finalconfirm-ship-'+orderId);
+    if(!btn) return; // 택배 고정 행은 버튼 자체가 없음 (— (택배) 텍스트만 존재)
+    if(btn.textContent.trim() === '확인됨') return; // 이미 처리 완료된 건은 건드리지 않음
+
+    const workerCell = document.getElementById('ship-worker-'+orderId);
+    const worker = workerCell ? workerCell.textContent.trim() : '';
+    const row = btn.closest('tr');
+    const delivery = row ? row.dataset.delivery : '';
+    const shipConfirmCell = document.getElementById('shipdate-'+orderId);
+    const hasShipConfirm = !!shipConfirmCell && shipConfirmCell.textContent.trim() !== '—' && shipConfirmCell.textContent.trim() !== '';
+
+    let shouldEnable = false;
+    if(worker === '매장'){
+      shouldEnable = true; // 작업자=매장이면 출고관리를 거치지 않으므로 배송관리에서 매장 관리자가 바로 최종확인
+    } else if(delivery === '상차'){
+      shouldEnable = hasShipConfirm; // 작업자=공장(또는 미지정) + 상차: 기존과 동일하게 출고완료(출고확인 기록) 후 활성화
+    }
+
+    btn.disabled = !shouldEnable;
+    btn.style.opacity = shouldEnable ? '1' : '.4';
+    btn.style.cursor = shouldEnable ? 'pointer' : 'not-allowed';
+    btn.classList.toggle('confirm', shouldEnable);
+    btn.classList.toggle('ghost', !shouldEnable);
+  }
+
+  document.querySelectorAll('.worker-save-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const orderId = btn.dataset.order;
+      const select = document.getElementById('worker-select-'+orderId);
+      const value = select.value; // 매장 | 공장
+      if(!value){
+        select.style.borderColor = 'var(--red)';
+        return;
+      }
+      select.style.borderColor = '';
+
+      const cell = btn.closest('.worker-cell');
+      cell.style.transition = 'background .5s ease';
+      cell.style.background = 'var(--green-bg)';
+      setTimeout(()=>{ cell.style.background = ''; }, 700);
+
+      // 배송관리 작업자 필드 자동 반영 (매장/공장 모두 반영됨)
+      const shipWorkerCell = document.getElementById('ship-worker-'+orderId);
+      if(shipWorkerCell){
+        shipWorkerCell.innerHTML = '<span class="badge badge-y">'+value+'</span>';
+      }
+
+      // 작업자 값에 따라 배송관리 최종확인 버튼 상태 재계산 (매장 선택 시 즉시 활성화)
+      refreshFinalConfirmShip(orderId);
+
+      // '공장' 선택 시에만 출고관리로 전송 안내
+      if(value === '공장'){
+        btn.textContent = '전송완료';
+        setTimeout(()=>{ btn.textContent = '저장'; }, 1200);
+      }
+    });
+  });
+
+  /* ---- 출고관리(출고전용): '출고완료' 클릭 시 상차/택배에 따라 최종확인 활성화 대상 결정 ---- */
+  document.querySelectorAll('#page-factory .ship-complete-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const row = btn.closest('tr');
+      const orderId = row.dataset.order;
+      const delivery = row.dataset.delivery;
+      setTimeout(()=>{
+        if(delivery === '택배'){
+          // 공장 관리자가 이 화면에서 최종확인
+          const fc = document.getElementById('finalconfirm-out-'+orderId);
+          if(fc){
+            fc.disabled = false;
+            fc.style.opacity = '1';
+            fc.style.cursor = 'pointer';
+            fc.classList.remove('ghost');
+            fc.classList.add('confirm');
+          }
+        } else if(delivery === '상차'){
+          // 매장 관리자가 배송관리에서 최종확인 (작업자=매장/공장 조건 반영)
+          refreshFinalConfirmShip(orderId);
+        }
+      }, 350);
+    });
+  });
+
+  document.querySelectorAll('.final-confirm-out-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(btn.disabled) return;
+      btn.textContent = '확인됨';
+      btn.disabled = true;
+      btn.classList.remove('confirm');
+      btn.classList.add('ghost');
+      btn.style.opacity = '.5';
+      btn.style.cursor = 'not-allowed';
+
+      // 출고관리(공장)에서 최종확인 완료 → 배송관리에는 '완료' 상태로만 표시 (버튼 아님, 읽기전용)
+      const orderId = btn.id.replace('finalconfirm-out-', '');
+      const shipStatusCell = document.getElementById('ship-finalconfirm-status-'+orderId);
+      if(shipStatusCell) shipStatusCell.innerHTML = '<span class="badge badge-y">완료</span>';
+    });
+  });
+  document.querySelectorAll('.final-confirm-ship-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(btn.disabled) return;
+      btn.textContent = '확인됨';
+      btn.disabled = true;
+      btn.classList.remove('confirm');
+      btn.classList.add('ghost');
+      btn.style.opacity = '.5';
+      btn.style.cursor = 'not-allowed';
+    });
+  });
+</script>
+</body>
+</html>

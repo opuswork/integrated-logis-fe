@@ -26,7 +26,11 @@ function LoginForm() {
   useEffect(() => {
     const existing = getAuthUser();
     if (existing) {
-      router.replace(getHomePathForRole(existing.role));
+      router.replace(
+        getHomePathForRole(existing.role, {
+          canApproveGreeting: existing.canApproveGreeting,
+        }),
+      );
     }
   }, [router]);
 
@@ -53,7 +57,11 @@ function LoginForm() {
 
       if (response.ok && data.user && data.accessToken) {
         saveAuthUser(data.user, data.accessToken);
-        router.push(getHomePathForRole(data.user.role));
+        router.push(
+          getHomePathForRole(data.user.role, {
+            canApproveGreeting: data.user.canApproveGreeting,
+          }),
+        );
         return;
       }
 

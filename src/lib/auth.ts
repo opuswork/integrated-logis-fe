@@ -9,6 +9,7 @@ export interface AuthUser {
   phone?: string;
   adminRegion?: AdminRegion | null;
   isSuperAdmin?: boolean;
+  canApproveGreeting?: boolean;
 }
 
 const AUTH_STORAGE_KEY = "sanc-logistics-auth";
@@ -52,10 +53,14 @@ export function formatAdminPrivilegeLabel(
   return "최고관리자";
 }
 
-/** 사이드바 표시: `홍길동 - 중부(덕소) 관리자` / `최고관리자` */
+/** 사이드바 표시: `홍길동 - 중부(덕소) 관리자` / `최고관리자` / Factory-G */
 export function formatAdminSidebarTitle(user: AuthUser | null) {
   if (!user) {
     return "관리자";
+  }
+  if (user.role === "factory" && user.canApproveGreeting) {
+    const name = user.name?.trim();
+    return name ? `${name} - 인사장 승인` : "인사장 승인";
   }
   const privilege = formatAdminPrivilegeLabel(
     user.adminRegion,
@@ -80,11 +85,18 @@ export function formatFactorySidebarTitle(user: AuthUser | null) {
   return `[공장관리자 - ${name}]`;
 }
 
-export function getHomePathForRole(role: UserRole) {
+export function getHomePathForRole(
+  role: UserRole,
+  options?: { canApproveGreeting?: boolean },
+) {
   if (role === "admin") {
     return "/admin/OrderManagement";
   }
   if (role === "factory") {
+    // Factory-G(인사장 승인)는 관리자 주문목록에서 인사장완료를 처리합니다.
+    if (options?.canApproveGreeting) {
+      return "/admin/OrderManagement";
+    }
     return "/factory/ShipmentManagement";
   }
   return "/OrderManagement";
@@ -105,6 +117,7 @@ export function saveAuthUser(user: AuthUser, accessToken?: string) {
       adminRegion,
       isSuperAdmin:
         user.isSuperAdmin ?? (role === "admin" && adminRegion === null),
+      canApproveGreeting: user.canApproveGreeting === true,
     }),
   );
 
@@ -133,6 +146,7 @@ export function getAuthUser(): AuthUser | null {
       adminRegion,
       isSuperAdmin:
         parsed.isSuperAdmin ?? (role === "admin" && adminRegion === null),
+      canApproveGreeting: parsed.canApproveGreeting === true,
     };
   } catch {
     return null;
