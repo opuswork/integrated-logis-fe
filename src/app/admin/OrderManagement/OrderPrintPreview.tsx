@@ -388,7 +388,12 @@ function mapOrderToPrintPages(
       : parseParcelCompanyFromNotes(notes)) ||
     order.shipment?.carrier ||
     "";
-  const greetingMaterial = greetingMaterialFromNotes(notes);
+  const hasGreetingForms = (order.greetingForms?.length ?? 0) > 0;
+  const greetingMaterialRaw = greetingMaterialFromNotes(notes);
+  const greetingMaterial =
+    hasGreetingForms && greetingMaterialRaw === "없음"
+      ? "최지원"
+      : greetingMaterialRaw;
   const greetingLocation =
     greetingMaterial === "없음" ? "-" : "박스외부";
   const greetingSpecialNote =

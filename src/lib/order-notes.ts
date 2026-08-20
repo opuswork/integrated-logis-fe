@@ -118,6 +118,36 @@ export function parseRecipientPartsFromNotes(notes: string | null | undefined): 
   };
 }
 
+/**
+ * 본주소 끝의 호수/숫자(suite)를 상세주소로 분리.
+ * 예: "서울 중구 서소문로 10-3 신송빌라트 77" → address + detail "77"
+ */
+export function splitAddressAndDetail(full: string): {
+  address: string;
+  detail: string;
+} {
+  const trimmed = full.trim();
+  if (!trimmed) {
+    return { address: "", detail: "" };
+  }
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 2) {
+    return { address: trimmed, detail: "" };
+  }
+  const last = parts[parts.length - 1] ?? "";
+  // 77, 101, 12-3, #77, 77호, 101동 등
+  const isSuiteLike =
+    /^#?\d+([.-]\d+)?(호|동|실|층)?$/i.test(last) ||
+    /^\d+[A-Za-z]?$/i.test(last);
+  if (!isSuiteLike) {
+    return { address: trimmed, detail: "" };
+  }
+  return {
+    address: parts.slice(0, -1).join(" "),
+    detail: last.replace(/^#/, ""),
+  };
+}
+
 export function parseDeliveryDateTimeFromNotes(
   notes: string | null | undefined,
 ) {

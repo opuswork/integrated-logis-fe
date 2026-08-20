@@ -43,6 +43,7 @@ import {
   parseRecipientPartsFromNotes,
   parseSenderPartsFromNotes,
   parseShipDateFromNotes,
+  splitAddressAndDetail,
 } from "@/lib/order-notes";
 import {
   canEditOrderStatus,
@@ -1999,6 +2000,7 @@ function ProductOrderPanel({
   editOrderNumber = null,
   onHydratedGreetings,
   onApplyGreetingToAll,
+  onRemoveGreeting,
 }: {
   onGreetingClick: (context: {
     productNames: string[];
@@ -2034,6 +2036,8 @@ function ProductOrderPanel({
       phone: string;
     },
   ) => void | Promise<void>;
+  /** 행 인사장 로컬 제거(서버 DELETE 없음) */
+  onRemoveGreeting?: (productName: string) => void;
 }) {
   const isEditMode = Boolean(editOrderNumber);
   const [editOrderId, setEditOrderId] = useState<number | null>(null);
@@ -2359,18 +2363,20 @@ function ProductOrderPanel({
         }
 
         const recipient = parseRecipientPartsFromNotes(notes);
+        const recipientFull =
+          recipient.address || order.shipment?.deliveryAddress || "";
+        const recipientSplit = splitAddressAndDetail(recipientFull);
         setRecipientName(recipient.name);
         setRecipientPhone(formatPhoneInput(recipient.phone));
-        setRecipientAddress(
-          recipient.address || order.shipment?.deliveryAddress || "",
-        );
-        setRecipientAddressDetail("");
+        setRecipientAddress(recipientSplit.address);
+        setRecipientAddressDetail(recipientSplit.detail);
 
         const sender = parseSenderPartsFromNotes(notes);
+        const senderSplit = splitAddressAndDetail(sender.address);
         setSenderName(sender.name);
         setSenderPhone(formatPhoneInput(sender.phone));
-        setSenderAddress(sender.address);
-        setSenderAddressDetail("");
+        setSenderAddress(senderSplit.address);
+        setSenderAddressDetail(senderSplit.detail);
 
         const branchName = parseBranchStoreFromNotes(notes);
         const branch =
@@ -2701,8 +2707,10 @@ function ProductOrderPanel({
       onUnsavedGreetingResolved?.();
     }
 
-    const shouldAttachGreetings =
-      savedGreetingCount > 0 && !hasUnsavedGreeting;
+    // 미저장 인사장 경고와 별개로, 이미 저장된 인사장은 주문에 반드시 연결
+    const shouldAttachGreetings = Object.values(savedGreetingsByProduct).some(
+      (draft) => Boolean(draft?.id || draft?.greetingContent?.trim()),
+    );
 
     setFormError("");
     const validationError = validateRequired();
@@ -2728,7 +2736,7 @@ function ProductOrderPanel({
         return;
       }
 
-      // 동일적용 등으로 id가 없는 draft는 접수 전 서버에 복제
+      // id 없는 draft는 접수 전 서버에 저장·복제
       let greetingsForSubmit = { ...savedGreetingsByProduct };
       if (shouldAttachGreetings) {
         const resolved: Record<string, GreetingDraft> = {
@@ -2749,9 +2757,10 @@ function ProductOrderPanel({
         greetingsForSubmit = resolved;
       }
 
-      const greetingCountForNotes = Object.values(greetingsForSubmit).filter(
-        (draft) => draft?.id,
-      ).length;
+      const greetingIdsForSubmit = Object.values(greetingsForSubmit)
+        .map((draft) => draft?.id)
+        .filter((id): id is number => typeof id === "number");
+      const greetingCountForNotes = greetingIdsForSubmit.length;
 
       const selectedBranch =
         BRANCH_STORES.find((store) => store.id === branchStore)?.name ?? "";
@@ -2767,10 +2776,10 @@ function ProductOrderPanel({
       const hasDeliveryItems = isDelivery;
       const hasParcelItems = !isDelivery;
       const attachedGreetingNotes =
-        greetingCountForNotes > 0 && !hasUnsavedGreeting
+        greetingCountForNotes > 0
           ? Object.values(greetingsForSubmit)
-              .filter((draft) => draft.id)
-              .map((draft) => formatGreetingDraftNotes(draft))
+              .filter((draft) => draft?.id)
+              .map((draft) => formatGreetingDraftNotes(draft!))
               .join(" / ")
           : null;
       const notes = [
@@ -2862,21 +2871,28 @@ function ProductOrderPanel({
         );
       } else {
         setAcceptedOrderNumber(orderNumber);
-        if (!isEditMode) {
-          const created = (await response.json().catch(() => null)) as {
-            id?: number;
-          } | null;
-          if (created?.id && shouldAttachGreetings) {
-            const greetingIds = Object.values(greetingsForSubmit)
-              .map((draft) => draft.id)
-              .filter((id): id is number => typeof id === "number");
-            await Promise.all(
-              greetingIds.map((id) =>
-                apiFetch(`/api/greeting-forms/${id}/link-order`, {
+        const created = (await response.json().catch(() => null)) as {
+          id?: number;
+        } | null;
+        const orderId =
+          created?.id ??
+          (isEditMode ? editOrderId : null);
+        if (orderId && greetingIdsForSubmit.length > 0) {
+          const linkResults = await Promise.all(
+            greetingIdsForSubmit.map(async (id) => {
+              const linkRes = await apiFetch(
+                `/api/greeting-forms/${id}/link-order`,
+                {
                   method: "PATCH",
-                  body: JSON.stringify({ orderId: created.id }),
-                }).catch(() => null),
-              ),
+                  body: JSON.stringify({ orderId }),
+                },
+              );
+              return linkRes.ok;
+            }),
+          );
+          if (linkResults.some((ok) => !ok)) {
+            setFormError(
+              "주문은 접수되었으나 일부 인사장 연결에 실패했습니다. 인사장관리에서 확인해 주세요.",
             );
           }
         }
@@ -2978,33 +2994,48 @@ function ProductOrderPanel({
     {
       key: "greeting",
       header: "인사장",
-      className: "w-[120px]",
+      className: "w-[140px]",
       render: (row) => {
         const draft = savedGreetingsByProduct[row.product];
         const isSaved = Boolean(draft);
 
         return (
-          <Button
-            type="button"
-            size="sm"
-            className={cn(
-              "h-8 px-2 text-xs",
-              isSaved
-                ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A] hover:bg-[#c6e6c6]"
-                : "border-green bg-green text-white hover:bg-[#128a52]",
-            )}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (isSaved) {
-                setViewingGreetingProduct(row.product);
-                setIsGreetingViewOpen(true);
-                return;
-              }
-              openGreetingForm(row.product);
-            }}
-          >
-            {isSaved ? "인사장보기" : "인사장주문"}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              className={cn(
+                "h-8 px-2 text-xs",
+                isSaved
+                  ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A] hover:bg-[#c6e6c6]"
+                  : "border-green bg-green text-white hover:bg-[#128a52]",
+              )}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (isSaved) {
+                  setViewingGreetingProduct(row.product);
+                  setIsGreetingViewOpen(true);
+                  return;
+                }
+                openGreetingForm(row.product);
+              }}
+            >
+              {isSaved ? "인사장보기" : "인사장주문"}
+            </Button>
+            {isSaved ? (
+              <button
+                type="button"
+                aria-label={`${row.product} 인사장 제거`}
+                className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemoveGreeting?.(row.product);
+                }}
+              >
+                <X className="size-4" strokeWidth={2.5} />
+              </button>
+            ) : null}
+          </div>
         );
       },
     },
@@ -3049,8 +3080,10 @@ function ProductOrderPanel({
   }
 
   const editorName = getAuthUser()?.name?.trim() || getAuthUser()?.username || "—";
-  const hasAnyGreeting = Object.values(savedGreetingsByProduct).some(Boolean);
   const greetingTargetProducts = productItems.map((item) => item.product);
+  const greetingCountOnProducts = greetingTargetProducts.filter(
+    (name) => savedGreetingsByProduct[name],
+  ).length;
 
   const handleApplyInsaAll = async () => {
     if (greetingTargetProducts.length < 2) {
@@ -3060,10 +3093,17 @@ function ProductOrderPanel({
       });
       return;
     }
-    if (!hasAnyGreeting) {
+    if (greetingCountOnProducts === 0) {
       setAlertDialog({
         open: true,
         message: "먼저 한 상품에 인사장을 작성·저장한 뒤 동일적용해 주세요.",
+      });
+      return;
+    }
+    if (greetingCountOnProducts >= 2) {
+      setAlertDialog({
+        open: true,
+        message: "인사장을 모두 삭제하고 다시 추가해야 합니다.",
       });
       return;
     }
@@ -3477,25 +3517,37 @@ function ProductOrderPanel({
                     <span className="text-[11px] font-bold text-[#64748B]">
                       인사장
                     </span>
-                    <button
-                      type="button"
-                      className={cn(
-                        "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
-                        isSaved
-                          ? "bg-[#DCF0DC] text-[#2F855A]"
-                          : "bg-[#EDF2F7] text-[#64748B]",
-                      )}
-                      onClick={() => {
-                        if (isSaved) {
-                          setViewingGreetingProduct(row.product);
-                          setIsGreetingViewOpen(true);
-                          return;
-                        }
-                        openGreetingForm(row.product);
-                      }}
-                    >
-                      {isSaved ? "인사장보기" : "인사장주문"}
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+                          isSaved
+                            ? "bg-[#DCF0DC] text-[#2F855A]"
+                            : "bg-[#EDF2F7] text-[#64748B]",
+                        )}
+                        onClick={() => {
+                          if (isSaved) {
+                            setViewingGreetingProduct(row.product);
+                            setIsGreetingViewOpen(true);
+                            return;
+                          }
+                          openGreetingForm(row.product);
+                        }}
+                      >
+                        {isSaved ? "인사장보기" : "인사장주문"}
+                      </button>
+                      {isSaved ? (
+                        <button
+                          type="button"
+                          aria-label={`${row.product} 인사장 제거`}
+                          className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
+                          onClick={() => onRemoveGreeting?.(row.product)}
+                        >
+                          <X className="size-4" strokeWidth={2.5} />
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   {row.note ? (
@@ -3812,17 +3864,18 @@ function OrderStatusPanel({
   ): OrderRow[] =>
     data.map((order) => {
       const greetingKind = parseGreetingKindFromNotes(order.notes);
-      const hasLinkedGreeting = (order.greetingForms ?? []).some(
-        (form) => form.linkedToOrder,
-      );
+      const greetingFormCount = order.greetingForms?.length ?? 0;
+      const hasLinkedGreeting =
+        greetingFormCount > 0 ||
+        (order.greetingForms ?? []).some((form) => form.linkedToOrder);
       let greetingLabel = greetingKind || "-";
-      if (greetingKind === "본사" || hasLinkedGreeting) {
-        greetingLabel = hasLinkedGreeting ? "연계" : greetingKind || "본사";
-      }
-      if (greetingKind === "자체") {
+      if (hasLinkedGreeting) {
+        greetingLabel = "연계";
+      } else if (greetingKind === "본사") {
+        greetingLabel = "본사";
+      } else if (greetingKind === "자체") {
         greetingLabel = "자체";
-      }
-      if (greetingKind === "없음") {
+      } else if (greetingKind === "없음") {
         greetingLabel = "없음";
       }
 
@@ -4348,6 +4401,16 @@ export function OrderListInput({
                 onDirtyChange={setOrderFormDirty}
                 onOrderAccepted={handleEditOrCreateComplete}
                 onHydratedGreetings={handleHydratedGreetings}
+                onRemoveGreeting={(productName) => {
+                  setSavedGreetingsByProduct((current) => {
+                    if (!current[productName]) {
+                      return current;
+                    }
+                    const next = { ...current };
+                    delete next[productName];
+                    return next;
+                  });
+                }}
                 onApplyGreetingToAll={async (productNames, customer) => {
                   const current = savedGreetingsByProduct;
                   const sourceKey =
