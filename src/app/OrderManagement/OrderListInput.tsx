@@ -537,6 +537,73 @@ function formatGreetingDraftNotes(draft: GreetingDraft) {
     .join(" / ");
 }
 
+/** 동일적용·접수 시 id 없는 draft를 서버 인사장으로 복제 */
+async function createGreetingFormFromDraft(
+  draft: GreetingDraft,
+  productName: string,
+  customer?: {
+    ordererName?: string;
+    churchName?: string;
+    phone?: string;
+  },
+): Promise<GreetingDraft> {
+  const auth = getAuthUser();
+  const formData = new FormData();
+  formData.append("greetingNumber", draft.greetingNumber);
+  formData.append("includeSelf", String(draft.includeSelf));
+  formData.append(
+    "businessCard",
+    draft.businessCard || BUSINESS_CARD_DEFAULT,
+  );
+  formData.append("content", draft.greetingContent.trim());
+  formData.append("quantity", draft.quantity.trim() || "1");
+  formData.append("size", draft.greetingSize);
+  formData.append("receivePlace", draft.receivePlace.trim());
+  formData.append("linkedToOrder", "true");
+  formData.append("submitted", "false");
+  formData.append("productName", productName.trim());
+  if (draft.specialNote.trim()) {
+    formData.append("specialNote", draft.specialNote.trim());
+  }
+  if (customer?.ordererName?.trim()) {
+    formData.append("ordererName", customer.ordererName.trim());
+  }
+  if (customer?.churchName?.trim()) {
+    formData.append("churchName", customer.churchName.trim());
+  }
+  if (customer?.phone?.trim()) {
+    formData.append("phone", customer.phone.trim());
+  }
+  if (auth?.id) {
+    formData.append("userId", String(auth.id));
+  }
+
+  const response = await apiFetch("/api/greeting-forms", {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(payload?.message)
+      ? payload.message.join(", ")
+      : payload?.message;
+    throw new Error(message || "인사장 복제에 실패하였습니다.");
+  }
+  const created = (await response.json()) as {
+    id: number;
+    imageUrl?: string;
+  };
+  return {
+    ...draft,
+    productName,
+    imageNumbers: [...draft.imageNumbers],
+    id: created.id,
+    imageUrl: created.imageUrl ?? draft.imageUrl,
+  };
+}
+
 function greetingDraftFromApi(form: {
   id: number;
   greetingNumber: string;
@@ -1958,8 +2025,15 @@ function ProductOrderPanel({
   editOrderNumber?: string | null;
   /** Edit hydrate: restore linked greeting drafts into parent state. */
   onHydratedGreetings?: (drafts: Record<string, GreetingDraft>) => void;
-  /** 인사장주문 동일적용 — 대상 상품명 목록에 기준 인사장 복제 */
-  onApplyGreetingToAll?: (productNames: string[]) => void;
+  /** 인사장주문 동일적용 — 대상 상품명 목록에 기준 인사장 복제(서버 id 포함) */
+  onApplyGreetingToAll?: (
+    productNames: string[],
+    customer: {
+      ordererName: string;
+      churchName: string;
+      phone: string;
+    },
+  ) => void | Promise<void>;
 }) {
   const isEditMode = Boolean(editOrderNumber);
   const [editOrderId, setEditOrderId] = useState<number | null>(null);
@@ -2048,7 +2122,7 @@ function ProductOrderPanel({
         ? ordererName.trim().slice(0, -1)
         : ordererName.trim();
   const savedGreetingCount = Object.values(savedGreetingsByProduct).filter(
-    (draft) => draft.id,
+    (draft) => Boolean(draft?.id || draft?.greetingContent?.trim()),
   ).length;
   const viewingGreeting = viewingGreetingProduct
     ? (savedGreetingsByProduct[viewingGreetingProduct] ?? null)
@@ -2654,6 +2728,31 @@ function ProductOrderPanel({
         return;
       }
 
+      // 동일적용 등으로 id가 없는 draft는 접수 전 서버에 복제
+      let greetingsForSubmit = { ...savedGreetingsByProduct };
+      if (shouldAttachGreetings) {
+        const resolved: Record<string, GreetingDraft> = {
+          ...greetingsForSubmit,
+        };
+        for (const [name, draft] of Object.entries(resolved)) {
+          if (!draft || draft.id) continue;
+          resolved[name] = await createGreetingFormFromDraft(
+            draft,
+            name,
+            {
+              ordererName: displayOrdererName || ordererName.trim(),
+              churchName: churchQuery.trim(),
+              phone: ordererPhone.trim(),
+            },
+          );
+        }
+        greetingsForSubmit = resolved;
+      }
+
+      const greetingCountForNotes = Object.values(greetingsForSubmit).filter(
+        (draft) => draft?.id,
+      ).length;
+
       const selectedBranch =
         BRANCH_STORES.find((store) => store.id === branchStore)?.name ?? "";
       if (!selectedBranch) {
@@ -2667,12 +2766,13 @@ function ProductOrderPanel({
         `ORD-${year}-${String(Date.now()).slice(-6)}`;
       const hasDeliveryItems = isDelivery;
       const hasParcelItems = !isDelivery;
-      const attachedGreetingNotes = shouldAttachGreetings
-        ? Object.values(savedGreetingsByProduct)
-            .filter((draft) => draft.id)
-            .map((draft) => formatGreetingDraftNotes(draft))
-            .join(" / ")
-        : null;
+      const attachedGreetingNotes =
+        greetingCountForNotes > 0 && !hasUnsavedGreeting
+          ? Object.values(greetingsForSubmit)
+              .filter((draft) => draft.id)
+              .map((draft) => formatGreetingDraftNotes(draft))
+              .join(" / ")
+          : null;
       const notes = [
         `주문자:${displayOrdererName || ordererName.trim()}`,
         `연락처:${ordererPhone.trim()}`,
@@ -2693,7 +2793,7 @@ function ProductOrderPanel({
           : null,
         `주문작업지역:${selectedBranch}`,
         `지부매장:${selectedBranch}`,
-        `인사장종류:${savedGreetingCount > 0 ? "본사" : "없음"}`,
+        `인사장종류:${greetingCountForNotes > 0 ? "본사" : "없음"}`,
         attachedGreetingNotes,
         ...productItems.map(
           (item) =>
@@ -2767,7 +2867,7 @@ function ProductOrderPanel({
             id?: number;
           } | null;
           if (created?.id && shouldAttachGreetings) {
-            const greetingIds = Object.values(savedGreetingsByProduct)
+            const greetingIds = Object.values(greetingsForSubmit)
               .map((draft) => draft.id)
               .filter((id): id is number => typeof id === "number");
             await Promise.all(
@@ -2952,7 +3052,7 @@ function ProductOrderPanel({
   const hasAnyGreeting = Object.values(savedGreetingsByProduct).some(Boolean);
   const greetingTargetProducts = productItems.map((item) => item.product);
 
-  const handleApplyInsaAll = () => {
+  const handleApplyInsaAll = async () => {
     if (greetingTargetProducts.length < 2) {
       setAlertDialog({
         open: true,
@@ -2967,11 +3067,25 @@ function ProductOrderPanel({
       });
       return;
     }
-    onApplyGreetingToAll?.(greetingTargetProducts);
-    setAlertDialog({
-      open: true,
-      message: "인사장주문이 동일 적용되었습니다.",
-    });
+    try {
+      await onApplyGreetingToAll?.(greetingTargetProducts, {
+        ordererName: displayOrdererName || ordererName.trim(),
+        churchName: churchQuery.trim(),
+        phone: ordererPhone.trim(),
+      });
+      setAlertDialog({
+        open: true,
+        message: "인사장주문이 동일 적용되었습니다.",
+      });
+    } catch (error) {
+      setAlertDialog({
+        open: true,
+        message:
+          error instanceof Error
+            ? error.message
+            : "인사장 동일적용에 실패하였습니다.",
+      });
+    }
   };
 
   const omInputClass =
@@ -4234,27 +4348,45 @@ export function OrderListInput({
                 onDirtyChange={setOrderFormDirty}
                 onOrderAccepted={handleEditOrCreateComplete}
                 onHydratedGreetings={handleHydratedGreetings}
-                onApplyGreetingToAll={(productNames) => {
-                  setSavedGreetingsByProduct((current) => {
-                    const source =
-                      productNames
-                        .map((name) => current[name])
-                        .find((draft) => Boolean(draft)) ??
-                      Object.values(current).find((draft) => Boolean(draft));
-                    if (!source) {
-                      return current;
-                    }
-                    const next = { ...current };
-                    for (const name of productNames) {
+                onApplyGreetingToAll={async (productNames, customer) => {
+                  const current = savedGreetingsByProduct;
+                  const sourceKey =
+                    productNames.find((name) => current[name]?.id) ??
+                    productNames.find((name) => current[name]) ??
+                    Object.keys(current).find((key) => current[key]);
+                  const source = sourceKey ? current[sourceKey] : undefined;
+                  if (!source) {
+                    throw new Error(
+                      "동일적용할 인사장 원본을 찾을 수 없습니다.",
+                    );
+                  }
+                  if (!source.id) {
+                    throw new Error(
+                      "원본 인사장을 먼저 저장한 뒤 동일적용해 주세요.",
+                    );
+                  }
+
+                  const next: Record<string, GreetingDraft> = { ...current };
+                  for (const name of productNames) {
+                    if (name === sourceKey) {
                       next[name] = {
                         ...source,
                         productName: name,
                         imageNumbers: [...source.imageNumbers],
-                        id: undefined,
                       };
+                      continue;
                     }
-                    return next;
-                  });
+                    if (current[name]?.id) {
+                      // 이미 저장된 인사장 유지
+                      continue;
+                    }
+                    next[name] = await createGreetingFormFromDraft(
+                      source,
+                      name,
+                      customer,
+                    );
+                  }
+                  setSavedGreetingsByProduct(next);
                 }}
                 onGreetingClick={({
                   productNames,
