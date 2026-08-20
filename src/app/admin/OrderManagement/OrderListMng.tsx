@@ -23,14 +23,14 @@ import { GreetingFormMng } from "@/app/admin/OrderManagement/GreetingFormMng";
 import { MembersListMng } from "@/app/admin/OrderManagement/MembersListMng";
 import { StockInventoryMng } from "@/app/admin/OrderManagement/StockInventoryMng";
 import { OrderDataMng } from "@/app/admin/OrderManagement/OrderDataMng";
-import { OrderPrintPreview } from "@/app/admin/OrderManagement/OrderPrintPreview";
+import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { AdminShipmentMng } from "@/app/admin/OrderManagement/AdminShipmentMng";
 import { AdminReleaseMng } from "@/app/admin/OrderManagement/AdminReleaseMng";
 import { AdminPackagingMng } from "@/app/admin/OrderManagement/AdminPackagingMng";
 import { OrderListInput } from "@/app/OrderManagement/OrderListInput";
 import { LogoutButton } from "@/components/auth-guard";
 import { AdminTopBar } from "@/components/admin-top-bar";
-import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 /** 실제 콘텐츠가 연결된 화면 키 */
@@ -91,9 +91,6 @@ const FULL_NAV: NavPrimaryItem[] = [
     icon: ClipboardList,
     view: "주문목록",
     children: [
-      { id: "order-list", label: "주문목록", view: "주문목록" },
-      { id: "order-new", label: "주문작성", view: "주문작성" },
-      { id: "order-print", label: "출력관리", view: "출력관리" },
       { id: "order-greeting", label: "인사장관리", view: "인사장관리" },
       { id: "order-post", label: "우체국택배 업로드용", view: "우체국택배" },
     ],
@@ -293,19 +290,31 @@ export function OrderListMng() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [orderDraftDirty, setOrderDraftDirty] = useState(false);
+  const [orderFormOpen, setOrderFormOpen] = useState(false);
   const [editOrderNumber, setEditOrderNumber] = useState<string | null>(null);
+  const [printOrderNumber, setPrintOrderNumber] = useState<string | null>(null);
+  const [orderListKey, setOrderListKey] = useState(0);
 
   const activePrimary = primaryForView(nav, activeMenu);
 
   const confirmLeaveOrderDraft = () => {
-    if (activeMenu !== "주문작성" || !orderDraftDirty) {
+    if (!orderFormOpen || !orderDraftDirty) {
       return true;
     }
     return window.confirm(ORDER_LEAVE_CONFIRM_MESSAGE);
   };
 
+  const closeOrderForm = () => {
+    if (!confirmLeaveOrderDraft()) {
+      return;
+    }
+    setOrderFormOpen(false);
+    setOrderDraftDirty(false);
+    setEditOrderNumber(null);
+  };
+
   const goTo = (view: AdminView) => {
-    if (view === activeMenu && !(view === "주문작성" && editOrderNumber)) {
+    if (view === activeMenu) {
       setMobileNavOpen(false);
       return;
     }
@@ -313,7 +322,8 @@ export function OrderListMng() {
       setMobileNavOpen(false);
       return;
     }
-    if (activeMenu === "주문작성") {
+    if (orderFormOpen) {
+      setOrderFormOpen(false);
       setOrderDraftDirty(false);
       setEditOrderNumber(null);
     }
@@ -323,8 +333,12 @@ export function OrderListMng() {
 
   const handlePrimaryClick = (item: NavPrimaryItem) => {
     if (item.children?.length) {
-      const preferred =
-        item.children.find((c) => c.view === item.view) ?? item.children[0];
+      // Prefer primary view (e.g. 주문목록) over first child
+      if (item.view) {
+        goTo(item.view);
+        return;
+      }
+      const preferred = item.children[0];
       goTo(preferred.view);
       return;
     }
@@ -338,8 +352,12 @@ export function OrderListMng() {
   };
 
   const handleNewOrder = () => {
+    if (orderFormOpen && !confirmLeaveOrderDraft()) {
+      return;
+    }
     setEditOrderNumber(null);
-    goTo("주문작성");
+    setOrderDraftDirty(false);
+    setOrderFormOpen(true);
   };
 
   const handleEditOrder = (orderNumber: string) => {
@@ -348,22 +366,25 @@ export function OrderListMng() {
     }
     setOrderDraftDirty(false);
     setEditOrderNumber(orderNumber);
-    setActiveMenu("주문작성");
+    setOrderFormOpen(true);
     setMobileNavOpen(false);
   };
 
-  const handleNavigateAfterOrderAccepted = () => {
+  const handleNavigateAfterOrderAccepted = (orderNumber?: string) => {
     setOrderDraftDirty(false);
+    setOrderFormOpen(false);
     setEditOrderNumber(null);
-    setActiveMenu("출력관리");
-    setMobileNavOpen(false);
+    setOrderListKey((k) => k + 1);
+    if (orderNumber) {
+      setPrintOrderNumber(orderNumber);
+    }
   };
 
   const handleEditComplete = () => {
     setOrderDraftDirty(false);
+    setOrderFormOpen(false);
     setEditOrderNumber(null);
-    setActiveMenu("주문목록");
-    setMobileNavOpen(false);
+    setOrderListKey((k) => k + 1);
   };
 
   const renderContent = () => {
@@ -374,47 +395,11 @@ export function OrderListMng() {
     if (activeMenu === "주문목록") {
       return (
         <AdminOrderList
+          key={orderListKey}
           onNewOrder={handleNewOrder}
           onEditOrder={handleEditOrder}
         />
       );
-    }
-
-    if (activeMenu === "주문작성") {
-      return (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-[19px] font-bold tracking-tight text-[#1A202C]">
-                {editOrderNumber ? "주문서 수정" : "주문 작성"}
-              </h3>
-              <p className="mt-1 text-[12.5px] text-[#A0AEC0]">
-                {editOrderNumber
-                  ? "주문 내용을 수정한 뒤 변경내용접수로 저장합니다."
-                  : "관리자가 회원 주문을 대신 작성합니다."}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => goTo("주문목록")}
-            >
-              목록으로
-            </Button>
-          </div>
-          <OrderListInput
-            key={editOrderNumber ?? "new-order"}
-            embedded
-            editOrderNumber={editOrderNumber}
-            onDirtyChange={setOrderDraftDirty}
-            onNavigateToPrint={handleNavigateAfterOrderAccepted}
-            onEditComplete={handleEditComplete}
-          />
-        </div>
-      );
-    }
-
-    if (activeMenu === "출력관리") {
-      return <OrderPrintPreview />;
     }
 
     if (activeMenu === "데이터 관리") {
@@ -522,6 +507,33 @@ export function OrderListMng() {
           {renderContent()}
         </section>
       </div>
+
+      <Dialog
+        open={orderFormOpen}
+        title={editOrderNumber ? "주문서 수정" : "주문 작성"}
+        onClose={closeOrderForm}
+        className="max-h-[92vh] max-w-5xl overflow-y-auto"
+      >
+        <p className="mb-3 text-[12.5px] text-[#A0AEC0]">
+          {editOrderNumber
+            ? "주문 내용을 수정한 뒤 변경내용접수로 저장합니다."
+            : "관리자가 회원 주문을 대신 작성합니다."}
+        </p>
+        <OrderListInput
+          key={editOrderNumber ?? "new-order"}
+          embedded
+          editOrderNumber={editOrderNumber}
+          onDirtyChange={setOrderDraftDirty}
+          onNavigateToPrint={handleNavigateAfterOrderAccepted}
+          onEditComplete={handleEditComplete}
+        />
+      </Dialog>
+
+      <OrderPrintPreviewModal
+        open={Boolean(printOrderNumber)}
+        orderNumber={printOrderNumber}
+        onClose={() => setPrintOrderNumber(null)}
+      />
     </div>
   );
 }

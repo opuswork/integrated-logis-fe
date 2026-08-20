@@ -1946,7 +1946,7 @@ function ProductOrderPanel({
   savedGreetingsByProduct?: Record<string, GreetingDraft>;
   onUnsavedGreetingResolved?: () => void;
   /** After successful 접수하기 / 변경내용접수 / 취소 confirm — e.g. go to list. */
-  onOrderAccepted?: () => void;
+  onOrderAccepted?: (orderNumber?: string) => void;
   /** Called when draft content changes (for leave-guard). */
   onDirtyChange?: (dirty: boolean) => void;
   /** When set, load existing order and submit via PATCH. */
@@ -2027,6 +2027,9 @@ function ProductOrderPanel({
     open: boolean;
     success: boolean;
   }>({ open: false, success: false });
+  const [acceptedOrderNumber, setAcceptedOrderNumber] = useState<string | null>(
+    null,
+  );
   const isDesktop = useMinWidth(1040);
   const isWideProductList = useMinWidth(500);
   const isDelivery = orderType === "delivery";
@@ -2490,9 +2493,11 @@ function ProductOrderPanel({
 
   const closeResultDialog = () => {
     const wasSuccess = resultDialog.success;
+    const orderNo = acceptedOrderNumber ?? editOrderNumber ?? undefined;
     setResultDialog((current) => ({ ...current, open: false }));
     if (wasSuccess) {
-      onOrderAccepted?.();
+      onOrderAccepted?.(orderNo ?? undefined);
+      setAcceptedOrderNumber(null);
     }
   };
 
@@ -2751,22 +2756,25 @@ function ProductOrderPanel({
               ? "주문서 변경 접수에 실패하였습니다."
               : "제품주문서 접수에 실패하였습니다."),
         );
-      } else if (!isEditMode) {
-        const created = (await response.json().catch(() => null)) as {
-          id?: number;
-        } | null;
-        if (created?.id && shouldAttachGreetings) {
-          const greetingIds = Object.values(savedGreetingsByProduct)
-            .map((draft) => draft.id)
-            .filter((id): id is number => typeof id === "number");
-          await Promise.all(
-            greetingIds.map((id) =>
-              apiFetch(`/api/greeting-forms/${id}/link-order`, {
-                method: "PATCH",
-                body: JSON.stringify({ orderId: created.id }),
-              }).catch(() => null),
-            ),
-          );
+      } else {
+        setAcceptedOrderNumber(orderNumber);
+        if (!isEditMode) {
+          const created = (await response.json().catch(() => null)) as {
+            id?: number;
+          } | null;
+          if (created?.id && shouldAttachGreetings) {
+            const greetingIds = Object.values(savedGreetingsByProduct)
+              .map((draft) => draft.id)
+              .filter((id): id is number => typeof id === "number");
+            await Promise.all(
+              greetingIds.map((id) =>
+                apiFetch(`/api/greeting-forms/${id}/link-order`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ orderId: created.id }),
+                }).catch(() => null),
+              ),
+            );
+          }
         }
       }
     } catch {
@@ -3964,7 +3972,7 @@ export function OrderListInput({
   /** When true, renders only the order form content (no member sidebar shell). */
   embedded?: boolean;
   /** After order 접수 완료 confirm (admin). */
-  onNavigateToPrint?: () => void;
+  onNavigateToPrint?: (orderNumber?: string) => void;
   /** Admin leave-guard: reports whether the draft has unsaved input. */
   onDirtyChange?: (dirty: boolean) => void;
   /** Open form in edit mode for this order number. */
@@ -4103,7 +4111,7 @@ export function OrderListInput({
     setIsMobileMenuOpen(false);
   };
 
-  const handleEditOrCreateComplete = () => {
+  const handleEditOrCreateComplete = (orderNumber?: string) => {
     clearLinkedGreeting();
     setOrderFormDirty(false);
     const wasEditing = Boolean(editingOrderNumber);
@@ -4114,7 +4122,7 @@ export function OrderListInput({
         onEditComplete?.();
         return;
       }
-      onNavigateToPrint?.();
+      onNavigateToPrint?.(orderNumber);
       return;
     }
     setOrdersReloadToken((token) => token + 1);
