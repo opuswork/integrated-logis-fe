@@ -53,14 +53,17 @@ export function formatAdminPrivilegeLabel(
   return "최고관리자";
 }
 
-/** 사이드바 표시: `홍길동 - 중부(덕소) 관리자` / `최고관리자` / Factory-G */
+/** 사이드바 표시: `홍길동 - 중부(덕소) 관리자` / `최고관리자` / 공장관리자 */
 export function formatAdminSidebarTitle(user: AuthUser | null) {
   if (!user) {
     return "관리자";
   }
-  if (user.role === "factory" && user.canApproveGreeting) {
+  if (user.role === "factory") {
     const name = user.name?.trim();
-    return name ? `${name} - 인사장 승인` : "인사장 승인";
+    if (user.canApproveGreeting) {
+      return name ? `${name} - 인사장 승인` : "인사장 승인";
+    }
+    return name ? `${name} - 공장관리자` : "공장관리자";
   }
   const privilege = formatAdminPrivilegeLabel(
     user.adminRegion,
@@ -87,17 +90,10 @@ export function formatFactorySidebarTitle(user: AuthUser | null) {
 
 export function getHomePathForRole(
   role: UserRole,
-  options?: { canApproveGreeting?: boolean },
+  _options?: { canApproveGreeting?: boolean },
 ) {
-  if (role === "admin") {
+  if (role === "admin" || role === "factory") {
     return "/admin/OrderManagement";
-  }
-  if (role === "factory") {
-    // Factory-G(인사장 승인)는 관리자 주문목록에서 인사장완료를 처리합니다.
-    if (options?.canApproveGreeting) {
-      return "/admin/OrderManagement";
-    }
-    return "/factory/ShipmentManagement";
   }
   return "/OrderManagement";
 }

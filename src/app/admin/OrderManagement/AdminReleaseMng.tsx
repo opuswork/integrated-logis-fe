@@ -50,7 +50,7 @@ function shiftDate(iso: string, delta: number) {
 
 export function AdminReleaseMng() {
   const auth = getAuthUser();
-  const isFactory = auth?.role === "factory";
+  const canOperate = auth?.role === "admin" || auth?.role === "factory";
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -278,9 +278,9 @@ export function AdminReleaseMng() {
               <tbody>
                 {filtered.map((row, idx) => {
                   const releaseEnabled =
-                    isFactory && row.packDone && !row.releaseDone;
+                    canOperate && row.packDone && !row.releaseDone;
                   const confirmEnabled =
-                    isFactory &&
+                    canOperate &&
                     row.isParcel &&
                     row.finalCompleteDone &&
                     !row.finalConfirmDone;
