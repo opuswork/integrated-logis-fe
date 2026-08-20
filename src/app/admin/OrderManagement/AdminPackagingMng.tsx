@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
-import { getAuthUser } from "@/lib/auth";
+import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import {
   mapShipmentOpsOrder,
   parseApiErrorMessage,
@@ -48,7 +48,7 @@ function CellBtn({
 
 export function AdminPackagingMng() {
   const auth = getAuthUser();
-  const canOperate = auth?.role === "admin" || auth?.role === "factory";
+  const canOperate = canWriteShipmentOps(auth);
   const [tab, setTab] = useState<PackTab>("pre");
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);

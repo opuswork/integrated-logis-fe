@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
-import { getAuthUser } from "@/lib/auth";
+import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import {
   mapShipmentOpsOrder,
   parseApiErrorMessage,
@@ -78,7 +78,7 @@ function isUrgent(row: ShipmentOpsOrder) {
 
 export function AdminShipmentMng() {
   const auth = getAuthUser();
-  const canOperate = auth?.role === "admin" || auth?.role === "factory";
+  const canOperate = canWriteShipmentOps(auth);
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -420,8 +420,9 @@ export function AdminShipmentMng() {
       <p className="mt-3 text-[11px] leading-relaxed text-[#64748B]">
         출고요청일은 오늘 이후 날짜만 선택 가능하며 선택 즉시 저장됩니다.
         출고확인은 출고관리에서 공장 관리자가 출고완료하면 자동 기록됩니다.
-        최종완료는 출고완료 후 관리자(매장·공장)가 처리합니다. 택배 건의
-        최종확인은 출고관리에서 공장이 처리합니다.
+        최종완료·운영 액션은 공장관리자(및 최고관리자)가 처리합니다. 지역
+        매장관리자·Factory-G는 목록만 조회합니다. 택배 건의 최종확인은
+        출고관리에서 공장이 처리합니다.
       </p>
     </div>
   );

@@ -98,6 +98,51 @@ export function getHomePathForRole(
   return "/OrderManagement";
 }
 
+/** Factory-G: 인사장완료만 쓰기 가능 */
+export const FACTORY_G_USERNAME = "01029647088";
+
+export function isFactoryGUser(user: AuthUser | null | undefined): boolean {
+  if (!user) return false;
+  return (
+    user.canApproveGreeting === true || user.username === FACTORY_G_USERNAME
+  );
+}
+
+export function canApproveGreetingAction(
+  user: AuthUser | null | undefined,
+): boolean {
+  return Boolean(user?.role === "factory" && isFactoryGUser(user));
+}
+
+/** 주문관리 체크리스트(확인·작업자·입금·전표) 쓰기 — 인사장 제외 */
+export function canWriteOrderChecklist(
+  user: AuthUser | null | undefined,
+  storeRegion: AdminRegion | null,
+): boolean {
+  if (!user || user.role !== "admin") return false;
+  if (user.isSuperAdmin || !user.adminRegion) return true;
+  return storeRegion != null && storeRegion === user.adminRegion;
+}
+
+/** 배송·출고·포장 쓰기: 공장(비-G) + 최고관리자 */
+export function canWriteShipmentOps(
+  user: AuthUser | null | undefined,
+): boolean {
+  if (!user) return false;
+  if (isFactoryGUser(user)) return false;
+  if (user.role === "factory") return true;
+  if (user.role === "admin" && (user.isSuperAdmin || !user.adminRegion)) {
+    return true;
+  }
+  return false;
+}
+
+export function canCreateAdminOrder(
+  user: AuthUser | null | undefined,
+): boolean {
+  return user?.role === "admin";
+}
+
 export function saveAuthUser(user: AuthUser, accessToken?: string) {
   if (typeof window === "undefined") {
     return;
