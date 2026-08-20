@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { useIdleLogout } from "@/hooks/use-idle-logout";
 import {
   clearAuthUser,
   getAuthUser,
@@ -11,12 +12,20 @@ import {
   type UserRole,
 } from "@/lib/auth";
 
+function IdleLogoutEffect({ timeoutMs }: { timeoutMs: number }) {
+  useIdleLogout(timeoutMs);
+  return null;
+}
+
 export function AuthGuard({
   children,
   allow,
+  idleTimeoutMs,
 }: {
   children: ReactNode;
   allow: UserRole | UserRole[];
+  /** When set, auto-logout after this many ms of no activity. */
+  idleTimeoutMs?: number;
 }) {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -49,7 +58,14 @@ export function AuthGuard({
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {idleTimeoutMs != null && idleTimeoutMs > 0 ? (
+        <IdleLogoutEffect timeoutMs={idleTimeoutMs} />
+      ) : null}
+      {children}
+    </>
+  );
 }
 
 export function LogoutButton({ className }: { className?: string }) {
