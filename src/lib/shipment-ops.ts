@@ -1,4 +1,5 @@
 import {
+  isDeliveryOrderType,
   memberFacingStatusLabel,
   type DeliveryOrderStatus,
 } from "@/lib/order-delivery";
@@ -105,8 +106,10 @@ export function mapShipmentOpsOrder(order: {
         ? "PICKUP"
         : null;
   const typeFromNotes = parseOrderTypeFromNotes(order.notes);
-  const isParcel =
-    fulfillmentType === "PARCEL" || typeFromNotes.startsWith("택배");
+  // notes의 배달을 우선: fulfillmentType이 PARCEL로 남아 있어도 상차로 표시
+  const isParcel = isDeliveryOrderType(typeFromNotes)
+    ? false
+    : fulfillmentType !== "PICKUP";
   const items = order.items ?? [];
   const quantity = items.reduce((sum, item) => sum + (item.quantity ?? 0), 0);
   const productSummary =
