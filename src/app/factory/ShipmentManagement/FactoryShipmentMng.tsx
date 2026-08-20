@@ -4,12 +4,13 @@ import { Menu, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { OrderPrintPreview } from "@/app/admin/OrderManagement/OrderPrintPreview";
+import { AdminReleaseMng } from "@/app/admin/OrderManagement/AdminReleaseMng";
 import { FactoryOrderList } from "@/app/factory/ShipmentManagement/FactoryOrderList";
 import { LogoutButton } from "@/components/auth-guard";
 import { formatFactorySidebarTitle, getAuthUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
-const FACTORY_NAV = ["주문 목록", "출하 관리"] as const;
+const FACTORY_NAV = ["주문 목록", "출하 관리", "출고관리"] as const;
 
 type FactoryNav = (typeof FACTORY_NAV)[number];
 
@@ -163,6 +164,10 @@ export function FactoryShipmentMng() {
           showFactoryControls
         />
       );
+    }
+
+    if (activeMenu === "출고관리") {
+      return <AdminReleaseMng />;
     }
 
     return (

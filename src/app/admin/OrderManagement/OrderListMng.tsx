@@ -24,6 +24,9 @@ import { MembersListMng } from "@/app/admin/OrderManagement/MembersListMng";
 import { StockInventoryMng } from "@/app/admin/OrderManagement/StockInventoryMng";
 import { OrderDataMng } from "@/app/admin/OrderManagement/OrderDataMng";
 import { OrderPrintPreview } from "@/app/admin/OrderManagement/OrderPrintPreview";
+import { AdminShipmentMng } from "@/app/admin/OrderManagement/AdminShipmentMng";
+import { AdminReleaseMng } from "@/app/admin/OrderManagement/AdminReleaseMng";
+import { AdminPackagingMng } from "@/app/admin/OrderManagement/AdminPackagingMng";
 import { OrderListInput } from "@/app/OrderManagement/OrderListInput";
 import { LogoutButton } from "@/components/auth-guard";
 import { AdminTopBar } from "@/components/admin-top-bar";
@@ -101,14 +104,12 @@ const FULL_NAV: NavPrimaryItem[] = [
     label: "배송관리",
     icon: Truck,
     view: "배송관리",
-    placeholder: true,
   },
   {
     id: "factory",
     label: "출고관리",
     icon: Factory,
     view: "출고관리",
-    placeholder: true,
     children: [
       { id: "miss", label: "누락체크", view: "누락체크", placeholder: true },
       {
@@ -116,9 +117,8 @@ const FULL_NAV: NavPrimaryItem[] = [
         label: "출고관리",
         view: "출고관리",
         tag: "출고전용",
-        placeholder: true,
       },
-      { id: "pack", label: "포장관리", view: "포장관리", placeholder: true },
+      { id: "pack", label: "포장관리", view: "포장관리" },
     ],
   },
   {
@@ -460,12 +460,19 @@ export function OrderListMng() {
       return <MembersListMng />;
     }
 
-    if (
-      activeMenu === "배송관리" ||
-      activeMenu === "누락체크" ||
-      activeMenu === "출고관리" ||
-      activeMenu === "포장관리"
-    ) {
+    if (activeMenu === "배송관리") {
+      return <AdminShipmentMng />;
+    }
+
+    if (activeMenu === "출고관리") {
+      return <AdminReleaseMng />;
+    }
+
+    if (activeMenu === "포장관리") {
+      return <AdminPackagingMng />;
+    }
+
+    if (activeMenu === "누락체크") {
       return <ComingSoon title={activeMenu} />;
     }
 
