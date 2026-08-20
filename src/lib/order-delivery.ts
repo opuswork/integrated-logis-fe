@@ -58,7 +58,13 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
 };
 
 /** 목록용 회원 상태 라벨 (출력완료도 배송완료로 표시) */
-export function memberFacingStatusLabel(status: string) {
+export function memberFacingStatusLabel(
+  status: string,
+  opts?: { finalConfirmDone?: boolean },
+) {
+  if (opts?.finalConfirmDone === true && status === "SHIPPING") {
+    return "배송완료";
+  }
   if (status === "PRINTING_COMPLETE") {
     return "배송완료";
   }
