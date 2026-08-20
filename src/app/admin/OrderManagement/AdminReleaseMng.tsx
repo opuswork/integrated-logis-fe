@@ -276,7 +276,10 @@ export function AdminReleaseMng() {
               <tbody>
                 {filtered.map((row, idx) => {
                   const releaseEnabled =
-                    canOperate && row.packDone && !row.releaseDone;
+                    canOperate &&
+                    row.packDone &&
+                    !row.releaseDone &&
+                    Boolean(row.requestedShipDate);
                   const confirmEnabled =
                     canOperate &&
                     row.isParcel &&
@@ -397,7 +400,8 @@ export function AdminReleaseMng() {
             반영됩니다.
           </p>
           <p>
-            출고완료는 포장완료 후 공장 계정만 처리할 수 있습니다. 택배 건
+            출고완료는 포장완료·출고요청일 입력 후 공장(또는 최고관리자)이
+            처리합니다. 출고요청일이 없으면 완료 버튼이 비활성입니다. 택배 건
             최종확인도 공장 계정입니다.
           </p>
         </div>
