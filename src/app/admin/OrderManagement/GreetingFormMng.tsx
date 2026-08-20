@@ -15,6 +15,7 @@ type GreetingFormRow = {
   id: number;
   title: string;
   type: string;
+  orderNumber: string;
   ordererName: string;
   churchName: string;
   phone: string;
@@ -169,6 +170,12 @@ function GreetingDetailDialog({
         <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-base">
           <dt className="text-[#64748b]">번호</dt>
           <dd className="font-medium text-ink">{row.id}</dd>
+          {row.type === "제품주문 연계" && row.orderNumber ? (
+            <>
+              <dt className="text-[#64748b]">주문번호</dt>
+              <dd className="font-medium text-ink">{row.orderNumber}</dd>
+            </>
+          ) : null}
           <dt className="text-[#64748b]">구분</dt>
           <dd className="font-medium text-ink">{row.type}</dd>
           <dt className="text-[#64748b]">성명</dt>
@@ -253,6 +260,7 @@ export function GreetingFormMng() {
               id: item.id,
               title: orderNumber || `인사장 #${item.id}`,
               type: item.linkedToOrder ? "제품주문 연계" : "인사장만 의뢰",
+              orderNumber: item.linkedToOrder ? orderNumber || "" : "",
               ordererName: item.ordererName?.trim() || "-",
               churchName: item.churchName?.trim() || "-",
               phone: item.phone?.trim() || "-",
