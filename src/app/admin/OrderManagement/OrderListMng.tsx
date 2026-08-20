@@ -11,7 +11,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { AdminOrderList } from "@/app/admin/OrderManagement/AdminOrderList";
 import {
@@ -31,7 +31,6 @@ import { OrderListInput } from "@/app/OrderManagement/OrderListInput";
 import { LogoutButton } from "@/components/auth-guard";
 import { AdminTopBar } from "@/components/admin-top-bar";
 import { Button } from "@/components/ui/button";
-import { getAuthUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 /** 실제 콘텐츠가 연결된 화면 키 */
@@ -132,18 +131,6 @@ const FULL_NAV: NavPrimaryItem[] = [
     label: "회원관리",
     icon: Users,
     view: "회원관리",
-  },
-];
-
-const FACTORY_GREETING_NAV: NavPrimaryItem[] = [
-  {
-    id: "order",
-    label: "주문관리",
-    icon: ClipboardList,
-    view: "주문목록",
-    children: [
-      { id: "order-list", label: "주문목록", view: "주문목록" },
-    ],
   },
 ];
 
@@ -300,13 +287,7 @@ const ORDER_LEAVE_CONFIRM_MESSAGE =
   "주문서를 벗어나면 데이터가 소실됩니다. 주문서 작성을 먼저 완료해주세요.\n\n그래도 다른 메뉴로 이동하시겠습니까?";
 
 export function OrderListMng() {
-  const authUser = getAuthUser();
-  const isFactoryGreetingOnly =
-    authUser?.role === "factory" && authUser.canApproveGreeting === true;
-  const nav = useMemo(
-    () => (isFactoryGreetingOnly ? FACTORY_GREETING_NAV : FULL_NAV),
-    [isFactoryGreetingOnly],
-  );
+  const nav = FULL_NAV;
 
   const [activeMenu, setActiveMenu] = useState<AdminView>("주문목록");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

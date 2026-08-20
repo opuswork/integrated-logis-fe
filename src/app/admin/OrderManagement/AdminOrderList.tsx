@@ -94,11 +94,9 @@ function isParcelType(type: string, fulfillmentType: string | null) {
   return type.startsWith("택배") || fulfillmentType === "PARCEL";
 }
 
-function canMutateRow(user: AuthUser | null, row: AdminOrderRow) {
-  if (!user || user.role !== "admin") return false;
-  if (user.isSuperAdmin || !user.adminRegion) return true;
-  if (!row.storeRegion) return true;
-  return row.storeRegion === user.adminRegion;
+function canMutateRow(user: AuthUser | null, _row: AdminOrderRow) {
+  if (!user) return false;
+  return user.role === "admin" || user.role === "factory";
 }
 
 function Panel({
@@ -158,7 +156,9 @@ export function AdminOrderList({
   onEditOrder?: (orderNumber: string) => void;
 }) {
   const authUser = getAuthUser();
-  const canApproveGreeting = authUser?.canApproveGreeting === true;
+  const canApproveGreeting =
+    authUser?.canApproveGreeting === true ||
+    authUser?.username === "01029647088";
 
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
   const [drafts, setDrafts] = useState<Record<number, DraftState>>({});
@@ -385,12 +385,11 @@ export function AdminOrderList({
             주문관리
           </h3>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            {canApproveGreeting && authUser?.role === "factory"
-              ? "인사장완료 확인만 처리할 수 있습니다. 그 외 항목은 관리자가 처리합니다."
-              : "담당 지역 외 주문의 확인·저장 버튼은 비활성화됩니다. (출력·보기·주문번호는 가능)"}
+            인사장완료 확인은 Factory-G(01029647088)만 가능합니다. 그 외 항목은
+            모든 관리자가 동일하게 처리할 수 있습니다.
           </p>
         </div>
-        {authUser?.role === "admin" ? (
+        {authUser?.role === "admin" || authUser?.role === "factory" ? (
           <Button type="button" onClick={onNewOrder}>
             <Plus className="size-4" />
             신규작성
@@ -715,9 +714,9 @@ export function AdminOrderList({
         )}
 
         <p className="mt-3 text-[11px] leading-relaxed text-[#64748b]">
-          관할 외 주문은 회색(잠금) 처리됩니다. 인사장이 없으면 인사장완료는 X,
-          택배가 아니면 기표지완료는 X입니다. 작업자·주문확인·결제·인사장·기표지
-          5항목이 모두 충족되면 배송관리 후보(readyForShipment)로 표시됩니다.
+          인사장완료 확인은 Factory-G(01029647088)만 가능합니다. 인사장이 없으면
+          인사장완료는 X, 택배가 아니면 기표지완료는 X입니다. 작업자·주문확인·결제·인사장·기표지
+          5항목이 모두 충족되면 배송·출고·포장관리에 표시됩니다.
         </p>
       </Panel>
 

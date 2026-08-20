@@ -5,7 +5,7 @@ import { OrderListMng } from "./OrderListMng";
 
 export default function AdminOrderManagementPage() {
   return (
-    <AuthGuard allow="admin">
+    <AuthGuard allow={["admin", "factory"]}>
       <main className="min-h-screen bg-[#F5F7FA]">
         <OrderListMng />
       </main>

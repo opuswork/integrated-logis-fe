@@ -47,7 +47,7 @@ function CellBtn({
 
 export function AdminPackagingMng() {
   const auth = getAuthUser();
-  const isAdmin = auth?.role === "admin";
+  const canOperate = auth?.role === "admin" || auth?.role === "factory";
   const [tab, setTab] = useState<PackTab>("pre");
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -217,7 +217,7 @@ export function AdminPackagingMng() {
                 <td className="px-2 py-2">{row.specialNote}</td>
                 <td className="px-2 py-2">
                   <input
-                    disabled={!isAdmin}
+                    disabled={!canOperate}
                     value={ptDraft[row.id] ?? ""}
                     onChange={(e) =>
                       setPtDraft((p) => ({ ...p, [row.id]: e.target.value }))
@@ -229,7 +229,7 @@ export function AdminPackagingMng() {
                 <td className="px-2 py-2">
                   <input
                     type="date"
-                    disabled={!isAdmin}
+                    disabled={!canOperate}
                     value={packDateDraft[row.id] ?? todayIsoDate()}
                     onChange={(e) =>
                       setPackDateDraft((p) => ({
@@ -243,7 +243,7 @@ export function AdminPackagingMng() {
                 <td className="px-2 py-2">
                   <CellBtn
                     variant="confirm"
-                    disabled={!isAdmin || savingId === `pc-${row.id}`}
+                    disabled={!canOperate || savingId === `pc-${row.id}`}
                     onClick={() =>
                       void runOp(
                         row.id,
@@ -384,7 +384,7 @@ export function AdminPackagingMng() {
                       <td className="px-2 py-2">{row.specialNote}</td>
                       <td className="px-2 py-2">
                         <select
-                          disabled={!isAdmin}
+                          disabled={!canOperate}
                           value={deptDraft[row.id] ?? ""}
                           onChange={(e) =>
                             setDeptDraft((p) => ({
@@ -403,7 +403,7 @@ export function AdminPackagingMng() {
                         <CellBtn
                           variant="confirm"
                           disabled={
-                            !isAdmin ||
+                            !canOperate ||
                             !deptDraft[row.id] ||
                             savingId === `pd-${row.id}`
                           }

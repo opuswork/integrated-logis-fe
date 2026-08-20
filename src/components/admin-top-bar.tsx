@@ -32,9 +32,12 @@ export function formatAdminHeaderLabel(user = getAuthUser()) {
   if (!user) {
     return "관리자";
   }
-  if (user.role === "factory" && user.canApproveGreeting) {
+  if (user.role === "factory") {
     const name = user.name?.trim() || user.username;
-    return `인사장 승인 ${name}님`;
+    if (user.canApproveGreeting || user.username === "01029647088") {
+      return `인사장 승인 ${name}님`;
+    }
+    return `공장관리자 ${name}님`;
   }
   const privilege = formatAdminPrivilegeLabel(
     user.adminRegion,

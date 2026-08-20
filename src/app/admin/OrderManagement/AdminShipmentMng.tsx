@@ -77,7 +77,7 @@ function isUrgent(row: ShipmentOpsOrder) {
 
 export function AdminShipmentMng() {
   const auth = getAuthUser();
-  const isAdmin = auth?.role === "admin";
+  const canOperate = auth?.role === "admin" || auth?.role === "factory";
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -263,7 +263,7 @@ export function AdminShipmentMng() {
                     row.greetingCount === 0 ? null : row.greetingDone;
                   const slipYes = row.isParcel ? row.slipDone : null;
                   const finalCompleteEnabled =
-                    isAdmin && row.releaseDone && !row.finalCompleteDone;
+                    canOperate && row.releaseDone && !row.finalCompleteDone;
                   return (
                     <tr
                       key={row.id}
@@ -307,7 +307,7 @@ export function AdminShipmentMng() {
                         <input
                           type="date"
                           min={todayIsoDate()}
-                          disabled={!isAdmin || savingId === `d-${row.id}`}
+                          disabled={!canOperate || savingId === `d-${row.id}`}
                           value={row.requestedShipDate ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
