@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { getAuthUser } from "@/lib/auth";
 import {
   mapShipmentOpsOrder,
+  parseApiErrorMessage,
   patchShipmentOps,
   todayIsoDate,
   type PackDept,
@@ -141,10 +142,7 @@ export function AdminPackagingMng() {
     try {
       const { response, data } = await patchShipmentOps(orderId, body, apiFetch);
       if (!response.ok) {
-        setActionError(
-          (data as { message?: string })?.message ||
-            "처리에 실패했습니다.",
-        );
+        setActionError(parseApiErrorMessage(data));
         return;
       }
       const mapped = mapShipmentOpsOrder(data as never);
