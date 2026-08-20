@@ -13,6 +13,9 @@ import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPr
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import {
+  canApproveGreetingAction,
+  canCreateAdminOrder,
+  canWriteOrderChecklist,
   getAuthUser,
   type AdminRegion,
   type AuthUser,
@@ -94,9 +97,8 @@ function isParcelType(type: string, fulfillmentType: string | null) {
   return type.startsWith("택배") || fulfillmentType === "PARCEL";
 }
 
-function canMutateRow(user: AuthUser | null, _row: AdminOrderRow) {
-  if (!user) return false;
-  return user.role === "admin" || user.role === "factory";
+function canMutateRow(user: AuthUser | null, row: AdminOrderRow) {
+  return canWriteOrderChecklist(user, row.storeRegion);
 }
 
 function Panel({
@@ -156,9 +158,8 @@ export function AdminOrderList({
   onEditOrder?: (orderNumber: string) => void;
 }) {
   const authUser = getAuthUser();
-  const canApproveGreeting =
-    authUser?.canApproveGreeting === true ||
-    authUser?.username === "01029647088";
+  const canApproveGreeting = canApproveGreetingAction(authUser);
+  const canCreateOrder = canCreateAdminOrder(authUser);
 
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
   const [drafts, setDrafts] = useState<Record<number, DraftState>>({});
@@ -385,11 +386,12 @@ export function AdminOrderList({
             주문관리
           </h3>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            인사장완료 확인은 Factory-G(01029647088)만 가능합니다. 그 외 항목은
-            모든 관리자가 동일하게 처리할 수 있습니다.
+            지역 매장관리자는 자지역 주문만 처리합니다. 인사장완료는
+            Factory-G(01029647088)만 확인 가능합니다. 공장관리자는 목록만
+            조회합니다.
           </p>
         </div>
-        {authUser?.role === "admin" || authUser?.role === "factory" ? (
+        {canCreateOrder ? (
           <Button type="button" onClick={onNewOrder}>
             <Plus className="size-4" />
             신규작성
@@ -559,7 +561,9 @@ export function AdminOrderList({
                         </span>
                       </td>
                       <td className="px-2 py-2 align-middle font-medium">
-                        {canEditOrderStatus(row.status) && onEditOrder ? (
+                        {mutable &&
+                        canEditOrderStatus(row.status) &&
+                        onEditOrder ? (
                           <button
                             type="button"
                             className="text-left text-brand underline-offset-2 hover:underline"
@@ -714,8 +718,9 @@ export function AdminOrderList({
         )}
 
         <p className="mt-3 text-[11px] leading-relaxed text-[#64748b]">
-          인사장완료 확인은 Factory-G(01029647088)만 가능합니다. 인사장이 없으면
-          인사장완료는 X, 택배가 아니면 기표지완료는 X입니다. 작업자·주문확인·결제·인사장·기표지
+          지역 매장관리자는 자지역 주문만 작성·수정·확인합니다. 인사장완료는
+          Factory-G(01029647088)만 가능합니다. 인사장이 없으면 인사장완료는 X,
+          택배가 아니면 기표지완료는 X입니다. 작업자·주문확인·결제·인사장·기표지
           5항목이 모두 충족되면 배송·출고·포장관리에 표시됩니다.
         </p>
       </Panel>
