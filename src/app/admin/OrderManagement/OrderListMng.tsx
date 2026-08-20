@@ -510,15 +510,14 @@ export function OrderListMng() {
 
       <Dialog
         open={orderFormOpen}
-        title={editOrderNumber ? "주문서 수정" : "주문 작성"}
+        title={
+          editOrderNumber
+            ? `제품주문서 (수정) — ${editOrderNumber}`
+            : "제품주문서 (신규작성)"
+        }
         onClose={closeOrderForm}
-        className="max-h-[92vh] max-w-5xl overflow-y-auto"
+        className="max-h-[92vh] max-w-[440px] overflow-y-auto bg-[#F5F7FA] sm:max-w-5xl"
       >
-        <p className="mb-3 text-[12.5px] text-[#A0AEC0]">
-          {editOrderNumber
-            ? "주문 내용을 수정한 뒤 변경내용접수로 저장합니다."
-            : "관리자가 회원 주문을 대신 작성합니다."}
-        </p>
         <OrderListInput
           key={editOrderNumber ?? "new-order"}
           embedded

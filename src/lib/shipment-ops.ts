@@ -129,7 +129,9 @@ export function mapShipmentOpsOrder(order: {
     id: order.id,
     orderNumber: order.orderNumber,
     status: order.status,
-    statusLabel: memberFacingStatusLabel(order.status),
+    statusLabel: memberFacingStatusLabel(order.status, {
+      finalConfirmDone: order.finalConfirmDone === true,
+    }),
     createdAt: order.createdAt,
     orderDate:
       parseOrderDateFromNotes(order.notes) || order.createdAt.slice(0, 10),

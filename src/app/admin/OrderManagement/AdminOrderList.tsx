@@ -192,6 +192,7 @@ export function AdminOrderList({
       slipDone?: boolean;
       slipAuthor?: string | null;
       readyForShipment?: boolean;
+      finalConfirmDone?: boolean;
       items?: unknown[];
       greetingForms?: unknown[];
       shipment?: { fulfillmentType?: string | null } | null;
@@ -207,7 +208,9 @@ export function AdminOrderList({
         status: order.status,
         statusLabel:
           order.orderConfirmedAt || order.status !== "PLACED"
-            ? memberFacingStatusLabel(order.status)
+            ? memberFacingStatusLabel(order.status, {
+                finalConfirmDone: order.finalConfirmDone === true,
+              })
             : "접수",
         orderDate:
           parseOrderDateFromNotes(order.notes) ||
