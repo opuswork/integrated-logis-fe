@@ -56,11 +56,6 @@ type AdminOrderRow = {
 
 type DraftState = {
   worker: "STORE" | "FACTORY" | "";
-  paymentDone: "Y" | "N";
-  paymentAuthor: string;
-  greetingDone: "Y" | "N";
-  slipDone: "Y" | "N";
-  slipAuthor: string;
 };
 
 function regionFromNotes(notes?: string | null): AdminRegion | null {
@@ -259,11 +254,6 @@ export function AdminOrderList({
             if (!next[row.id]) {
               next[row.id] = {
                 worker: row.packagingWorker ?? "",
-                paymentDone: row.paymentDone ? "Y" : "N",
-                paymentAuthor: row.paymentAuthor ?? "",
-                greetingDone: row.greetingDone ? "Y" : "N",
-                slipDone: row.slipDone ? "Y" : "N",
-                slipAuthor: row.slipAuthor ?? "",
               };
             }
           }
@@ -371,11 +361,6 @@ export function AdminOrderList({
         ...prev,
         [orderId]: {
           worker: mapped.packagingWorker ?? "",
-          paymentDone: mapped.paymentDone ? "Y" : "N",
-          paymentAuthor: mapped.paymentAuthor ?? "",
-          greetingDone: mapped.greetingDone ? "Y" : "N",
-          slipDone: mapped.slipDone ? "Y" : "N",
-          slipAuthor: mapped.slipAuthor ?? "",
         },
       }));
     } catch {
@@ -388,14 +373,7 @@ export function AdminOrderList({
   const updateDraft = (id: number, patch: Partial<DraftState>) => {
     setDrafts((prev) => ({
       ...prev,
-      [id]: { ...(prev[id] ?? {
-        worker: "",
-        paymentDone: "N",
-        paymentAuthor: "",
-        greetingDone: "N",
-        slipDone: "N",
-        slipAuthor: "",
-      }), ...patch },
+      [id]: { ...(prev[id] ?? { worker: "" }), ...patch },
     }));
   };
 
@@ -408,7 +386,7 @@ export function AdminOrderList({
           </h3>
           <p className="mt-1 text-[13px] text-muted-foreground">
             {canApproveGreeting && authUser?.role === "factory"
-              ? "인사장완료(Y/N)만 저장할 수 있습니다. 그 외 항목은 관리자가 처리합니다."
+              ? "인사장완료 확인만 처리할 수 있습니다. 그 외 항목은 관리자가 처리합니다."
               : "담당 지역 외 주문의 확인·저장 버튼은 비활성화됩니다. (출력·보기·주문번호는 가능)"}
           </p>
         </div>
@@ -504,11 +482,6 @@ export function AdminOrderList({
                   const locked = !mutable;
                   const draft = drafts[row.id] ?? {
                     worker: row.packagingWorker ?? "",
-                    paymentDone: row.paymentDone ? "Y" : "N",
-                    paymentAuthor: row.paymentAuthor ?? "",
-                    greetingDone: row.greetingDone ? "Y" : "N",
-                    slipDone: row.slipDone ? "Y" : "N",
-                    slipAuthor: row.slipAuthor ?? "",
                   };
                   const parcel = isParcelType(row.type, row.fulfillmentType);
                   const needsGreeting = row.greetingCount > 0;
@@ -632,55 +605,26 @@ export function AdminOrderList({
                         </span>
                       </td>
                       <td className="px-2 py-2 align-top">
-                        {row.paymentDone && locked ? (
-                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
-                            Y
-                          </span>
-                        ) : (
-                          <div className="flex min-w-[120px] flex-col gap-1">
-                            <div className="flex gap-1">
-                              <select
-                                disabled={locked}
-                                value={draft.paymentDone}
-                                onChange={(e) =>
-                                  updateDraft(row.id, {
-                                    paymentDone: e.target.value as "Y" | "N",
-                                  })
-                                }
-                                className="rounded border border-line px-1.5 py-1 disabled:opacity-50"
-                              >
-                                <option value="N">N</option>
-                                <option value="Y">Y</option>
-                              </select>
-                              <input
-                                disabled={locked}
-                                value={draft.paymentAuthor}
-                                onChange={(e) =>
-                                  updateDraft(row.id, {
-                                    paymentAuthor: e.target.value,
-                                  })
-                                }
-                                placeholder="작성자"
-                                className="w-[72px] rounded border border-line px-1.5 py-1 disabled:opacity-50"
-                              />
-                            </div>
-                            <CellBtn
-                              disabled={locked || savingId === `p-${row.id}`}
-                              onClick={() =>
-                                void patchChecklist(
-                                  row.id,
-                                  {
-                                    action: "payment",
-                                    done: draft.paymentDone === "Y",
-                                    author: draft.paymentAuthor,
-                                  },
-                                  `p-${row.id}`,
-                                )
-                              }
-                            >
-                              저장
-                            </CellBtn>
+                        {row.paymentDone ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] font-semibold text-[#15803d]">
+                              결제자: {row.paymentAuthor || "—"}
+                            </span>
+                            <CellBtn disabled>확인</CellBtn>
                           </div>
+                        ) : (
+                          <CellBtn
+                            disabled={locked || savingId === `p-${row.id}`}
+                            onClick={() =>
+                              void patchChecklist(
+                                row.id,
+                                { action: "payment" },
+                                `p-${row.id}`,
+                              )
+                            }
+                          >
+                            확인
+                          </CellBtn>
                         )}
                       </td>
                       <td className="px-2 py-2 align-top">
@@ -688,44 +632,29 @@ export function AdminOrderList({
                           <span className="rounded bg-[#f1f5f9] px-2 py-0.5 text-[11px] font-semibold text-[#64748b]">
                             X
                           </span>
-                        ) : row.greetingDone && !canApproveGreeting ? (
-                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
-                            Y
-                          </span>
-                        ) : (
+                        ) : row.greetingDone ? (
                           <div className="flex flex-col gap-1">
-                            <select
-                              disabled={!canApproveGreeting}
-                              value={draft.greetingDone}
-                              onChange={(e) =>
-                                updateDraft(row.id, {
-                                  greetingDone: e.target.value as "Y" | "N",
-                                })
-                              }
-                              className="rounded border border-line px-1.5 py-1 disabled:opacity-50"
-                            >
-                              <option value="N">N</option>
-                              <option value="Y">Y</option>
-                            </select>
-                            <CellBtn
-                              disabled={
-                                !canApproveGreeting ||
-                                savingId === `g-${row.id}`
-                              }
-                              onClick={() =>
-                                void patchChecklist(
-                                  row.id,
-                                  {
-                                    action: "greeting",
-                                    done: draft.greetingDone === "Y",
-                                  },
-                                  `g-${row.id}`,
-                                )
-                              }
-                            >
-                              저장
-                            </CellBtn>
+                            <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                              Y
+                            </span>
+                            <CellBtn disabled>확인</CellBtn>
                           </div>
+                        ) : (
+                          <CellBtn
+                            disabled={
+                              !canApproveGreeting ||
+                              savingId === `g-${row.id}`
+                            }
+                            onClick={() =>
+                              void patchChecklist(
+                                row.id,
+                                { action: "greeting" },
+                                `g-${row.id}`,
+                              )
+                            }
+                          >
+                            확인
+                          </CellBtn>
                         )}
                       </td>
                       <td className="px-2 py-2 align-top">
@@ -733,55 +662,26 @@ export function AdminOrderList({
                           <span className="rounded bg-[#f1f5f9] px-2 py-0.5 text-[11px] font-semibold text-[#64748b]">
                             X
                           </span>
-                        ) : row.slipDone && locked ? (
-                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
-                            Y
-                          </span>
-                        ) : (
-                          <div className="flex min-w-[120px] flex-col gap-1">
-                            <div className="flex gap-1">
-                              <select
-                                disabled={locked}
-                                value={draft.slipDone}
-                                onChange={(e) =>
-                                  updateDraft(row.id, {
-                                    slipDone: e.target.value as "Y" | "N",
-                                  })
-                                }
-                                className="rounded border border-line px-1.5 py-1 disabled:opacity-50"
-                              >
-                                <option value="N">N</option>
-                                <option value="Y">Y</option>
-                              </select>
-                              <input
-                                disabled={locked}
-                                value={draft.slipAuthor}
-                                onChange={(e) =>
-                                  updateDraft(row.id, {
-                                    slipAuthor: e.target.value,
-                                  })
-                                }
-                                placeholder="작성자"
-                                className="w-[72px] rounded border border-line px-1.5 py-1 disabled:opacity-50"
-                              />
-                            </div>
-                            <CellBtn
-                              disabled={locked || savingId === `s-${row.id}`}
-                              onClick={() =>
-                                void patchChecklist(
-                                  row.id,
-                                  {
-                                    action: "slip",
-                                    done: draft.slipDone === "Y",
-                                    author: draft.slipAuthor,
-                                  },
-                                  `s-${row.id}`,
-                                )
-                              }
-                            >
-                              저장
-                            </CellBtn>
+                        ) : row.slipDone ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] font-semibold text-[#15803d]">
+                              확인: {row.slipAuthor || "—"}
+                            </span>
+                            <CellBtn disabled>확인</CellBtn>
                           </div>
+                        ) : (
+                          <CellBtn
+                            disabled={locked || savingId === `s-${row.id}`}
+                            onClick={() =>
+                              void patchChecklist(
+                                row.id,
+                                { action: "slip" },
+                                `s-${row.id}`,
+                              )
+                            }
+                          >
+                            확인
+                          </CellBtn>
                         )}
                       </td>
                       <td className="px-2 py-2 align-middle">
