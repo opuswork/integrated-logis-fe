@@ -174,6 +174,27 @@ export function mapShipmentOpsOrder(order: {
   };
 }
 
+export function parseApiErrorMessage(
+  data: unknown,
+  fallback = "처리에 실패했습니다.",
+): string {
+  if (!data || typeof data !== "object") return fallback;
+  const body = data as { message?: unknown; error?: unknown };
+  if (typeof body.message === "string" && body.message.trim()) {
+    return body.message.trim();
+  }
+  if (Array.isArray(body.message)) {
+    const joined = body.message
+      .filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+      .join(", ");
+    if (joined) return joined;
+  }
+  if (typeof body.error === "string" && body.error.trim()) {
+    return body.error.trim();
+  }
+  return fallback;
+}
+
 export async function patchShipmentOps(
   orderId: number,
   body: Record<string, unknown>,

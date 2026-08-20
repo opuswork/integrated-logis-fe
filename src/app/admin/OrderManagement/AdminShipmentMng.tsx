@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { getAuthUser } from "@/lib/auth";
 import {
   mapShipmentOpsOrder,
+  parseApiErrorMessage,
   patchShipmentOps,
   todayIsoDate,
   type ShipmentOpsOrder,
@@ -157,10 +158,7 @@ export function AdminShipmentMng() {
     try {
       const { response, data } = await patchShipmentOps(orderId, body, apiFetch);
       if (!response.ok) {
-        setActionError(
-          (data as { message?: string })?.message ||
-            "처리에 실패했습니다.",
-        );
+        setActionError(parseApiErrorMessage(data));
         return;
       }
       setRows((prev) =>
@@ -422,8 +420,8 @@ export function AdminShipmentMng() {
       <p className="mt-3 text-[11px] leading-relaxed text-[#64748B]">
         출고요청일은 오늘 이후 날짜만 선택 가능하며 선택 즉시 저장됩니다.
         출고확인은 출고관리에서 공장 관리자가 출고완료하면 자동 기록됩니다.
-        최종완료는 출고완료 후 매장 관리자가 처리합니다. 택배 건의 최종확인은
-        출고관리에서 공장이 처리합니다.
+        최종완료는 출고완료 후 관리자(매장·공장)가 처리합니다. 택배 건의
+        최종확인은 출고관리에서 공장이 처리합니다.
       </p>
     </div>
   );
