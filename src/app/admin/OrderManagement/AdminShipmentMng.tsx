@@ -134,7 +134,16 @@ export function AdminShipmentMng() {
           return false;
         if (statusFilter === "발송대기" && row.statusLabel !== "발송대기")
           return false;
-        if (statusFilter === "발송완료" && row.statusLabel !== "발송완료")
+        if (
+          statusFilter === "배송중" &&
+          row.statusLabel !== "배송중" &&
+          row.statusLabel !== "발송완료"
+        )
+          return false;
+        if (
+          (statusFilter === "배송완료" || statusFilter === "발송완료") &&
+          row.statusLabel !== "배송완료"
+        )
           return false;
         if (
           statusFilter === "출력완료" &&
@@ -205,8 +214,9 @@ export function AdminShipmentMng() {
               <option value="all">전체 상태</option>
               <option value="접수">접수</option>
               <option value="발송대기">발송대기</option>
+              <option value="배송중">배송중</option>
+              <option value="배송완료">배송완료</option>
               <option value="출력완료">출력완료</option>
-              <option value="발송완료">발송완료</option>
             </select>
             <select
               value={workerFilter}
