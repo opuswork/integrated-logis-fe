@@ -282,7 +282,6 @@ export function AdminReleaseMng() {
                     Boolean(row.requestedShipDate);
                   const confirmEnabled =
                     canOperate &&
-                    row.isParcel &&
                     row.finalCompleteDone &&
                     !row.finalConfirmDone;
                   return (
@@ -358,11 +357,7 @@ export function AdminReleaseMng() {
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
-                        {!row.isParcel ? (
-                          <span className="text-[11px] text-[#A0AEC0]">
-                            — (상차)
-                          </span>
-                        ) : row.finalConfirmDone ? (
+                        {row.finalConfirmDone ? (
                           <CellBtn disabled>확인됨</CellBtn>
                         ) : (
                           <CellBtn
@@ -401,8 +396,8 @@ export function AdminReleaseMng() {
           </p>
           <p>
             출고완료는 포장완료·출고요청일 입력 후 공장(또는 최고관리자)이
-            처리합니다. 출고요청일이 없으면 완료 버튼이 비활성입니다. 택배 건
-            최종확인도 공장 계정입니다.
+            처리합니다. 출고요청일이 없으면 완료 버튼이 비활성입니다. 최종확인은
+            배송관리 최종완료 후 공장 계정이 처리합니다.
           </p>
         </div>
       </div>
