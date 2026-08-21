@@ -169,7 +169,7 @@ export function AdminDashboardMng() {
         (s) =>
           s.stock !== null &&
           s.stock !== undefined &&
-          s.stock < LOW_STOCK_THRESHOLD,
+          s.stock <= LOW_STOCK_THRESHOLD,
       )
       .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0))
       .slice(0, 5)

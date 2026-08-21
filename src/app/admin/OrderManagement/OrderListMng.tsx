@@ -24,6 +24,7 @@ import { AdminPostOfficeUploadMng } from "@/app/admin/OrderManagement/AdminPostO
 import { GreetingFormMng } from "@/app/admin/OrderManagement/GreetingFormMng";
 import { MembersListMng } from "@/app/admin/OrderManagement/MembersListMng";
 import { StockInventoryMng } from "@/app/admin/OrderManagement/StockInventoryMng";
+import { StockStatusMng } from "@/app/admin/OrderManagement/StockStatusMng";
 import { OrderDataMng } from "@/app/admin/OrderManagement/OrderDataMng";
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { AdminShipmentMng } from "@/app/admin/OrderManagement/AdminShipmentMng";
@@ -50,6 +51,8 @@ type AdminView =
   | "출고관리"
   | "포장관리"
   | "재고관리"
+  | "전체 재고 현황"
+  | "재고/상품"
   | "회원관리"
   | "프로필";
 
@@ -122,7 +125,15 @@ const FULL_NAV: NavPrimaryItem[] = [
     id: "inventory",
     label: "재고관리",
     icon: Package,
-    view: "재고관리",
+    view: "전체 재고 현황",
+    children: [
+      {
+        id: "inv-status",
+        label: "전체 재고 현황",
+        view: "전체 재고 현황",
+      },
+      { id: "inv-catalog", label: "재고/상품", view: "재고/상품" },
+    ],
   },
   {
     id: "members",
@@ -430,7 +441,13 @@ export function OrderListMng() {
       return <AdminPostOfficeUploadMng />;
     }
 
-    if (activeMenu === "재고관리") {
+    if (activeMenu === "전체 재고 현황" || activeMenu === "재고관리") {
+      return (
+        <StockStatusMng onNavigateToCatalog={() => goTo("재고/상품")} />
+      );
+    }
+
+    if (activeMenu === "재고/상품") {
       return <StockInventoryMng />;
     }
 
