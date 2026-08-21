@@ -30,6 +30,7 @@ import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPr
 import { AdminShipmentMng } from "@/app/admin/OrderManagement/AdminShipmentMng";
 import { AdminReleaseMng } from "@/app/admin/OrderManagement/AdminReleaseMng";
 import { AdminPackagingMng } from "@/app/admin/OrderManagement/AdminPackagingMng";
+import { AdminMissingCheckMng } from "@/app/admin/OrderManagement/AdminMissingCheckMng";
 import { OrderListInput } from "@/app/OrderManagement/OrderListInput";
 import { LogoutButton } from "@/components/auth-guard";
 import { AdminTopBar } from "@/components/admin-top-bar";
@@ -111,7 +112,7 @@ const FULL_NAV: NavPrimaryItem[] = [
     icon: Factory,
     view: "출고관리",
     children: [
-      { id: "miss", label: "누락체크", view: "누락체크", placeholder: true },
+      { id: "miss", label: "누락체크", view: "누락체크" },
       {
         id: "release",
         label: "출고관리",
@@ -468,7 +469,7 @@ export function OrderListMng() {
     }
 
     if (activeMenu === "누락체크") {
-      return <ComingSoon title={activeMenu} />;
+      return <AdminMissingCheckMng />;
     }
 
     return (
