@@ -488,7 +488,7 @@ export function OrderDataMng() {
     <div className="space-y-3">
       <div>
         <h3 className="text-lg font-semibold text-ink min-[1040px]:text-[22px]">
-          데이터 관리
+          데이터 내보내기
         </h3>
         <p className="mt-1 text-[13px] text-muted-foreground">
           주문마스터를 선택하면 해당 주문의 상품상세가 표시됩니다. 엑셀 내보내기는
