@@ -352,6 +352,10 @@ export function AdminPostOfficeUploadMng() {
   };
 
   const validateBeforeConvert = () => {
+    if (!ordererName.trim()) {
+      setError("주문자 성명을 입력해 주세요.");
+      return false;
+    }
     if (!churchQuery.trim()) {
       setError("중앙을 검색하여 선택해 주세요.");
       return false;
@@ -365,7 +369,7 @@ export function AdminPostOfficeUploadMng() {
       const qty = Number(opt.quantity);
       const unit = Number(opt.boxUnit);
       if (!Number.isFinite(qty) || qty < 1) {
-        setError("수량은 1 이상이어야 합니다.");
+        setError("수량은 1 이상이어야 합니다. (해당 상품의 엑셀 행 수)");
         return false;
       }
       if (!Number.isFinite(unit) || unit <= 0) {
@@ -494,13 +498,13 @@ export function AdminPostOfficeUploadMng() {
         <div className="mb-4 grid gap-3 min-[720px]:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-ink">
-              주문자 성명 (선택)
+              주문자 성명 *
             </label>
             <input
               type="text"
               value={ordererName}
               onChange={(e) => setOrdererName(e.target.value)}
-              placeholder="비우면 엑셀에서 직접 입력"
+              placeholder="예: 김순옥"
               className={fieldClassName()}
             />
           </div>
@@ -577,7 +581,9 @@ export function AdminPostOfficeUploadMng() {
               </div>
 
               <div className="grid gap-3 min-[640px]:grid-cols-[100px_1fr] min-[640px]:items-center">
-                <label className="text-sm font-medium text-ink">2. 수량</label>
+                <label className="text-sm font-medium text-ink">
+                  2. 수량 (행 수)
+                </label>
                 <input
                   type="number"
                   min={1}
