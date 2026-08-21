@@ -106,10 +106,10 @@ export function mapShipmentOpsOrder(order: {
         ? "PICKUP"
         : null;
   const typeFromNotes = parseOrderTypeFromNotes(order.notes);
-  // notes의 배달을 우선: fulfillmentType이 PARCEL로 남아 있어도 상차로 표시
-  const isParcel = isDeliveryOrderType(typeFromNotes)
-    ? false
-    : fulfillmentType !== "PICKUP";
+  // 배달 notes 또는 PICKUP → 상차. (PARCEL만으로 택배로 단정하지 않음)
+  const isParcel = !(
+    isDeliveryOrderType(typeFromNotes) || fulfillmentType === "PICKUP"
+  );
   const items = order.items ?? [];
   const quantity = items.reduce((sum, item) => sum + (item.quantity ?? 0), 0);
   const productSummary =

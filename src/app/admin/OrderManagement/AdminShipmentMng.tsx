@@ -171,9 +171,28 @@ export function AdminShipmentMng() {
         return;
       }
       setRows((prev) =>
-        prev.map((r) =>
-          r.id === orderId ? mapShipmentOpsOrder(data as never) : r,
-        ),
+        prev.map((r) => {
+          if (r.id !== orderId) return r;
+          const payload = data as Record<string, unknown>;
+          // PATCH 응답에 notes가 빠지면 isParcel/loadType이 택배로 뒤집혀
+          // 상차 최종확인 버튼이 뱃지/대시로 바뀌는 문제 방지
+          return mapShipmentOpsOrder({
+            ...payload,
+            notes:
+              (typeof payload.notes === "string" ? payload.notes : null) ??
+              r.notes,
+            shipment:
+              (payload.shipment as { fulfillmentType?: string | null } | null) ??
+              (r.fulfillmentType
+                ? { fulfillmentType: r.fulfillmentType }
+                : null),
+            finalCompleteDone:
+              payload.finalCompleteDone ?? r.finalCompleteDone,
+            finalConfirmDone: payload.finalConfirmDone ?? r.finalConfirmDone,
+            status: payload.status ?? r.status,
+            releaseDone: payload.releaseDone ?? r.releaseDone,
+          } as never);
+        }),
       );
     } catch {
       setActionError("처리에 실패했습니다.");
@@ -272,6 +291,13 @@ export function AdminShipmentMng() {
                   const slipYes = row.isParcel ? row.slipDone : null;
                   const finalCompleteEnabled =
                     canOperate && row.releaseDone && !row.finalCompleteDone;
+                  // 상차/박스만 최종확인 버튼 — isParcel이 어긋나도 loadType 기준
+                  const isSangchaRow = row.loadType === "상차";
+                  const finalConfirmEnabled =
+                    canOperate &&
+                    isSangchaRow &&
+                    row.finalCompleteDone &&
+                    !row.finalConfirmDone;
                   return (
                     <tr
                       key={row.id}
@@ -392,7 +418,30 @@ export function AdminShipmentMng() {
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
-                        {row.isParcel ? (
+                        {isSangchaRow ? (
+                          row.finalConfirmDone ? (
+                            <CellBtn disabled>확인됨</CellBtn>
+                          ) : (
+                            <CellBtn
+                              variant={
+                                finalConfirmEnabled ? "confirm" : "ghost"
+                              }
+                              disabled={
+                                !finalConfirmEnabled ||
+                                savingId === `cf-${row.id}`
+                              }
+                              onClick={() =>
+                                void runOp(
+                                  row.id,
+                                  { action: "finalConfirm" },
+                                  `cf-${row.id}`,
+                                )
+                              }
+                            >
+                              최종확인
+                            </CellBtn>
+                          )
+                        ) : (
                           <span
                             className={cn(
                               "rounded px-1.5 py-0.5 text-[11px] font-bold",
@@ -403,33 +452,6 @@ export function AdminShipmentMng() {
                           >
                             {row.finalConfirmDone ? "완료" : "미완료"}
                           </span>
-                        ) : row.finalConfirmDone ? (
-                          <CellBtn disabled>확인됨</CellBtn>
-                        ) : (
-                          <CellBtn
-                            variant={
-                              canOperate &&
-                              row.finalCompleteDone &&
-                              !row.finalConfirmDone
-                                ? "confirm"
-                                : "ghost"
-                            }
-                            disabled={
-                              !canOperate ||
-                              !row.finalCompleteDone ||
-                              row.finalConfirmDone ||
-                              savingId === `cf-${row.id}`
-                            }
-                            onClick={() =>
-                              void runOp(
-                                row.id,
-                                { action: "finalConfirm" },
-                                `cf-${row.id}`,
-                              )
-                            }
-                          >
-                            최종확인
-                          </CellBtn>
                         )}
                       </td>
                     </tr>
