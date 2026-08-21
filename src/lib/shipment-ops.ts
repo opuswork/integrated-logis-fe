@@ -5,9 +5,12 @@ import {
 } from "@/lib/order-delivery";
 import {
   parseBranchStoreFromNotes,
+  parseChurchFromNotes,
+  parseDeliveryCompanyFromNotes,
   parseOrderDateFromNotes,
   parseOrdererFromNotes,
   parseOrderTypeFromNotes,
+  parseParcelCompanyFromNotes,
 } from "@/lib/order-notes";
 import type { AdminRegion } from "@/lib/auth";
 
@@ -92,8 +95,14 @@ export function mapShipmentOpsOrder(order: {
   finalCompleteDone?: boolean;
   finalConfirmDone?: boolean;
   items?: { productName?: string; quantity?: number }[];
-  greetingForms?: { specialNote?: string | null }[];
-  shipment?: { fulfillmentType?: string | null } | null;
+  greetingForms?: {
+    specialNote?: string | null;
+    churchName?: string | null;
+  }[];
+  shipment?: {
+    fulfillmentType?: string | null;
+    carrier?: string | null;
+  } | null;
   user?: {
     fullname?: string | null;
     church?: { name?: string | null } | null;
@@ -125,6 +134,19 @@ export function mapShipmentOpsOrder(order: {
       .join(", ") || "—";
   const storeRegion = order.storeRegion ?? null;
   const storeFromNotes = parseBranchStoreFromNotes(order.notes);
+  const churchFromNotes = parseChurchFromNotes(order.notes);
+  const churchFromGreeting =
+    order.greetingForms
+      ?.map((g) => g.churchName?.trim())
+      .find((name) => Boolean(name)) || "";
+  // 중앙 = 주문서 「중앙」(notes) → 인사장 churchName. user.church 폴백 금지.
+  const churchName = churchFromNotes || churchFromGreeting || "—";
+  // 거래처 = 주문서 「업체명」(배달업체명/택배업체명/carrier). 중앙과 분리.
+  const clientLabel =
+    parseDeliveryCompanyFromNotes(order.notes) ||
+    parseParcelCompanyFromNotes(order.notes) ||
+    order.shipment?.carrier?.trim() ||
+    "—";
   const releaseDone = order.releaseDone === true;
   const finalCompleteDone = order.finalCompleteDone === true;
 
@@ -142,9 +164,9 @@ export function mapShipmentOpsOrder(order: {
     storeLabel: regionLabel(storeRegion) !== "—"
       ? regionLabel(storeRegion)
       : storeFromNotes || "—",
-    churchName: order.user?.church?.name?.trim() || "—",
+    churchName,
     name: parseOrdererFromNotes(order.notes) || order.user?.fullname || "—",
-    clientLabel: order.user?.church?.name?.trim() || "—",
+    clientLabel,
     productSummary,
     quantity,
     packagingWorker: order.packagingWorker ?? null,
