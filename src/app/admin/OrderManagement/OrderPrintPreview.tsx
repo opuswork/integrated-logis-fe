@@ -26,8 +26,6 @@ import { cn } from "@/lib/utils";
 import {
   type DeliveryAction,
   FACTORY_CHANGE_ALERT_MESSAGE,
-  MEMBER_STATUS_STEPS,
-  memberDeliveryStepIndex,
 } from "@/lib/order-delivery";
 
 export type OrderShipType = "택배" | "배달";
@@ -87,31 +85,12 @@ function DeliveryWorkflowPanel({
   order,
   busyAction,
   onAction,
-  showAdminControls,
-  showFactoryControls,
 }: {
   order: ApiOrder;
   busyAction: DeliveryAction | null;
   onAction: (action: DeliveryAction) => void;
-  showAdminControls: boolean;
-  showFactoryControls: boolean;
 }) {
   const status = order.status;
-  const deliveredAt = order.shipment?.deliveredAt;
-  const currentIndex = memberDeliveryStepIndex(status);
-
-  const approveReady = status === "PLACED";
-  const approveDone = status !== "PLACED" && status !== "CANCELLED";
-
-  const cancelApproveReady =
-    status === "WAITING_FOR_SHIPMENT" ||
-    status === "PREPARED" ||
-    status === "LOAD_NOTIFIED";
-
-  /** 배송중 이후에만 인수증 수령 가능 */
-  const receiptReady = status === "SHIPPING";
-  const receiptDone =
-    Boolean(deliveredAt) || status === "PRINTING_COMPLETE";
 
   /** 관리자 승인 후 상차완료 활성화 (발송대기 전) */
   const loadCompleteReady = status === "WAITING_FOR_SHIPMENT";
@@ -130,186 +109,67 @@ function DeliveryWorkflowPanel({
     status === "RECEIVED" ||
     status === "PRINTING_COMPLETE";
 
-  const printCompleteDone = status === "PRINTING_COMPLETE";
-
   return (
     <div className="space-y-3 rounded-lg border border-line bg-[#f8fafc] p-3 print:hidden">
       <div>
-        <p className="mb-2 text-sm font-bold text-ink">주문 및 배송 알림</p>
+        <p className="mb-2 text-sm font-bold text-ink">공장 출하관리</p>
         <div className="flex flex-wrap gap-2">
-          {MEMBER_STATUS_STEPS.map((step, index) => {
-            const isCurrent = index === currentIndex;
-            const isPast = index < currentIndex;
-            return (
-              <span
-                key={step.key}
-                className={cn(
-                  "rounded-md border px-3 py-1.5 text-sm font-semibold",
-                  isCurrent
-                    ? step.activeClass
-                    : isPast
-                      ? "border-[#94a3b8] bg-[#e2e8f0] text-[#334155]"
-                      : "border-[#e2e8f0] bg-white text-[#94a3b8]",
-                )}
-              >
-                {step.label}
-              </span>
-            );
-          })}
+          <Button
+            type="button"
+            size="sm"
+            disabled={!loadCompleteReady || busyAction !== null}
+            className={cn(
+              "text-white",
+              loadCompleteDone
+                ? "border-[#34d399] bg-[#34d399] opacity-80"
+                : loadCompleteReady
+                  ? "border-[#059669] bg-[#059669] ring-2 ring-[#6ee7b7] hover:bg-[#047857]"
+                  : "border-[#a7f3d0] bg-[#ecfdf5] text-[#94a3b8]",
+            )}
+            onClick={() => onAction("FACTORY_PREPARE")}
+          >
+            {busyAction === "FACTORY_PREPARE" ? "처리 중..." : "상차완료!"}
+          </Button>
+          {shipStartReady || shipStartDone ? (
+            <Button
+              type="button"
+              size="sm"
+              disabled={!shipStartReady || busyAction !== null}
+              className={cn(
+                "text-white",
+                shipStartDone
+                  ? "border-[#a78bfa] bg-[#a78bfa] opacity-80"
+                  : shipStartReady
+                    ? "border-[#7c3aed] bg-[#7c3aed] ring-2 ring-[#c4b5fd] hover:bg-[#6d28d9]"
+                    : "border-[#ddd6fe] bg-[#f5f3ff] text-[#94a3b8]",
+              )}
+              onClick={() => onAction("FACTORY_SHIP")}
+            >
+              {busyAction === "FACTORY_SHIP" ? "처리 중..." : "배송시작"}
+            </Button>
+          ) : null}
         </div>
+        {status === "PLACED" ? (
+          <p className="mt-2 text-xs text-[#64748b]">
+            관리자가 관리자 승인을 하면 상차완료! 버튼이 활성화됩니다.
+          </p>
+        ) : null}
+        {loadCompleteReady ? (
+          <p className="mt-2 text-xs font-medium text-[#047857]">
+            상차 준비가 끝나면 상차완료!를 눌러 주세요. (발송대기로 전환)
+          </p>
+        ) : null}
+        {shipStartReady ? (
+          <p className="mt-2 text-xs font-medium text-[#6d28d9]">
+            발송대기 상태입니다. 출발 시 배송시작을 눌러 주세요.
+          </p>
+        ) : null}
+        {shipStartDone && status === "SHIPPING" ? (
+          <p className="mt-2 text-xs text-[#64748b]">
+            배송중. 관리자의 인수증 수령을 기다립니다.
+          </p>
+        ) : null}
       </div>
-
-      {showAdminControls ? (
-        <div>
-          <p className="mb-2 text-sm font-bold text-ink">관리자 상태관리</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={!approveReady || busyAction !== null}
-              className={cn(
-                "text-white",
-                approveDone
-                  ? "border-[#fb923c] bg-[#fb923c] opacity-80"
-                  : approveReady
-                    ? "border-[#ea580c] bg-[#ea580c] hover:bg-[#c2410c]"
-                    : "border-[#fed7aa] bg-[#ffedd5] text-[#94a3b8]",
-              )}
-              onClick={() => onAction("ADMIN_APPROVE")}
-            >
-              {busyAction === "ADMIN_APPROVE" ? "처리 중..." : "관리자 승인"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!cancelApproveReady || busyAction !== null}
-              className={cn(
-                "text-white",
-                cancelApproveReady
-                  ? "border-[#dc2626] bg-[#dc2626] ring-2 ring-[#fca5a5] hover:bg-[#b91c1c]"
-                  : "border-[#fecaca] bg-[#fef2f2] text-[#94a3b8]",
-              )}
-              onClick={() => onAction("ADMIN_CANCEL_APPROVE")}
-            >
-              {busyAction === "ADMIN_CANCEL_APPROVE"
-                ? "처리 중..."
-                : "관리자 승인 취소"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!receiptReady || busyAction !== null}
-              className={cn(
-                "text-white",
-                receiptDone
-                  ? "border-[#60a5fa] bg-[#60a5fa] opacity-80"
-                  : receiptReady
-                    ? "border-[#2563eb] bg-[#2563eb] ring-2 ring-[#93c5fd] hover:bg-[#1d4ed8]"
-                    : "border-[#bfdbfe] bg-[#eff6ff] text-[#94a3b8]",
-              )}
-              onClick={() => onAction("LOADING_NOTICE")}
-            >
-              {busyAction === "LOADING_NOTICE" ? "처리 중..." : "인수증 수령"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled
-              className={cn(
-                "text-white",
-                printCompleteDone
-                  ? "border-[#f472b6] bg-[#f472b6]"
-                  : "border-[#fbcfe8] bg-[#fce7f3] text-[#94a3b8]",
-              )}
-            >
-              출력완료
-            </Button>
-          </div>
-          {status === "WAITING_FOR_SHIPMENT" ? (
-            <p className="mt-2 text-xs text-[#64748b]">
-              관리자 승인 완료. 공장에서 상차완료!를 누르면 발송대기로
-              전환됩니다.
-            </p>
-          ) : null}
-          {status === "PREPARED" || status === "LOAD_NOTIFIED" ? (
-            <p className="mt-2 text-xs text-[#64748b]">
-              공장 상차완료(발송대기). 배송시작 전이면 승인 취소가 가능합니다.
-            </p>
-          ) : null}
-          {receiptReady ? (
-            <p className="mt-2 text-xs font-medium text-[#1d4ed8]">
-              배송중. 인수증 수령을 누르면 배송완료로 전환됩니다.
-            </p>
-          ) : null}
-          {receiptDone && !printCompleteDone ? (
-            <p className="mt-2 text-xs text-[#64748b]">
-              배송완료 확인됨. 인쇄를 누르면 출력완료로 전환됩니다.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {showFactoryControls ? (
-        <div>
-          <p className="mb-2 text-sm font-bold text-ink">공장 출하관리</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={!loadCompleteReady || busyAction !== null}
-              className={cn(
-                "text-white",
-                loadCompleteDone
-                  ? "border-[#34d399] bg-[#34d399] opacity-80"
-                  : loadCompleteReady
-                    ? "border-[#059669] bg-[#059669] ring-2 ring-[#6ee7b7] hover:bg-[#047857]"
-                    : "border-[#a7f3d0] bg-[#ecfdf5] text-[#94a3b8]",
-              )}
-              onClick={() => onAction("FACTORY_PREPARE")}
-            >
-              {busyAction === "FACTORY_PREPARE" ? "처리 중..." : "상차완료!"}
-            </Button>
-            {shipStartReady || shipStartDone ? (
-              <Button
-                type="button"
-                size="sm"
-                disabled={!shipStartReady || busyAction !== null}
-                className={cn(
-                  "text-white",
-                  shipStartDone
-                    ? "border-[#a78bfa] bg-[#a78bfa] opacity-80"
-                    : shipStartReady
-                      ? "border-[#7c3aed] bg-[#7c3aed] ring-2 ring-[#c4b5fd] hover:bg-[#6d28d9]"
-                      : "border-[#ddd6fe] bg-[#f5f3ff] text-[#94a3b8]",
-                )}
-                onClick={() => onAction("FACTORY_SHIP")}
-              >
-                {busyAction === "FACTORY_SHIP" ? "처리 중..." : "배송시작"}
-              </Button>
-            ) : null}
-          </div>
-          {status === "PLACED" ? (
-            <p className="mt-2 text-xs text-[#64748b]">
-              관리자가 관리자 승인을 하면 상차완료! 버튼이 활성화됩니다.
-            </p>
-          ) : null}
-          {loadCompleteReady ? (
-            <p className="mt-2 text-xs font-medium text-[#047857]">
-              상차 준비가 끝나면 상차완료!를 눌러 주세요. (발송대기로 전환)
-            </p>
-          ) : null}
-          {shipStartReady ? (
-            <p className="mt-2 text-xs font-medium text-[#6d28d9]">
-              발송대기 상태입니다. 출발 시 배송시작을 눌러 주세요.
-            </p>
-          ) : null}
-          {shipStartDone && status === "SHIPPING" ? (
-            <p className="mt-2 text-xs text-[#64748b]">
-              배송중. 관리자의 인수증 수령을 기다립니다.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -726,7 +586,6 @@ export function OrderPrintPreview({
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [busyAction, setBusyAction] = useState<DeliveryAction | null>(null);
   const [actionError, setActionError] = useState("");
-  const [approveConfirmOpen, setApproveConfirmOpen] = useState(false);
   const [clearingFactoryAlert, setClearingFactoryAlert] = useState(false);
   const pdfSheetRef = useRef<HTMLDivElement>(null);
 
@@ -892,8 +751,8 @@ export function OrderPrintPreview({
     ? ordersByNumber[selectedPage.orderNumber]
     : undefined;
 
-  // 배송상태 / 관리자배송관리 패널: 택배·배달 모두 표시 (엑셀 업로드 택배 포함)
-  const showDeliveryWorkflow = Boolean(selectedOrder);
+  // 공장 출하관리 패널만 표시 (관리자 주문/배송 알림·상태관리 패널 제거)
+  const showDeliveryWorkflow = Boolean(selectedOrder) && showFactoryControls;
 
   const pagesForSelectedOrder = useMemo(() => {
     if (!selectedPage) {
@@ -993,8 +852,7 @@ export function OrderPrintPreview({
     if (
       !showAdminDeliveryControls ||
       !selectedOrder ||
-      selectedOrder.status === "PRINTING_COMPLETE" ||
-      !showDeliveryWorkflow
+      selectedOrder.status === "PRINTING_COMPLETE"
     ) {
       return;
     }
@@ -1141,13 +999,7 @@ export function OrderPrintPreview({
           <DeliveryWorkflowPanel
             order={selectedOrder}
             busyAction={busyAction}
-            showAdminControls={showAdminDeliveryControls}
-            showFactoryControls={showFactoryControls}
             onAction={(action) => {
-              if (action === "ADMIN_APPROVE") {
-                setApproveConfirmOpen(true);
-                return;
-              }
               void runDeliveryAction(action);
             }}
           />
@@ -1155,47 +1007,6 @@ export function OrderPrintPreview({
             <p className="text-sm text-red print:hidden">{actionError}</p>
           ) : null}
         </>
-      ) : null}
-
-      {approveConfirmOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 print:hidden">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-approve-confirm-title"
-            className="w-full max-w-md rounded-xl border border-line bg-panel p-5 shadow-[0_14px_34px_rgba(18,38,63,0.08)]"
-          >
-            <h2
-              id="admin-approve-confirm-title"
-              className="text-lg font-semibold text-ink"
-            >
-              관리자 승인
-            </h2>
-            <p className="mt-3 text-base leading-relaxed text-ink">
-              정말 승인하시겠습니까? 승인하면 공장에서 발송준비를 시작합니다.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setApproveConfirmOpen(false)}
-              >
-                취소
-              </Button>
-              <Button
-                type="button"
-                className="border-[#ea580c] bg-[#ea580c] text-white hover:bg-[#c2410c]"
-                disabled={busyAction !== null}
-                onClick={() => {
-                  setApproveConfirmOpen(false);
-                  void runDeliveryAction("ADMIN_APPROVE");
-                }}
-              >
-                승인
-              </Button>
-            </div>
-          </div>
-        </div>
       ) : null}
 
       {factoryAlertMessage ? (
