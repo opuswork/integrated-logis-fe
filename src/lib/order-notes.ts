@@ -74,7 +74,7 @@ export function parseSenderPartsFromNotes(notes: string | null | undefined): {
     return { name: "", phone: "", address: "" };
   }
   const match =
-    /보내는사람:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:지부매장|인사장종류|인사장번호|\[)|$)/.exec(
+    /보내는사람:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:받는분주소|주문작업지역|지부매장|인사장종류|인사장번호|\[)|$)/.exec(
       notes,
     );
   if (!match) {
