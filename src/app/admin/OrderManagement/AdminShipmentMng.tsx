@@ -392,21 +392,33 @@ export function AdminShipmentMng() {
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
-                        {row.isParcel ? (
-                          <span
-                            className={cn(
-                              "rounded px-1.5 py-0.5 text-[11px] font-bold",
-                              row.finalConfirmDone
-                                ? "bg-[#E9F8EF] text-[#2F855A]"
-                                : "bg-[#FDEEEE] text-[#9B2C2C]",
-                            )}
-                          >
-                            {row.finalConfirmDone ? "완료" : "미완료"}
-                          </span>
+                        {row.finalConfirmDone ? (
+                          <CellBtn disabled>확인됨</CellBtn>
                         ) : (
-                          <span className="text-[11px] text-[#A0AEC0]">
-                            {row.finalConfirmDone ? "확인됨" : "—"}
-                          </span>
+                          <CellBtn
+                            variant={
+                              canOperate &&
+                              row.finalCompleteDone &&
+                              !row.finalConfirmDone
+                                ? "confirm"
+                                : "ghost"
+                            }
+                            disabled={
+                              !canOperate ||
+                              !row.finalCompleteDone ||
+                              row.finalConfirmDone ||
+                              savingId === `cf-${row.id}`
+                            }
+                            onClick={() =>
+                              void runOp(
+                                row.id,
+                                { action: "finalConfirm" },
+                                `cf-${row.id}`,
+                              )
+                            }
+                          >
+                            최종확인
+                          </CellBtn>
                         )}
                       </td>
                     </tr>
@@ -430,9 +442,9 @@ export function AdminShipmentMng() {
       <p className="mt-3 text-[11px] leading-relaxed text-[#64748B]">
         출고요청일은 오늘 이후 날짜만 선택 가능하며 선택 즉시 저장됩니다.
         출고확인은 출고관리에서 공장 관리자가 출고완료하면 자동 기록됩니다.
-        최종완료·운영 액션은 공장관리자(및 최고관리자)가 처리합니다. 지역
-        매장관리자·Factory-G는 목록만 조회합니다. 택배 건의 최종확인은
-        출고관리에서 공장이 처리합니다.
+        최종완료·최종확인·운영 액션은 공장관리자(및 최고관리자)가 처리합니다. 지역
+        매장관리자·Factory-G는 목록만 조회합니다. 최종완료 후 배송관리에서
+        최종확인하면 배송완료로 전환됩니다.
       </p>
     </div>
   );

@@ -2707,6 +2707,20 @@ function ProductOrderPanel({
       onUnsavedGreetingResolved?.();
     }
 
+    const productsWithGreeting = productItems.filter((item) =>
+      Boolean(savedGreetingsByProduct[item.product]),
+    );
+    if (
+      productsWithGreeting.length > 0 &&
+      productsWithGreeting.length < productItems.length
+    ) {
+      setAlertDialog({
+        open: true,
+        message: "인사장이 작성되지 않은 상품이 존재합니다.",
+      });
+      return;
+    }
+
     // 미저장 인사장 경고와 별개로, 이미 저장된 인사장은 주문에 반드시 연결
     const shouldAttachGreetings = Object.values(savedGreetingsByProduct).some(
       (draft) => Boolean(draft?.id || draft?.greetingContent?.trim()),
