@@ -392,7 +392,18 @@ export function AdminShipmentMng() {
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
-                        {row.finalConfirmDone ? (
+                        {row.isParcel ? (
+                          <span
+                            className={cn(
+                              "rounded px-1.5 py-0.5 text-[11px] font-bold",
+                              row.finalConfirmDone
+                                ? "bg-[#E9F8EF] text-[#2F855A]"
+                                : "bg-[#FDEEEE] text-[#9B2C2C]",
+                            )}
+                          >
+                            {row.finalConfirmDone ? "완료" : "미완료"}
+                          </span>
+                        ) : row.finalConfirmDone ? (
                           <CellBtn disabled>확인됨</CellBtn>
                         ) : (
                           <CellBtn
