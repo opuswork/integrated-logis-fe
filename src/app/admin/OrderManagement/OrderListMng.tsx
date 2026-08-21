@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ClipboardList,
   Factory,
+  FileDown,
   LayoutDashboard,
   Package,
   Truck,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { AdminDashboardMng } from "@/app/admin/OrderManagement/AdminDashboardMng";
 import { AdminOrderList } from "@/app/admin/OrderManagement/AdminOrderList";
 import {
   AdminProfilePanel,
@@ -36,6 +38,7 @@ import { cn } from "@/lib/utils";
 /** 실제 콘텐츠가 연결된 화면 키 */
 type AdminView =
   | "데이터 관리"
+  | "데이터 내보내기"
   | "주문목록"
   | "주문작성"
   | "출력관리"
@@ -56,7 +59,8 @@ type NavPrimaryId =
   | "ship"
   | "factory"
   | "inventory"
-  | "members";
+  | "members"
+  | "export";
 
 type NavSubItem = {
   id: string;
@@ -81,9 +85,6 @@ const FULL_NAV: NavPrimaryItem[] = [
     label: "데이터 관리",
     icon: LayoutDashboard,
     view: "데이터 관리",
-    children: [
-      { id: "excel", label: "엑셀", view: "엑셀" },
-    ],
   },
   {
     id: "order",
@@ -128,6 +129,13 @@ const FULL_NAV: NavPrimaryItem[] = [
     label: "회원관리",
     icon: Users,
     view: "회원관리",
+  },
+  {
+    id: "export",
+    label: "데이터 내보내기",
+    icon: FileDown,
+    view: "데이터 내보내기",
+    children: [{ id: "excel", label: "엑셀", view: "엑셀" }],
   },
 ];
 
@@ -403,6 +411,10 @@ export function OrderListMng() {
     }
 
     if (activeMenu === "데이터 관리") {
+      return <AdminDashboardMng />;
+    }
+
+    if (activeMenu === "데이터 내보내기") {
       return <OrderDataMng />;
     }
 
