@@ -1711,6 +1711,7 @@ function AddressField({
 }) {
   const [isSearching, setIsSearching] = useState(false);
   const detailId = `${id}-detail`;
+  const omLabelClass = "mb-[5px] block text-[12px] font-bold text-[#64748B]";
 
   const handleSearch = async () => {
     setIsSearching(true);
@@ -1729,7 +1730,7 @@ function AddressField({
   return (
     <div className="space-y-2">
       <div>
-        <label htmlFor={id} className="mb-1.5 block text-2xl font-bold text-ink">
+        <label htmlFor={id} className={omLabelClass}>
           {required ? <RequiredLabel>{label}</RequiredLabel> : label}
         </label>
         <div className="flex gap-2">
@@ -1740,7 +1741,7 @@ function AddressField({
             readOnly
             value={value}
             placeholder="주소 검색 버튼으로 입력해 주세요"
-            className="min-h-9 w-full cursor-default rounded-[7px] border border-[#cbd5e1] bg-[#f8fafc] px-2.5 py-2 text-lg text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            className="mb-0 min-h-9 w-full cursor-default rounded-lg border border-[#E2E8F0] bg-[#f8fafc] px-[11px] py-[9px] text-[13px] text-[#1A202C] placeholder:text-[#A0AEC0] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
           />
           <Button
             type="button"
@@ -1754,14 +1755,20 @@ function AddressField({
           </Button>
         </div>
       </div>
-      <Input
-        id={detailId}
-        label="상세주소"
-        value={detailValue}
-        onChange={(event) => onDetailChange(event.target.value)}
-        placeholder="동·호수 / 호실 (예: 101동 1203호)"
-        disabled={!value.trim()}
-      />
+      <div>
+        <label htmlFor={detailId} className={omLabelClass}>
+          상세주소
+        </label>
+        <input
+          id={detailId}
+          type="text"
+          value={detailValue}
+          onChange={(event) => onDetailChange(event.target.value)}
+          placeholder="동·호수 / 호실 (예: 101동 1203호)"
+          disabled={!value.trim()}
+          className="mb-3 w-full rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C] placeholder:text-[#A0AEC0] disabled:bg-[#EDF2F7] disabled:text-[#A0AEC0]"
+        />
+      </div>
     </div>
   );
 }
