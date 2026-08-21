@@ -27,7 +27,7 @@ export type StockCatalogItem = {
 export type ProductPickResult = {
   productId: number;
   productName: string;
-  /** Display e.g. 정성4호[신앙촌1호] */
+  /** Display e.g. 명진1호 (박스명 생략) */
   productLabel: string;
   boxName: string | null;
   postWeight: number | null;
@@ -39,7 +39,7 @@ function productImageSrc(imageUrl: string | null | undefined) {
   return trimmed ? trimmed : DEFAULT_PRODUCT_IMAGE;
 }
 
-/** Short label for post-office excel: strip * and parenthetical specs. */
+/** Short label for post-office option UI (no box name). */
 export function shortProductName(productName: string): string {
   return productName
     .replace(/^\*\s*/, "")
@@ -48,16 +48,12 @@ export function shortProductName(productName: string): string {
     .trim();
 }
 
+/** Option display label: short name only (omit [박스명]). */
 export function formatProductLabel(
   productName: string,
-  boxName: string | null | undefined,
+  _boxName?: string | null,
 ): string {
-  const short = shortProductName(productName);
-  const box = boxName?.replace(/\s+/g, "").trim();
-  if (box) {
-    return `${short}[${box}]`;
-  }
-  return short;
+  return shortProductName(productName);
 }
 
 /** Product picker with qty + confirm for admin post-office upload. */
@@ -199,6 +195,7 @@ export function ProductPickDialog({
       <div className="space-y-3">
         <p className="text-sm text-[#64748b]">
           상품을 선택한 뒤 수량을 입력하고 완료를 누르면 옵션에 반영됩니다.
+          (수량은 해당 상품의 엑셀 행 수입니다.)
         </p>
 
         <div className="grid gap-2 min-[480px]:grid-cols-[140px_1fr]">
