@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   getAuthUser,
   getHomePathForRole,
@@ -62,13 +63,14 @@ function LoginForm() {
             canApproveGreeting: data.user.canApproveGreeting,
           }),
         );
+        // Keep spinner until navigation unmounts this page.
         return;
       }
 
       setError(data.message ?? "아이디 또는 비밀번호가 올바르지 않습니다.");
+      setIsSubmitting(false);
     } catch {
       setError("로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.");
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -130,9 +132,10 @@ function LoginForm() {
             type="submit"
             variant="default"
             disabled={!username || !password || isSubmitting}
+            aria-busy={isSubmitting}
             className="h-12 w-full border-brand bg-brand text-white hover:bg-[#1856bf] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? "로그인 중..." : "로그인"}
+            {isSubmitting ? <Spinner size="sm" label="로그인 중" /> : "로그인"}
           </Button>
         </form>
 
