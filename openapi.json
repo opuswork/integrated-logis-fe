@@ -7,8 +7,12 @@
   },
   "servers": [
     {
+      "url": "https://be-aosm.onrender.com",
+      "description": "Production (Render)"
+    },
+    {
       "url": "http://localhost:3001",
-      "description": "NestJS backend"
+      "description": "Local NestJS backend"
     },
     {
       "url": "http://localhost:3000",
