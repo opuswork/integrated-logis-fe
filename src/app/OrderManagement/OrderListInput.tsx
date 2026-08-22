@@ -1579,7 +1579,10 @@ function ChurchSearchField({
 
   return (
     <div ref={containerRef} className="relative w-full">
-      <label htmlFor="order-church" className="mb-1.5 block text-2xl font-bold text-ink">
+      <label
+        htmlFor="order-church"
+        className="mb-[5px] block text-[12px] font-bold text-[#64748B]"
+      >
         중앙 *
       </label>
       <input
@@ -1611,9 +1614,9 @@ function ChurchSearchField({
         autoComplete="off"
         required
         className={cn(
-          "min-h-9 w-full rounded-[7px] border border-[#cbd5e1] px-2.5 py-2 text-lg text-ink",
-          "placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
-          readOnly ? "cursor-default bg-[#f8fafc]" : "bg-white",
+          "mb-0 w-full rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C]",
+          "placeholder:text-[#A0AEC0] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
+          readOnly && "cursor-default bg-[#EDF2F7]",
         )}
       />
       {isOpen && !readOnly ? (
