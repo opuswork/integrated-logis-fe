@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import {
   mapShipmentOpsOrder,
@@ -107,7 +108,28 @@ export function AdminMissingCheckMng() {
 
   if (loading) {
     return (
-      <p className="text-sm text-[#64748B]">누락체크를 불러오는 중...</p>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="h-4 w-64 max-w-full" />
+        </div>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-[#E2E8F0] bg-white p-4"
+            >
+              <Skeleton className="mb-3 h-3 w-20" />
+              <Skeleton className="mb-2 h-8 w-24" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          ))}
+        </div>
+        <section className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white p-4">
+          <Skeleton className="mb-3 h-4 w-48" />
+          <TableSkeleton rows={6} columns={5} className="border-0" />
+        </section>
+      </div>
     );
   }
 
