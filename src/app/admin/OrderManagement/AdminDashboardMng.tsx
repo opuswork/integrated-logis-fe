@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -230,7 +231,42 @@ export function AdminDashboardMng() {
 
   if (loading) {
     return (
-      <p className="text-sm text-[#64748B]">대시보드를 불러오는 중...</p>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-4 w-52 max-w-full" />
+        </div>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-[#E2E8F0] bg-white p-4"
+            >
+              <Skeleton className="mb-3 h-3 w-20" />
+              <Skeleton className="mb-2 h-8 w-24" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_1fr]">
+          <section className="rounded-xl border border-[#E2E8F0] bg-white p-5">
+            <Skeleton className="mb-4 h-4 w-32" />
+            <Skeleton className="h-[150px] w-full rounded-lg" />
+          </section>
+          <section className="rounded-xl border border-[#E2E8F0] bg-white p-5">
+            <Skeleton className="mb-4 h-4 w-28" />
+            <div className="space-y-3">
+              {Array.from({ length: 5 }, (_, index) => (
+                <Skeleton key={index} className="h-6 w-full" />
+              ))}
+            </div>
+          </section>
+        </div>
+        <section className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+          <Skeleton className="mb-3 h-4 w-36" />
+          <TableSkeleton rows={5} columns={4} className="border-0" />
+        </section>
+      </div>
     );
   }
 
