@@ -2595,6 +2595,9 @@ function ProductOrderPanel({
     if (wasSuccess) {
       onOrderAccepted?.(orderNo ?? undefined);
       setAcceptedOrderNumber(null);
+    } else {
+      // Modal already showed the error — clear so it does not reappear inline.
+      setFormError("");
     }
   };
 
@@ -3609,7 +3612,9 @@ function ProductOrderPanel({
         </div>
       ) : null}
 
-      {formError && !formError.includes("주문 기본정보") ? (
+      {formError &&
+      !formError.includes("주문 기본정보") &&
+      !(resultDialog.open && !resultDialog.success) ? (
         <p className="mb-3 rounded-lg border border-[#E53E3E]/30 bg-[#FDEEEE] px-3 py-2 text-[13px] text-[#E53E3E]">
           {formError}
         </p>
