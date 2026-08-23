@@ -11,6 +11,7 @@ import {
 
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { Button } from "@/components/ui/button";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import {
   canApproveGreetingAction,
@@ -460,7 +461,7 @@ export function AdminOrderList({
         ) : null}
 
         {isLoading ? (
-          <p className="py-8 text-center text-sm text-[#64748b]">불러오는 중…</p>
+          <TableSkeleton rows={8} columns={8} className="border-0" />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-[1100px] w-full border-collapse text-[12.5px]">

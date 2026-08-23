@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import {
@@ -256,7 +257,9 @@ export function AdminShipmentMng() {
         {error ? (
           <p className="p-4 text-sm text-[#E53E3E]">{error}</p>
         ) : loading ? (
-          <p className="p-4 text-sm text-[#64748B]">불러오는 중…</p>
+          <div className="p-4">
+            <TableSkeleton rows={8} columns={8} className="border-0" />
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1400px] border-collapse text-left text-[12px]">

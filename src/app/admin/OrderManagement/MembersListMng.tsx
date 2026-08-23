@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAuthUser } from "@/lib/auth";
@@ -516,9 +517,19 @@ export function MembersListMng() {
 
   if (isLoading) {
     return (
-      <section className="rounded-lg border border-line bg-panel p-4">
-        <p className="text-sm text-muted-foreground">회원 목록을 불러오는 중...</p>
-      </section>
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="h-4 w-64 max-w-full" />
+        </div>
+        <section className="rounded-lg border border-line bg-panel p-3.5">
+          <Skeleton className="mb-2 h-4 w-12" />
+          <Skeleton className="h-10 w-full" />
+        </section>
+        <section className="rounded-lg border border-line bg-panel p-3.5">
+          <TableSkeleton rows={8} columns={5} className="border-0" />
+        </section>
+      </div>
     );
   }
 
