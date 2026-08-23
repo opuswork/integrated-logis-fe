@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -936,9 +937,15 @@ export function StockInventoryMng() {
 
   if (isLoading && view === "list") {
     return (
-      <section className="rounded-lg border border-line bg-panel p-4">
-        <p className="text-sm text-muted-foreground">상품 목록을 불러오는 중...</p>
-      </section>
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="h-4 w-72 max-w-full" />
+        </div>
+        <section className="rounded-lg border border-line bg-panel p-3.5">
+          <TableSkeleton rows={8} columns={6} className="border-0" />
+        </section>
+      </div>
     );
   }
 

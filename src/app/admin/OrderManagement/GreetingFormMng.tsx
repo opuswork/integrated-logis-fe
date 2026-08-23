@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StandaloneGreetingForm } from "@/app/admin/OrderManagement/StandaloneGreetingForm";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/env";
@@ -390,9 +391,15 @@ export function GreetingFormMng() {
 
   if (isLoading) {
     return (
-      <Panel>
-        <p className="text-sm text-muted-foreground">인사장 목록을 불러오는 중...</p>
-      </Panel>
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-36" />
+          <Skeleton className="h-4 w-72 max-w-full" />
+        </div>
+        <Panel>
+          <TableSkeleton rows={8} columns={6} className="border-0" />
+        </Panel>
+      </div>
     );
   }
 
