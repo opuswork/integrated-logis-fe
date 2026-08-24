@@ -1,22 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import html2canvas from "html2canvas-pro";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { RegionCaptureOverlay } from "@/components/region-capture-overlay";
 import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import {
-  CaptureCancelledError,
-  CaptureUnsupportedError,
+  SaveCancelledError,
   canvasToPngBlob,
-  captureDisplayFrame,
   copyPngBlobToClipboard,
-  cropCanvas,
-  downloadBlob,
   packagingCaptureFilename,
+  savePngBlob,
 } from "@/lib/region-screen-capture";
 import {
   mapShipmentOpsOrder,
@@ -78,46 +75,47 @@ export function AdminPackagingMng() {
     {},
   );
   const [isCapturing, setIsCapturing] = useState(false);
-  const [captureSession, setCaptureSession] = useState<{
-    canvas: HTMLCanvasElement;
-    imageUrl: string;
-    width: number;
-    height: number;
-  } | null>(null);
-
-  const closeCaptureSession = useCallback(() => {
-    setCaptureSession((current) => {
-      if (current?.imageUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(current.imageUrl);
-      }
-      return null;
-    });
-  }, []);
+  const captureRootRef = useRef<HTMLDivElement>(null);
 
   const handleScreenCapture = useCallback(async () => {
-    if (isCapturing || captureSession) {
+    if (isCapturing) {
       return;
     }
+    const root = captureRootRef.current;
+    if (!root) {
+      setAlertDialog({
+        open: true,
+        message: "캡처할 영역을 찾지 못했습니다.",
+      });
+      return;
+    }
+
     setIsCapturing(true);
     try {
-      const frame = await captureDisplayFrame();
-      const imageUrl = frame.canvas.toDataURL("image/png");
-      setCaptureSession({
-        canvas: frame.canvas,
-        imageUrl,
-        width: frame.width,
-        height: frame.height,
+      const canvas = await html2canvas(root, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#F5F7FA",
+        logging: false,
+      });
+      const blob = await canvasToPngBlob(canvas);
+      const filename = packagingCaptureFilename();
+      const savedVia = await savePngBlob(blob, filename);
+      const copied = await copyPngBlobToClipboard(blob);
+
+      setAlertDialog({
+        open: true,
+        message:
+          savedVia === "picker"
+            ? copied
+              ? "화면을 캡처해 저장했습니다. 클립보드에도 복사되었습니다."
+              : "화면을 캡처해 저장했습니다."
+            : copied
+              ? "화면을 캡처해 다운로드했습니다. 클립보드에도 복사되었습니다."
+              : "화면을 캡처해 다운로드했습니다.",
       });
     } catch (error) {
-      if (error instanceof CaptureCancelledError) {
-        return;
-      }
-      if (error instanceof CaptureUnsupportedError) {
-        setAlertDialog({
-          open: true,
-          message:
-            "이 브라우저에서는 화면 캡처를 지원하지 않습니다. Chrome 또는 Edge를 사용해 주세요.",
-        });
+      if (error instanceof SaveCancelledError) {
         return;
       }
       setAlertDialog({
@@ -125,41 +123,12 @@ export function AdminPackagingMng() {
         message:
           error instanceof Error
             ? error.message
-            : "화면 캡처를 시작하지 못했습니다.",
+            : "화면 캡처에 실패했습니다.",
       });
     } finally {
       setIsCapturing(false);
     }
-  }, [captureSession, isCapturing]);
-
-  const handleCaptureRegionComplete = useCallback(
-    async (rect: { x: number; y: number; width: number; height: number }) => {
-      if (!captureSession) {
-        return;
-      }
-      try {
-        const cropped = cropCanvas(captureSession.canvas, rect);
-        const blob = await canvasToPngBlob(cropped);
-        await copyPngBlobToClipboard(blob);
-        downloadBlob(blob, packagingCaptureFilename());
-        closeCaptureSession();
-        setAlertDialog({
-          open: true,
-          message:
-            "선택한 영역을 캡처했습니다. PNG 파일이 다운로드되었으며, 지원되는 환경에서는 클립보드에도 복사됩니다.",
-        });
-      } catch (error) {
-        setAlertDialog({
-          open: true,
-          message:
-            error instanceof Error
-              ? error.message
-              : "영역 캡처 저장에 실패했습니다.",
-        });
-      }
-    },
-    [captureSession, closeCaptureSession],
-  );
+  }, [isCapturing]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) {
@@ -382,7 +351,7 @@ export function AdminPackagingMng() {
   );
 
   return (
-    <div>
+    <div ref={captureRootRef}>
       <div className="mb-[18px]">
         <h3 className="text-[19px] font-bold tracking-tight text-[#1A202C]">
           포장관리
@@ -570,12 +539,12 @@ export function AdminPackagingMng() {
               <button
                 type="button"
                 className="rounded-[7px] border border-[#E2E8F0] px-3 py-1.5 text-[12.5px] font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isCapturing || Boolean(captureSession)}
+                disabled={isCapturing}
                 onClick={() => {
                   void handleScreenCapture();
                 }}
               >
-                {isCapturing ? "캡처 준비 중..." : "화면캡쳐"}
+                {isCapturing ? "캡처 중..." : "화면캡쳐"}
               </button>
             </div>
           </div>
@@ -607,12 +576,12 @@ export function AdminPackagingMng() {
               <button
                 type="button"
                 className="rounded-[7px] border border-[#E2E8F0] px-3 py-1.5 text-[12.5px] font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isCapturing || Boolean(captureSession)}
+                disabled={isCapturing}
                 onClick={() => {
                   void handleScreenCapture();
                 }}
               >
-                {isCapturing ? "캡처 준비 중..." : "화면캡쳐"}
+                {isCapturing ? "캡처 중..." : "화면캡쳐"}
               </button>
             </div>
           </div>
@@ -622,18 +591,6 @@ export function AdminPackagingMng() {
             포장완료가 완료로 표시됩니다.
           </p>
         </div>
-      ) : null}
-
-      {captureSession ? (
-        <RegionCaptureOverlay
-          imageUrl={captureSession.imageUrl}
-          imageWidth={captureSession.width}
-          imageHeight={captureSession.height}
-          onCancel={closeCaptureSession}
-          onComplete={(rect) => {
-            void handleCaptureRegionComplete(rect);
-          }}
-        />
       ) : null}
 
       {alertDialog.open ? (
