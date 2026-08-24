@@ -100,20 +100,8 @@ export function AdminPackagingMng() {
       });
       const blob = await canvasToPngBlob(canvas);
       const filename = packagingCaptureFilename();
-      const savedVia = await savePngBlob(blob, filename);
-      const copied = await copyPngBlobToClipboard(blob);
-
-      setAlertDialog({
-        open: true,
-        message:
-          savedVia === "picker"
-            ? copied
-              ? "화면을 캡처해 저장했습니다. 클립보드에도 복사되었습니다."
-              : "화면을 캡처해 저장했습니다."
-            : copied
-              ? "화면을 캡처해 다운로드했습니다. 클립보드에도 복사되었습니다."
-              : "화면을 캡처해 다운로드했습니다.",
-      });
+      await savePngBlob(blob, filename);
+      await copyPngBlobToClipboard(blob);
     } catch (error) {
       if (error instanceof SaveCancelledError) {
         return;
