@@ -11,6 +11,7 @@ import {
   parseOrdererFromNotes,
   parseOrderTypeFromNotes,
   parseParcelCompanyFromNotes,
+  greetingMaterialFromNotes,
 } from "@/lib/order-notes";
 import type { AdminRegion } from "@/lib/auth";
 
@@ -44,6 +45,12 @@ export type ShipmentOpsOrder = {
   slipDone: boolean;
   slipAuthor: string | null;
   greetingCount: number;
+  /** 주문서 미리보기 인사장소재 */
+  greetingMaterial: string;
+  /** 주문서 미리보기 인사장위치 */
+  greetingLocation: string;
+  /** 기표지: 택배=유, 상차=무 */
+  slipLabel: "유" | "무";
   requestedShipDate: string | null;
   packDept: PackDept;
   packDate: string | null;
@@ -149,6 +156,15 @@ export function mapShipmentOpsOrder(order: {
     "—";
   const releaseDone = order.releaseDone === true;
   const finalCompleteDone = order.finalCompleteDone === true;
+  const greetingCount = order.greetingForms?.length ?? 0;
+  const greetingMaterialRaw = greetingMaterialFromNotes(order.notes);
+  const greetingMaterial =
+    greetingCount > 0 && greetingMaterialRaw === "없음"
+      ? "최지원"
+      : greetingMaterialRaw;
+  const greetingLocation =
+    greetingMaterial === "없음" ? "—" : "박스외부";
+  const slipLabel: "유" | "무" = isParcel ? "유" : "무";
 
   return {
     id: order.id,
@@ -184,7 +200,10 @@ export function mapShipmentOpsOrder(order: {
     greetingDone: order.greetingDone === true,
     slipDone: order.slipDone === true,
     slipAuthor: order.slipAuthor ?? null,
-    greetingCount: order.greetingForms?.length ?? 0,
+    greetingCount,
+    greetingMaterial,
+    greetingLocation,
+    slipLabel,
     requestedShipDate: toDateOnly(order.requestedShipDate),
     packDept: order.packDept ?? null,
     packDate: toDateOnly(order.packDate),

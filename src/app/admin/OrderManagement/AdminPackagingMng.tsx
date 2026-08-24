@@ -284,17 +284,9 @@ export function AdminPackagingMng() {
                 </td>
                 <td className="px-2 py-2">{row.loadType}</td>
                 <td className="px-2 py-2">{row.unitType}</td>
-                <td className="px-2 py-2">
-                  {row.greetingCount > 0 ? row.productSummary : "—"}
-                </td>
-                <td className="px-2 py-2">—</td>
-                <td className="px-2 py-2">
-                  {row.isParcel
-                    ? row.slipDone
-                      ? detailLabel(row)
-                      : "—"
-                    : "무"}
-                </td>
+                <td className="px-2 py-2">{row.greetingMaterial}</td>
+                <td className="px-2 py-2">{row.greetingLocation}</td>
+                <td className="px-2 py-2">{row.slipLabel}</td>
                 <td className="px-2 py-2">{row.specialNote}</td>
                 <td className="overflow-visible whitespace-nowrap px-2 py-2 align-middle">
                   <input
@@ -443,17 +435,9 @@ export function AdminPackagingMng() {
                       </td>
                       <td className="px-2 py-2">{row.loadType}</td>
                       <td className="px-2 py-2">{row.unitType}</td>
-                      <td className="px-2 py-2">
-                        {row.greetingCount > 0 ? row.productSummary : "—"}
-                      </td>
-                      <td className="px-2 py-2">—</td>
-                      <td className="px-2 py-2">
-                        {row.isParcel
-                          ? row.slipDone
-                            ? detailLabel(row)
-                            : "—"
-                          : "무"}
-                      </td>
+                      <td className="px-2 py-2">{row.greetingMaterial}</td>
+                      <td className="px-2 py-2">{row.greetingLocation}</td>
+                      <td className="px-2 py-2">{row.slipLabel}</td>
                       <td className="px-2 py-2">{row.specialNote}</td>
                       <td className="px-2 py-2">
                         <select
