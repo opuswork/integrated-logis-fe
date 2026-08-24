@@ -296,18 +296,18 @@ export function AdminPackagingMng() {
                     : "무"}
                 </td>
                 <td className="px-2 py-2">{row.specialNote}</td>
-                <td className="px-2 py-2">
+                <td className="overflow-visible whitespace-nowrap px-2 py-2 align-middle">
                   <input
                     disabled={!canOperate}
                     value={ptDraft[row.id] ?? ""}
                     onChange={(e) =>
                       setPtDraft((p) => ({ ...p, [row.id]: e.target.value }))
                     }
-                    className="w-16 rounded border border-[#E2E8F0] px-1.5 py-1"
+                    className="box-border h-8 min-h-8 w-16 rounded border border-[#E2E8F0] px-2 text-[12px] leading-none"
                     placeholder="PT"
                   />
                 </td>
-                <td className="px-2 py-2">
+                <td className="overflow-visible whitespace-nowrap px-2 py-2 align-middle">
                   <input
                     type="date"
                     disabled={!canOperate}
@@ -318,7 +318,7 @@ export function AdminPackagingMng() {
                         [row.id]: e.target.value,
                       }))
                     }
-                    className="rounded border border-[#E2E8F0] px-1.5 py-1"
+                    className="box-border h-8 min-h-8 min-w-[9.5rem] rounded border border-[#E2E8F0] px-2 text-[12px] leading-none"
                   />
                 </td>
                 <td className="px-2 py-2">
