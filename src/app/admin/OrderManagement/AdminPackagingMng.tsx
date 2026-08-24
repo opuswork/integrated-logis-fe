@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
@@ -54,7 +56,10 @@ export function AdminPackagingMng() {
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [actionError, setActionError] = useState("");
+  const [alertDialog, setAlertDialog] = useState<{
+    open: boolean;
+    message: string;
+  }>({ open: false, message: "" });
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deptDraft, setDeptDraft] = useState<Record<number, PackDept>>({});
   const [ptDraft, setPtDraft] = useState<Record<number, string>>({});
@@ -139,20 +144,46 @@ export function AdminPackagingMng() {
     key: string,
   ) => {
     setSavingId(key);
-    setActionError("");
     try {
       const { response, data } = await patchShipmentOps(orderId, body, apiFetch);
       if (!response.ok) {
-        setActionError(parseApiErrorMessage(data));
+        setAlertDialog({
+          open: true,
+          message: parseApiErrorMessage(data),
+        });
         return;
       }
       const mapped = mapShipmentOpsOrder(data as never);
       setRows((prev) => prev.map((r) => (r.id === orderId ? mapped : r)));
     } catch {
-      setActionError("처리에 실패했습니다.");
+      setAlertDialog({ open: true, message: "처리에 실패했습니다." });
     } finally {
       setSavingId(null);
     }
+  };
+
+  const completePack = (row: ShipmentOpsOrder) => {
+    const packPt = (ptDraft[row.id] ?? "").trim();
+    const packDate = (packDateDraft[row.id] ?? todayIsoDate()).trim();
+
+    if (!packPt) {
+      setAlertDialog({ open: true, message: "PT를 입력해 주세요." });
+      return;
+    }
+    if (!packDate) {
+      setAlertDialog({ open: true, message: "포장완료일을 입력해 주세요." });
+      return;
+    }
+
+    void runOp(
+      row.id,
+      {
+        action: "completePack",
+        packPt,
+        packDate,
+      },
+      `pc-${row.id}`,
+    );
   };
 
   const detailLabel = (row: ShipmentOpsOrder) =>
@@ -243,17 +274,7 @@ export function AdminPackagingMng() {
                   <CellBtn
                     variant="confirm"
                     disabled={!canOperate || savingId === `pc-${row.id}`}
-                    onClick={() =>
-                      void runOp(
-                        row.id,
-                        {
-                          action: "completePack",
-                          packPt: ptDraft[row.id] ?? "",
-                          packDate: packDateDraft[row.id] ?? todayIsoDate(),
-                        },
-                        `pc-${row.id}`,
-                      )
-                    }
+                    onClick={() => completePack(row)}
                   >
                     완료
                   </CellBtn>
@@ -503,8 +524,23 @@ export function AdminPackagingMng() {
         </div>
       ) : null}
 
-      {actionError ? (
-        <p className="mt-2 text-sm text-[#E53E3E]">{actionError}</p>
+      {alertDialog.open ? (
+        <Dialog
+          open={alertDialog.open}
+          title="입력 확인"
+          onClose={() => setAlertDialog({ open: false, message: "" })}
+        >
+          <p className="text-sm leading-6 text-ink">{alertDialog.message}</p>
+          <div className="mt-5 flex justify-end">
+            <Button
+              type="button"
+              className="border-[#1A365D] bg-[#1A365D] text-white hover:bg-[#24487C]"
+              onClick={() => setAlertDialog({ open: false, message: "" })}
+            >
+              확인
+            </Button>
+          </div>
+        </Dialog>
       ) : null}
     </div>
   );
