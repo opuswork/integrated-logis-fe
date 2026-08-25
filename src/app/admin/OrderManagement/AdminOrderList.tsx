@@ -112,6 +112,37 @@ function formatMdDate(iso: string | null | undefined) {
   return `${Number(m)}/${Number(d)}`;
 }
 
+function formatMdInput(iso: string | null | undefined) {
+  const md = formatMdDate(iso);
+  return md === "—" ? "" : md;
+}
+
+/** m/d (or m-d, m.d) → YYYY-MM-DD. Year from hint ISO or current year. */
+function parseMdToIso(md: string, yearHint?: string | null): string | null {
+  const trimmed = md.trim();
+  if (!trimmed) return null;
+  const match = /^(\d{1,2})\s*[/.\\-]\s*(\d{1,2})$/.exec(trimmed);
+  if (!match) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const yearNum =
+    yearHint && /^\d{4}/.test(yearHint)
+      ? Number(yearHint.slice(0, 4))
+      : new Date().getFullYear();
+  const iso = `${yearNum}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const date = new Date(`${iso}T00:00:00`);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== yearNum ||
+    date.getMonth() + 1 !== month ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return iso;
+}
+
 function addDaysIso(iso: string, days: number) {
   const date = new Date(`${iso.slice(0, 10)}T00:00:00`);
   date.setDate(date.getDate() + days);
@@ -132,6 +163,69 @@ function todayIsoDate() {
 function toDateOnlyIso(value: string | null | undefined) {
   if (!value) return null;
   return value.slice(0, 10);
+}
+
+function MdDateField({
+  iso,
+  disabled,
+  yearHint,
+  onCommit,
+  placeholder = "m/d",
+  title,
+}: {
+  iso: string | null | undefined;
+  disabled?: boolean;
+  /** Prefer this ISO's year when parsing m/d */
+  yearHint?: string | null;
+  /** return false to reject and revert display */
+  onCommit: (nextIso: string) => boolean | void;
+  placeholder?: string;
+  title?: string;
+}) {
+  const [text, setText] = useState(formatMdInput(iso));
+
+  useEffect(() => {
+    setText(formatMdInput(iso));
+  }, [iso]);
+
+  const commit = () => {
+    if (disabled) return;
+    const next = parseMdToIso(text, yearHint ?? iso);
+    if (!next) {
+      setText(formatMdInput(iso));
+      return;
+    }
+    if (next === toDateOnlyIso(iso)) {
+      setText(formatMdInput(iso));
+      return;
+    }
+    const accepted = onCommit(next);
+    if (accepted === false) {
+      setText(formatMdInput(iso));
+      return;
+    }
+    setText(formatMdInput(next));
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      disabled={disabled}
+      value={text}
+      placeholder={placeholder}
+      title={title}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="w-[72px] rounded border border-line px-1.5 py-1 text-center text-[12px] tabular-nums disabled:opacity-50"
+    />
+  );
 }
 
 function Panel({
@@ -673,13 +767,12 @@ export function AdminOrderList({
                       </td>
                       <td className="px-2 py-2 align-middle">
                         {mutable ? (
-                          <input
-                            type="date"
+                          <MdDateField
+                            iso={row.deliveryRequestDate || null}
                             disabled={savingId === `dd-${row.id}`}
-                            value={row.deliveryRequestDate || ""}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              if (!v) return;
+                            yearHint={row.deliveryRequestDate || null}
+                            title="납품요청일 (m/d)"
+                            onCommit={(v) => {
                               void patchChecklist(
                                 row.id,
                                 {
@@ -689,12 +782,6 @@ export function AdminOrderList({
                                 `dd-${row.id}`,
                               );
                             }}
-                            className="w-[132px] rounded border border-line px-1.5 py-1 text-[12px] disabled:opacity-50"
-                            title={
-                              row.deliveryRequestDate
-                                ? formatMdDate(row.deliveryRequestDate)
-                                : "납품요청일"
-                            }
                           />
                         ) : (
                           <span className="tabular-nums">
@@ -714,15 +801,20 @@ export function AdminOrderList({
                               savingId === `sd-${row.id}` ||
                               maxShip < todayIsoDate();
                             return (
-                              <input
-                                type="date"
-                                min={todayIsoDate()}
-                                max={maxShip || undefined}
+                              <MdDateField
+                                iso={row.requestedShipDate}
                                 disabled={shipDisabled}
-                                value={row.requestedShipDate ?? ""}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  if (!v) return;
+                                yearHint={
+                                  row.requestedShipDate ||
+                                  row.deliveryRequestDate ||
+                                  null
+                                }
+                                title="출고요청일 (m/d)"
+                                onCommit={(v) => {
+                                  const min = todayIsoDate();
+                                  if (v < min || (maxShip && v > maxShip)) {
+                                    return false;
+                                  }
                                   void patchChecklist(
                                     row.id,
                                     {
@@ -732,12 +824,6 @@ export function AdminOrderList({
                                     `sd-${row.id}`,
                                   );
                                 }}
-                                className="w-[132px] rounded border border-line px-1.5 py-1 text-[12px] disabled:opacity-50"
-                                title={
-                                  row.requestedShipDate
-                                    ? formatMdDate(row.requestedShipDate)
-                                    : "출고요청일"
-                                }
                               />
                             );
                           })()
