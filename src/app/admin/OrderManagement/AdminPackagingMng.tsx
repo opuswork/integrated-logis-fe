@@ -135,7 +135,8 @@ export function AdminPackagingMng() {
       }
       const mapped = data
         .filter((o: { status?: string }) => o.status !== "CANCELLED")
-        .map(mapShipmentOpsOrder);
+        .map(mapShipmentOpsOrder)
+        .filter((row) => row.packagingWorker !== "STORE");
       setRows(mapped);
       setDeptDraft((prev) => {
         const next = { ...prev };

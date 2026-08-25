@@ -292,15 +292,21 @@ export function AdminShipmentMng() {
                   const greetingYes =
                     row.greetingCount === 0 ? null : row.greetingDone;
                   const slipYes = row.isParcel ? row.slipDone : null;
+                  const isStoreWorker = row.packagingWorker === "STORE";
                   const finalCompleteEnabled =
-                    canOperate && row.releaseDone && !row.finalCompleteDone;
+                    canOperate &&
+                    !isStoreWorker &&
+                    row.releaseDone &&
+                    !row.finalCompleteDone;
                   // 상차/박스만 최종확인 버튼 — isParcel이 어긋나도 loadType 기준
+                  // 매장 작업자는 상차/택배 모두 최종확인으로 프로세스 종료
                   const isSangchaRow = row.loadType === "상차";
+                  const showFinalConfirmButton = isStoreWorker || isSangchaRow;
                   const finalConfirmEnabled =
                     canOperate &&
-                    isSangchaRow &&
-                    row.finalCompleteDone &&
-                    !row.finalConfirmDone;
+                    !row.finalConfirmDone &&
+                    (isStoreWorker ||
+                      (isSangchaRow && row.finalCompleteDone));
                   return (
                     <tr
                       key={row.id}
@@ -421,7 +427,7 @@ export function AdminShipmentMng() {
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
-                        {isSangchaRow ? (
+                        {showFinalConfirmButton ? (
                           row.finalConfirmDone ? (
                             <CellBtn disabled>확인됨</CellBtn>
                           ) : (
