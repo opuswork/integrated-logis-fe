@@ -121,6 +121,31 @@ function Panel({
   );
 }
 
+function formatChecklistApiError(message: unknown): string {
+  const text = Array.isArray(message)
+    ? message
+        .filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+        .join(", ")
+    : typeof message === "string"
+      ? message.trim()
+      : "";
+
+  if (!text) {
+    return "저장에 실패했습니다.";
+  }
+
+  // Old BE build rejects workerClear (enum without workerClear).
+  if (
+    /action must be one of the following values/i.test(text) &&
+    /confirm.*worker.*payment/i.test(text) &&
+    !/workerClear/i.test(text)
+  ) {
+    return "작업자 초기화를 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
+  }
+
+  return text;
+}
+
 function CellBtn({
   children,
   disabled,
@@ -349,12 +374,12 @@ export function AdminOrderList({
       });
       const data = (await response.json()) as
         | Parameters<typeof mapApiOrder>[0]
-        | { message?: string };
+        | { message?: string | string[] };
       if (!response.ok) {
         setActionError(
-          "message" in data && data.message
-            ? data.message
-            : "저장에 실패했습니다.",
+          formatChecklistApiError(
+            "message" in data ? data.message : undefined,
+          ),
         );
         return;
       }
@@ -362,12 +387,14 @@ export function AdminOrderList({
       setOrders((prev) =>
         prev.map((row) => (row.id === orderId ? mapped : row)),
       );
+      // After workerClear, packagingWorker is null → select + 저장 again.
       setDrafts((prev) => ({
         ...prev,
         [orderId]: {
           worker: mapped.packagingWorker ?? "",
         },
       }));
+      setActionError("");
     } catch {
       setActionError("저장에 실패했습니다.");
     } finally {
