@@ -154,6 +154,15 @@ export function parseDeliveryDateTimeFromNotes(
   return parseOrderNoteField(notes, "배달일");
 }
 
+/** 납품요청일: 배달일 우선, 없으면 택배발송일 (YYYY-MM-DD). */
+export function parseDeliveryRequestDateFromNotes(
+  notes: string | null | undefined,
+) {
+  const delivery = parseDeliveryDateTimeFromNotes(notes).slice(0, 10);
+  if (delivery) return delivery;
+  return parseOrderNoteField(notes, "택배발송일").slice(0, 10);
+}
+
 /** Map saved greeting kind to 인사장소재 text on the print sheet. */
 export function greetingMaterialFromNotes(notes: string | null | undefined) {
   const kind = parseGreetingKindFromNotes(notes);

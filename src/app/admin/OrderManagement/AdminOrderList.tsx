@@ -28,6 +28,7 @@ import {
 } from "@/lib/order-delivery";
 import {
   parseBranchStoreFromNotes,
+  parseDeliveryRequestDateFromNotes,
   parseOrderDateFromNotes,
   parseOrdererFromNotes,
   parseOrderTypeFromNotes,
@@ -44,6 +45,8 @@ type AdminOrderRow = {
   status: DeliveryOrderStatus;
   statusLabel: string;
   orderDate: string;
+  deliveryRequestDate: string;
+  requestedShipDate: string | null;
   storeRegion: AdminRegion | null;
   packagingWorker: PackagingWorker;
   orderConfirmedAt: string | null;
@@ -102,6 +105,35 @@ function canMutateRow(user: AuthUser | null, row: AdminOrderRow) {
   return canWriteOrderChecklist(user, row.storeRegion);
 }
 
+function formatMdDate(iso: string | null | undefined) {
+  if (!iso || iso.length < 10) return "—";
+  const [, m, d] = iso.slice(0, 10).split("-");
+  if (!m || !d) return "—";
+  return `${Number(m)}/${Number(d)}`;
+}
+
+function addDaysIso(iso: string, days: number) {
+  const date = new Date(`${iso.slice(0, 10)}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function todayIsoDate() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function toDateOnlyIso(value: string | null | undefined) {
+  if (!value) return null;
+  return value.slice(0, 10);
+}
+
 function Panel({
   children,
   className,
@@ -121,7 +153,10 @@ function Panel({
   );
 }
 
-function formatChecklistApiError(message: unknown): string {
+function formatChecklistApiError(
+  message: unknown,
+  action?: string,
+): string {
   const text = Array.isArray(message)
     ? message
         .filter((m): m is string => typeof m === "string" && m.trim().length > 0)
@@ -134,13 +169,18 @@ function formatChecklistApiError(message: unknown): string {
     return "저장에 실패했습니다.";
   }
 
-  // Old BE build rejects workerClear (enum without workerClear).
-  if (
-    /action must be one of the following values/i.test(text) &&
-    /confirm.*worker.*payment/i.test(text) &&
-    !/workerClear/i.test(text)
-  ) {
-    return "작업자 초기화를 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
+  if (/action must be one of the following values/i.test(text)) {
+    if (action === "workerClear" && !/workerClear/i.test(text)) {
+      return "작업자 초기화를 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
+    }
+    if (
+      (action === "setDeliveryRequestDate" ||
+        action === "setRequestedShipDate") &&
+      !/setDeliveryRequestDate/i.test(text) &&
+      !/setRequestedShipDate/i.test(text)
+    ) {
+      return "납품·출고요청일 저장을 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
+    }
   }
 
   return text;
@@ -208,6 +248,7 @@ export function AdminOrderList({
       status: DeliveryOrderStatus;
       createdAt: string;
       notes?: string | null;
+      requestedShipDate?: string | null;
       storeRegion?: AdminRegion | null;
       packagingWorker?: PackagingWorker;
       orderConfirmedAt?: string | null;
@@ -241,6 +282,8 @@ export function AdminOrderList({
         orderDate:
           parseOrderDateFromNotes(order.notes) ||
           order.createdAt.slice(0, 10),
+        deliveryRequestDate: parseDeliveryRequestDateFromNotes(order.notes),
+        requestedShipDate: toDateOnlyIso(order.requestedShipDate),
         storeRegion: order.storeRegion ?? regionFromNotes(order.notes),
         packagingWorker: order.packagingWorker ?? null,
         orderConfirmedAt: order.orderConfirmedAt ?? null,
@@ -379,6 +422,7 @@ export function AdminOrderList({
         setActionError(
           formatChecklistApiError(
             "message" in data ? data.message : undefined,
+            typeof body.action === "string" ? body.action : undefined,
           ),
         );
         return;
@@ -488,16 +532,18 @@ export function AdminOrderList({
         ) : null}
 
         {isLoading ? (
-          <TableSkeleton rows={8} columns={8} className="border-0" />
+          <TableSkeleton rows={8} columns={10} className="border-0" />
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full border-collapse text-[12.5px]">
+            <table className="min-w-[1280px] w-full border-collapse text-[12.5px]">
               <thead>
                 <tr className="border-b border-line bg-[#f8fafc] text-left text-[12px] text-[#64748b]">
                   <th className="px-2 py-2 font-semibold">작업자</th>
                   <th className="px-2 py-2 font-semibold">주문매장</th>
                   <th className="px-2 py-2 font-semibold">주문번호</th>
+                  <th className="px-2 py-2 font-semibold">납품요청일</th>
                   <th className="px-2 py-2 font-semibold">성명</th>
+                  <th className="px-2 py-2 font-semibold">출고요청일</th>
                   <th className="px-2 py-2 font-semibold">구분</th>
                   <th className="px-2 py-2 font-semibold">주문확인</th>
                   <th className="px-2 py-2 font-semibold">상태</th>
@@ -625,7 +671,82 @@ export function AdminOrderList({
                           row.orderNumber
                         )}
                       </td>
+                      <td className="px-2 py-2 align-middle">
+                        {mutable ? (
+                          <input
+                            type="date"
+                            disabled={savingId === `dd-${row.id}`}
+                            value={row.deliveryRequestDate || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (!v) return;
+                              void patchChecklist(
+                                row.id,
+                                {
+                                  action: "setDeliveryRequestDate",
+                                  deliveryDate: v,
+                                },
+                                `dd-${row.id}`,
+                              );
+                            }}
+                            className="w-[132px] rounded border border-line px-1.5 py-1 text-[12px] disabled:opacity-50"
+                            title={
+                              row.deliveryRequestDate
+                                ? formatMdDate(row.deliveryRequestDate)
+                                : "납품요청일"
+                            }
+                          />
+                        ) : (
+                          <span className="tabular-nums">
+                            {formatMdDate(row.deliveryRequestDate)}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-2 py-2 align-middle">{row.name}</td>
+                      <td className="px-2 py-2 align-middle">
+                        {mutable ? (
+                          (() => {
+                            const maxShip = row.deliveryRequestDate
+                              ? addDaysIso(row.deliveryRequestDate, -1)
+                              : "";
+                            const shipDisabled =
+                              !row.deliveryRequestDate ||
+                              savingId === `sd-${row.id}` ||
+                              maxShip < todayIsoDate();
+                            return (
+                              <input
+                                type="date"
+                                min={todayIsoDate()}
+                                max={maxShip || undefined}
+                                disabled={shipDisabled}
+                                value={row.requestedShipDate ?? ""}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (!v) return;
+                                  void patchChecklist(
+                                    row.id,
+                                    {
+                                      action: "setRequestedShipDate",
+                                      shipDate: v,
+                                    },
+                                    `sd-${row.id}`,
+                                  );
+                                }}
+                                className="w-[132px] rounded border border-line px-1.5 py-1 text-[12px] disabled:opacity-50"
+                                title={
+                                  row.requestedShipDate
+                                    ? formatMdDate(row.requestedShipDate)
+                                    : "출고요청일"
+                                }
+                              />
+                            );
+                          })()
+                        ) : (
+                          <span className="tabular-nums">
+                            {formatMdDate(row.requestedShipDate)}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-2 py-2 align-middle">{row.type}</td>
                       <td className="px-2 py-2 align-middle">
                         {confirmed ? (
