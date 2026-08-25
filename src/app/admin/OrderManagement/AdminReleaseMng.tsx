@@ -82,7 +82,8 @@ export function AdminReleaseMng() {
       setRows(
         data
           .filter((o: { status?: string }) => o.status !== "CANCELLED")
-          .map(mapShipmentOpsOrder),
+          .map(mapShipmentOpsOrder)
+          .filter((row) => row.packagingWorker !== "STORE"),
       );
     } catch {
       if (!silent) {
