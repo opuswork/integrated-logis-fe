@@ -501,14 +501,17 @@ export function AdminOrderList({
                       )}
                     >
                       <td className="px-2 py-2 align-top">
-                        {row.packagingWorker && locked ? (
+                        {row.packagingWorker &&
+                        (locked || row.readyForShipment) ? (
                           <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
                             {row.packagingWorker === "STORE" ? "매장" : "공장"}
                           </span>
                         ) : (
                           <div className="flex flex-col gap-1">
                             <select
-                              disabled={locked || Boolean(row.packagingWorker)}
+                              disabled={
+                                locked || Boolean(row.packagingWorker)
+                              }
                               value={draft.worker ?? ""}
                               onChange={(e) =>
                                 updateDraft(row.id, {
@@ -545,11 +548,27 @@ export function AdminOrderList({
                                 저장
                               </CellBtn>
                             ) : (
-                              <span className="text-[11px] text-[#64748b]">
-                                {row.packagingWorker === "STORE"
-                                  ? "매장"
-                                  : "공장"}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] text-[#64748b]">
+                                  {row.packagingWorker === "STORE"
+                                    ? "매장"
+                                    : "공장"}
+                                </span>
+                                <CellBtn
+                                  disabled={
+                                    locked || savingId === `wc-${row.id}`
+                                  }
+                                  onClick={() =>
+                                    void patchChecklist(
+                                      row.id,
+                                      { action: "workerClear" },
+                                      `wc-${row.id}`,
+                                    )
+                                  }
+                                >
+                                  초기화
+                                </CellBtn>
+                              </div>
                             )}
                           </div>
                         )}
