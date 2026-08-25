@@ -137,6 +137,18 @@ export function canWriteShipmentOps(
   return false;
 }
 
+/**
+ * 작업자=매장 주문의 배송관리 최종확인:
+ * 공장/최고관리자 + 해당 지역 매장관리자
+ */
+export function canFinalConfirmStoreShipment(
+  user: AuthUser | null | undefined,
+  storeRegion: AdminRegion | null,
+): boolean {
+  if (canWriteShipmentOps(user)) return true;
+  return canWriteOrderChecklist(user, storeRegion);
+}
+
 export function canCreateAdminOrder(
   user: AuthUser | null | undefined,
 ): boolean {
