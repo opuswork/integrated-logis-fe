@@ -23,6 +23,7 @@ import { Chip, type ChipVariant } from "@/components/ui/chip";
 import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
+import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, getAuthUser } from "@/lib/auth";
@@ -3269,6 +3270,8 @@ function ProductOrderPanel({
 
   const omInputClass =
     "mb-3 w-full rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C] disabled:bg-[#EDF2F7] disabled:text-[#A0AEC0]";
+  const omDatePickerClass =
+    "mb-3 flex w-full [&>button]:h-auto [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg [&>button]:border-[#E2E8F0] [&>button]:px-[11px] [&>button]:py-[9px] [&>button]:text-[13px]";
   const omLabelClass =
     "mb-[5px] block text-[12px] font-bold text-[#64748B]";
 
@@ -3411,17 +3414,16 @@ function ProductOrderPanel({
       ) : isDelivery ? (
         <div className="mb-4 space-y-0">
           <label className={omLabelClass}>배달일 *</label>
-          <input
-            type="date"
-            min={todayDateValue()}
-            value={deliveryDate}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (next && next < todayDateValue()) return;
-              setDeliveryDate(next);
+          <MdCalendarPicker
+            valueIso={deliveryDate || null}
+            minIso={todayDateValue()}
+            placeholder="m/d"
+            title="배달일"
+            className={omDatePickerClass}
+            onChangeIso={(iso) => {
+              if (iso < todayDateValue()) return;
+              setDeliveryDate(iso);
             }}
-            required
-            className={omInputClass}
           />
           <label className={omLabelClass}>배달 시간 *</label>
           <input
@@ -3472,17 +3474,16 @@ function ProductOrderPanel({
       ) : (
         <div className="mb-4 space-y-0">
           <label className={omLabelClass}>택배발송일 *</label>
-          <input
-            type="date"
-            min={todayDateValue()}
-            value={parcelShipDate}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (next && next < todayDateValue()) return;
-              setParcelShipDate(next);
+          <MdCalendarPicker
+            valueIso={parcelShipDate || null}
+            minIso={todayDateValue()}
+            placeholder="m/d"
+            title="택배발송일"
+            className={omDatePickerClass}
+            onChangeIso={(iso) => {
+              if (iso < todayDateValue()) return;
+              setParcelShipDate(iso);
             }}
-            required
-            className={omInputClass}
           />
           <label className={omLabelClass}>업체명 *</label>
           <input
