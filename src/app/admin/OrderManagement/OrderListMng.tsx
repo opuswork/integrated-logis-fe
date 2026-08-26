@@ -228,10 +228,10 @@ function AdminSidebar({
   return (
     <aside
       className={cn(
-        "relative flex shrink-0 flex-col overflow-hidden border-r border-[#E2E8F0] bg-white transition-[width,flex-basis,padding,opacity] duration-200",
+        "relative flex shrink-0 flex-col border-r border-[#E2E8F0] bg-white transition-[width,flex-basis,padding,opacity] duration-200",
         collapsed
-          ? "w-0 basis-0 p-0 opacity-0"
-          : "w-[220px] basis-[220px] px-3 py-[18px] opacity-100",
+          ? "w-0 basis-0 overflow-hidden p-0 opacity-0"
+          : "w-[220px] basis-[220px] overflow-visible px-3 py-[18px] opacity-100",
         className,
       )}
     >
