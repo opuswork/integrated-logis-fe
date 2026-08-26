@@ -138,14 +138,14 @@ export function canWriteShipmentOps(
 }
 
 /**
- * 작업자=매장 주문의 배송관리 최종확인:
- * 공장/최고관리자 + 해당 지역 매장관리자
+ * 배송관리 최종완료·최종확인:
+ * 관할 매장관리자 + 최고관리자 (공장·Factory-G 불가)
  */
-export function canFinalConfirmStoreShipment(
+export function canPressShipmentFinalActions(
   user: AuthUser | null | undefined,
   storeRegion: AdminRegion | null,
 ): boolean {
-  if (canWriteShipmentOps(user)) return true;
+  if (!user || isFactoryGUser(user) || user.role === "factory") return false;
   return canWriteOrderChecklist(user, storeRegion);
 }
 

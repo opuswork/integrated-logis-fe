@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
-import { canFinalConfirmStoreShipment, canWriteShipmentOps, getAuthUser } from "@/lib/auth";
+import { canPressShipmentFinalActions, canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import {
   mapShipmentOpsOrder,
   parseApiErrorMessage,
@@ -295,8 +295,12 @@ export function AdminShipmentMng() {
                   const isStoreWorker =
                     row.packagingWorker === "STORE" ||
                     row.workerLabel === "매장";
+                  const canFinal = canPressShipmentFinalActions(
+                    auth,
+                    row.storeRegion,
+                  );
                   const finalCompleteEnabled =
-                    canOperate &&
+                    canFinal &&
                     !isStoreWorker &&
                     row.releaseDone &&
                     !row.finalCompleteDone;
@@ -304,17 +308,11 @@ export function AdminShipmentMng() {
                   // 매장 작업자는 상차/택배 모두 최종확인으로 프로세스 종료
                   const isSangchaRow = row.loadType === "상차";
                   const showFinalConfirmButton = isStoreWorker || isSangchaRow;
-                  const storeFinalConfirmAllowed = canFinalConfirmStoreShipment(
-                    auth,
-                    row.storeRegion,
-                  );
                   const finalConfirmEnabled =
+                    canFinal &&
                     !row.finalConfirmDone &&
-                    (isStoreWorker
-                      ? storeFinalConfirmAllowed
-                      : canOperate &&
-                        isSangchaRow &&
-                        row.finalCompleteDone);
+                    (isStoreWorker ||
+                      (isSangchaRow && row.finalCompleteDone));
                   return (
                     <tr
                       key={row.id}
@@ -491,10 +489,9 @@ export function AdminShipmentMng() {
 
       <p className="mt-3 text-[11px] leading-relaxed text-[#64748B]">
         출고요청일은 오늘 이후 날짜만 선택 가능하며 선택 즉시 저장됩니다.
-        출고확인은 출고관리에서 공장 관리자가 출고완료하면 자동 기록됩니다.
-        공장 작업자 건의 최종완료·최종확인은 공장관리자(및 최고관리자)가
-        처리합니다. 작업자=매장 건은 관할 매장관리자도 최종확인으로
-        배송완료 처리할 수 있습니다. Factory-G는 목록만 조회합니다.
+        포장·출고·출고요청일은 공장관리자(및 최고관리자)가 처리합니다.
+        최종완료·최종확인은 관할 매장관리자(및 최고관리자)만 누를 수 있으며,
+        공장관리자는 비활성입니다. Factory-G는 목록만 조회합니다.
       </p>
     </div>
   );
