@@ -190,6 +190,7 @@ export function MdCalendarPicker({
             nextLabel="▷"
             prevLabel="◁"
             navigationLabel={({ date }) => dayjs(date).format("M월")}
+            formatDay={(_locale, date) => String(date.getDate())}
             formatShortWeekday={(_locale, date) =>
               ["일", "월", "화", "수", "목", "금", "토"][date.getDay()] ?? ""
             }
