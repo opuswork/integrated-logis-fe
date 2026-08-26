@@ -3533,7 +3533,8 @@ function ProductOrderPanel({
         </div>
       )}
 
-      {/* Products */}
+      {/* Products — only after 배달/택배 selected (avoids showing parcel UI before choice) */}
+      {orderType ? (
       <div className="mb-4 space-y-3">
         {isDelivery ? (
           <>
@@ -3545,22 +3546,11 @@ function ProductOrderPanel({
                 </h4>
                 <button
                   type="button"
-                  disabled={!orderType}
                   onClick={() => {
-                    if (!orderType) {
-                      setAlertDialog({
-                        open: true,
-                        message: "배달 또는 택배를 먼저 선택해 주세요.",
-                      });
-                      return;
-                    }
                     setProductDialogMode("box");
                     setIsProductDialogOpen(true);
                   }}
-                  className={cn(
-                    "rounded-lg border border-[#CBD5E0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1A365D]",
-                    !orderType && "cursor-not-allowed opacity-50",
-                  )}
+                  className="rounded-lg border border-[#CBD5E0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1A365D]"
                 >
                   + 박스상품 추가
                 </button>
@@ -3656,32 +3646,21 @@ function ProductOrderPanel({
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={!orderType}
                     onClick={() => {
-                      if (!orderType) {
-                        setAlertDialog({
-                          open: true,
-                          message: "배달 또는 택배를 먼저 선택해 주세요.",
-                        });
-                        return;
-                      }
                       setProductDialogMode("giftUnit");
                       setIsProductDialogOpen(true);
                     }}
-                    className={cn(
-                      "rounded-lg border border-[#9AE6B4] bg-[#F0FFF4] px-3 py-2 text-[12.5px] font-bold text-[#276749]",
-                      !orderType && "cursor-not-allowed opacity-50",
-                    )}
+                    className="rounded-lg border border-[#9AE6B4] bg-[#F0FFF4] px-3 py-2 text-[12.5px] font-bold text-[#276749]"
                   >
                     + 선물세트 낱개 추가
                   </button>
                   <button
                     type="button"
-                    disabled={!orderType || giftUnitProductItems.length === 0}
+                    disabled={giftUnitProductItems.length === 0}
                     onClick={handleApplyInsaAll}
                     className={cn(
                       "rounded-lg px-3 py-2 text-[12.5px] font-bold",
-                      orderType && giftUnitProductItems.length > 0
+                      giftUnitProductItems.length > 0
                         ? "bg-[#EBF4FD] text-[#3182CE]"
                         : "cursor-not-allowed bg-[#EDF2F7] text-[#A0AEC0]",
                     )}
@@ -3825,34 +3804,21 @@ function ProductOrderPanel({
             <div className="mb-2.5 flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!orderType}
                 onClick={() => {
-                  if (!orderType) {
-                    setAlertDialog({
-                      open: true,
-                      message: "배달 또는 택배를 먼저 선택해 주세요.",
-                    });
-                    return;
-                  }
                   setProductDialogMode("all");
                   setIsProductDialogOpen(true);
                 }}
-                className={cn(
-                  "rounded-lg px-3 py-2 text-[12.5px] font-bold",
-                  orderType
-                    ? "bg-[#1A365D] text-white"
-                    : "cursor-not-allowed bg-[#CBD5E0] text-white",
-                )}
+                className="rounded-lg px-3 py-2 text-[12.5px] font-bold bg-[#1A365D] text-white"
               >
                 + 상품추가
               </button>
               <button
                 type="button"
-                disabled={!orderType || productItems.length === 0}
+                disabled={productItems.length === 0}
                 onClick={handleApplyInsaAll}
                 className={cn(
                   "rounded-lg px-3 py-2 text-[12.5px] font-bold",
-                  orderType && productItems.length > 0
+                  productItems.length > 0
                     ? "bg-[#EBF4FD] text-[#3182CE]"
                     : "cursor-not-allowed bg-[#EDF2F7] text-[#A0AEC0]",
                 )}
@@ -3993,6 +3959,7 @@ function ProductOrderPanel({
           </>
         )}
       </div>
+      ) : null}
 
       {isEditMode ? (
         <div className="mb-4 rounded-[10px] border border-[#F6AD55] bg-[#FFEDD5] px-3.5 py-3">
