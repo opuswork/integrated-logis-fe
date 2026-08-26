@@ -11,6 +11,7 @@ import {
 
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { Button } from "@/components/ui/button";
+import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import {
@@ -112,35 +113,11 @@ function formatMdDate(iso: string | null | undefined) {
   return `${Number(m)}/${Number(d)}`;
 }
 
-function formatMdInput(iso: string | null | undefined) {
-  const md = formatMdDate(iso);
-  return md === "—" ? "" : md;
-}
-
-/** m/d (or m-d, m.d) → YYYY-MM-DD. Year from hint ISO or current year. */
-function parseMdToIso(md: string, yearHint?: string | null): string | null {
-  const trimmed = md.trim();
-  if (!trimmed) return null;
-  const match = /^(\d{1,2})\s*[/.\\-]\s*(\d{1,2})$/.exec(trimmed);
-  if (!match) return null;
-  const month = Number(match[1]);
-  const day = Number(match[2]);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  const yearNum =
-    yearHint && /^\d{4}/.test(yearHint)
-      ? Number(yearHint.slice(0, 4))
-      : new Date().getFullYear();
-  const iso = `${yearNum}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  const date = new Date(`${iso}T00:00:00`);
-  if (
-    Number.isNaN(date.getTime()) ||
-    date.getFullYear() !== yearNum ||
-    date.getMonth() + 1 !== month ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-  return iso;
+/** Compare YYYY-MM-DD (or notes date) to filter MM-DD, ignoring year. */
+function mdMatches(isoOrDate: string | null | undefined, filterMd: string) {
+  if (!filterMd || filterMd.length < 5) return true;
+  if (!isoOrDate || isoOrDate.length < 10) return false;
+  return isoOrDate.slice(5, 10) === filterMd;
 }
 
 function addDaysIso(iso: string, days: number) {
@@ -172,58 +149,33 @@ function MdDateField({
   onCommit,
   placeholder = "m/d",
   title,
+  minIso,
+  maxIso,
 }: {
   iso: string | null | undefined;
   disabled?: boolean;
-  /** Prefer this ISO's year when parsing m/d */
   yearHint?: string | null;
-  /** return false to reject and revert display */
   onCommit: (nextIso: string) => boolean | void;
   placeholder?: string;
   title?: string;
+  minIso?: string;
+  maxIso?: string;
 }) {
-  const [text, setText] = useState(formatMdInput(iso));
-
-  useEffect(() => {
-    setText(formatMdInput(iso));
-  }, [iso]);
-
-  const commit = () => {
-    if (disabled) return;
-    const next = parseMdToIso(text, yearHint ?? iso);
-    if (!next) {
-      setText(formatMdInput(iso));
-      return;
-    }
-    if (next === toDateOnlyIso(iso)) {
-      setText(formatMdInput(iso));
-      return;
-    }
-    const accepted = onCommit(next);
-    if (accepted === false) {
-      setText(formatMdInput(iso));
-      return;
-    }
-    setText(formatMdInput(next));
-  };
-
   return (
-    <input
-      type="text"
-      inputMode="numeric"
+    <MdCalendarPicker
+      valueIso={iso}
+      yearHint={yearHint ?? iso}
       disabled={disabled}
-      value={text}
       placeholder={placeholder}
       title={title}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          (e.target as HTMLInputElement).blur();
-        }
+      showIcon
+      minIso={minIso}
+      maxIso={maxIso}
+      inputClassName="w-auto min-w-[72px]"
+      onChangeIso={(next) => {
+        if (next === toDateOnlyIso(iso)) return;
+        onCommit(next);
       }}
-      className="w-[72px] rounded border border-line px-1.5 py-1 text-center text-[12px] tabular-nums disabled:opacity-50"
     />
   );
 }
@@ -484,7 +436,7 @@ export function AdminOrderList({
           if (order.status !== "CANCELLED") return false;
         }
       }
-      if (orderDate && order.orderDate !== orderDate) return false;
+      if (orderDate && !mdMatches(order.orderDate, orderDate)) return false;
       if (
         q &&
         !order.orderNumber.toLowerCase().includes(q) &&
@@ -595,11 +547,14 @@ export function AdminOrderList({
               <option value="발송완료">발송완료</option>
               <option value="취소">취소</option>
             </select>
-            <input
-              type="date"
-              value={orderDate}
-              onChange={(e) => setOrderDate(e.target.value)}
-              className="rounded-[7px] border border-line bg-white px-2.5 py-2 text-sm"
+            <MdCalendarPicker
+              valueMd={orderDate}
+              allowClear
+              placeholder="m/d"
+              title="주문일자 (월/일)"
+              inputClassName="h-auto min-h-[38px] rounded-[7px] px-2.5 py-2 text-sm"
+              onChangeMd={(md) => setOrderDate(md)}
+              onClear={() => setOrderDate("")}
             />
             <input
               type="text"
@@ -810,6 +765,8 @@ export function AdminOrderList({
                                   null
                                 }
                                 title="출고요청일 (m/d)"
+                                minIso={todayIsoDate()}
+                                maxIso={maxShip || undefined}
                                 onCommit={(v) => {
                                   const min = todayIsoDate();
                                   if (v < min || (maxShip && v > maxShip)) {
