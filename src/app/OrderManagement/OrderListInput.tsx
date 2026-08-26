@@ -144,18 +144,46 @@ interface ProductLineItem {
   greeting: string;
   unitPrice: number;
   deliveryOnly: boolean;
+  /** 배달 주문 섹션: 박스 vs 선물세트(개). 택배는 giftUnit로 둠 */
+  lineSection: "box" | "giftUnit";
 }
 
 function orderKindLabel(kind: OrderType) {
   return kind === "delivery" ? "배달" : "택배";
 }
 
-/** 선물세트 + 품명에 '박스' 포함 → 배달 전용 */
+function isGiftSetCategory(category: string) {
+  const normalized = category.replace(/\s+/g, "");
+  return normalized === "선물세트" || normalized === "선물셋트";
+}
+
+/** 품명에 '박스' 포함 → ① 박스상품 */
+function isBoxProduct(productName: string) {
+  return productName.includes("박스");
+}
+
+/** 선물세트 + (개) → ② 선물세트 낱개 (박스는 ① 우선) */
+function isGiftUnitProduct(
+  category: string,
+  productName: string,
+  spec?: string | null,
+) {
+  if (isBoxProduct(productName)) {
+    return false;
+  }
+  return (
+    isGiftSetCategory(category) &&
+    (productName.includes("(개)") || (spec ?? "").includes("(개)"))
+  );
+}
+
+function inferLineSection(productName: string): "box" | "giftUnit" {
+  return isBoxProduct(productName) ? "box" : "giftUnit";
+}
+
+/** 선물세트 + 품명에 '박스' 포함 → 배달 전용 (택배 목록에서 제외) */
 function isDeliveryOnlyProduct(category: string, productName: string) {
-  const normalizedCategory = category.replace(/\s+/g, "");
-  const isGiftSet =
-    normalizedCategory === "선물세트" || normalizedCategory === "선물셋트";
-  return isGiftSet && productName.includes("박스");
+  return isGiftSetCategory(category) && productName.includes("박스");
 }
 
 interface OrderRow {
@@ -1252,6 +1280,7 @@ function ProductAddDialog({
   onAddItems,
   defaultOrderKind,
   openStockOnly = false,
+  mode = "all",
 }: {
   open: boolean;
   onClose: () => void;
@@ -1262,11 +1291,14 @@ function ProductAddDialog({
       note: string;
       unitPrice: number;
       deliveryOnly: boolean;
+      lineSection: "box" | "giftUnit";
     }>,
   ) => void;
   defaultOrderKind: OrderType;
   /** 개인회원 제품주문서: openStock=true 상품만 */
   openStockOnly?: boolean;
+  /** all=택배 통합 / box=①박스 / giftUnit=②선물세트(개) */
+  mode?: "all" | "box" | "giftUnit";
 }) {
   const [catalog, setCatalog] = useState<StockCatalogItem[]>([]);
   const [quantities, setQuantities] = useState<Record<number, number>>({});
@@ -1285,6 +1317,8 @@ function ProductAddDialog({
     const loadCatalog = async () => {
       setIsLoading(true);
       setLoadError("");
+      setKeyword("");
+      setCategoryFilter("all");
 
       try {
         const response = await apiFetch(
@@ -1331,14 +1365,25 @@ function ProductAddDialog({
     const normalizedKeyword = keyword.trim().toLowerCase();
 
     return catalog.filter((item) => {
-      if (categoryFilter !== "all" && item.category !== categoryFilter) {
-        return false;
-      }
-      // 택배 주문에서는 배달 전용(선물세트 박스) 상품 제외
-      if (
+      if (mode === "box") {
+        if (!isBoxProduct(item.productName)) {
+          return false;
+        }
+      } else if (mode === "giftUnit") {
+        if (
+          !isGiftUnitProduct(item.category, item.productName, item.spec)
+        ) {
+          return false;
+        }
+      } else if (
         defaultOrderKind === "parcel" &&
         isDeliveryOnlyProduct(item.category, item.productName)
       ) {
+        // 택배 통합: 배달 전용(선물세트 박스) 제외
+        return false;
+      }
+
+      if (mode === "all" && categoryFilter !== "all" && item.category !== categoryFilter) {
         return false;
       }
       if (!normalizedKeyword) {
@@ -1350,19 +1395,32 @@ function ProductAddDialog({
         (item.spec ?? "").toLowerCase().includes(normalizedKeyword)
       );
     });
-  }, [catalog, keyword, categoryFilter, defaultOrderKind]);
+  }, [catalog, keyword, categoryFilter, defaultOrderKind, mode]);
 
   const selectedItems = useMemo(() => {
     return catalog
       .filter((item) => (quantities[item.id] ?? 0) > 0)
-      .map((item) => ({
-        product: item.productName,
-        qty: quantities[item.id] ?? 0,
-        note: "",
-        unitPrice: item.wholesalePrice,
-        deliveryOnly: isDeliveryOnlyProduct(item.category, item.productName),
-      }));
-  }, [catalog, quantities]);
+      .map((item) => {
+        const deliveryOnly = isDeliveryOnlyProduct(
+          item.category,
+          item.productName,
+        );
+        const lineSection: "box" | "giftUnit" =
+          mode === "box"
+            ? "box"
+            : mode === "giftUnit"
+              ? "giftUnit"
+              : inferLineSection(item.productName);
+        return {
+          product: item.productName,
+          qty: quantities[item.id] ?? 0,
+          note: "",
+          unitPrice: item.wholesalePrice,
+          deliveryOnly,
+          lineSection,
+        };
+      });
+  }, [catalog, quantities, mode]);
 
   const selectedQtyTotal = selectedItems.reduce((sum, item) => sum + item.qty, 0);
   const selectedPriceTotal = selectedItems.reduce(
@@ -1386,10 +1444,17 @@ function ProductAddDialog({
     onClose();
   };
 
+  const dialogTitle =
+    mode === "box"
+      ? "박스상품 추가"
+      : mode === "giftUnit"
+        ? "선물세트 낱개 추가"
+        : "상품 추가";
+
   return (
     <Dialog
       open={open}
-      title="상품 추가"
+      title={dialogTitle}
       onClose={onClose}
       className="max-w-lg"
     >
@@ -1399,20 +1464,31 @@ function ProductAddDialog({
           <span className="font-semibold text-ink">
             {orderKindLabel(defaultOrderKind)}
           </span>{" "}
-          (현재 배달/택배 탭 기준)
+          {mode === "box"
+            ? "· 박스 상품만 표시"
+            : mode === "giftUnit"
+              ? "· 선물세트 (개)만 표시"
+              : "(현재 배달/택배 탭 기준)"}
         </p>
 
-        <div className="grid gap-2 min-[480px]:grid-cols-[140px_1fr]">
-          <select
-            aria-label="구분 필터"
-            value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value)}
-            className="min-h-9 w-full rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
-          >
-            <option value="all">전체</option>
-            <option value="선물세트">선물세트</option>
-            <option value="일반품">일반품</option>
-          </select>
+        <div
+          className={cn(
+            "grid gap-2",
+            mode === "all" ? "min-[480px]:grid-cols-[140px_1fr]" : "",
+          )}
+        >
+          {mode === "all" ? (
+            <select
+              aria-label="구분 필터"
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              className="min-h-9 w-full rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            >
+              <option value="all">전체</option>
+              <option value="선물세트">선물세트</option>
+              <option value="일반품">일반품</option>
+            </select>
+          ) : null}
           <input
             type="search"
             value={keyword}
@@ -2059,6 +2135,9 @@ function ProductOrderPanel({
   const [orderType, setOrderType] = useState<OrderType | null>(null);
   const [productItems, setProductItems] = useState<ProductLineItem[]>([]);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
+  const [productDialogMode, setProductDialogMode] = useState<
+    "all" | "box" | "giftUnit"
+  >("all");
   const [ordererName, setOrdererName] = useState("");
   const [ordererPhone, setOrdererPhone] = useState("");
   const [orderDate, setOrderDate] = useState(() => todayDateValue());
@@ -2421,6 +2500,7 @@ function ProductOrderPanel({
               Object.values(greetingMap).find(
                 (draft) => draft.productName === item.productName,
               );
+            const lineSection = inferLineSection(item.productName);
             return {
               product: item.productName,
               orderKind,
@@ -2432,7 +2512,8 @@ function ProductOrderPanel({
               ),
               greeting: matched?.id ? "인사장보기" : "",
               unitPrice: item.price || 0,
-              deliveryOnly: false,
+              deliveryOnly: lineSection === "box",
+              lineSection,
             };
           }),
         );
@@ -2479,6 +2560,7 @@ function ProductOrderPanel({
       note: string;
       unitPrice: number;
       deliveryOnly: boolean;
+      lineSection: "box" | "giftUnit";
     }>,
   ) => {
     if (!orderType) {
@@ -2511,6 +2593,7 @@ function ProductOrderPanel({
             unitPrice: item.unitPrice,
             orderKind: selectedOrderType,
             deliveryOnly: existing.deliveryOnly || item.deliveryOnly,
+            lineSection: item.lineSection,
           };
         } else {
           next.push({
@@ -2523,6 +2606,7 @@ function ProductOrderPanel({
               ? "인사장보기"
               : "",
             deliveryOnly: item.deliveryOnly,
+            lineSection: item.lineSection,
           });
         }
       }
@@ -2720,12 +2804,15 @@ function ProductOrderPanel({
       onUnsavedGreetingResolved?.();
     }
 
-    const productsWithGreeting = productItems.filter((item) =>
+    const giftUnitItems = productItems.filter(
+      (item) => item.lineSection !== "box",
+    );
+    const productsWithGreeting = giftUnitItems.filter((item) =>
       Boolean(savedGreetingsByProduct[item.product]),
     );
     if (
       productsWithGreeting.length > 0 &&
-      productsWithGreeting.length < productItems.length
+      productsWithGreeting.length < giftUnitItems.length
     ) {
       setAlertDialog({
         open: true,
@@ -2973,100 +3060,111 @@ function ProductOrderPanel({
     }
   };
 
-  const productColumns: TableColumn<ProductLineItem>[] = [
-    {
-      key: "product",
-      header: "상품명",
-      render: (row) => <span className="font-medium text-ink">{row.product}</span>,
-    },
-    {
-      key: "qty",
-      header: "수량",
-      className: "w-[88px] px-1 py-0",
-      render: (row) => {
-        const rowIndex = productItems.indexOf(row);
-        if (rowIndex < 0) {
-          return row.qty;
-        }
-
-        return (
-          <input
-            type="number"
-            min={1}
-            required
-            aria-label={`${row.product} 수량`}
-            value={row.qty}
-            onChange={(event) => {
-              const nextQty = Number(event.target.value);
-              if (!Number.isNaN(nextQty)) {
-                updateProductQty(rowIndex, nextQty);
-              }
-            }}
-            className="mx-auto block h-8 w-16 rounded border border-[#cbd5e1] bg-white px-1 text-center text-sm text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-        );
+  const buildProductColumns = (
+    includeGreeting: boolean,
+  ): TableColumn<ProductLineItem>[] => {
+    const cols: TableColumn<ProductLineItem>[] = [
+      {
+        key: "product",
+        header: "상품명",
+        render: (row) => (
+          <span className="font-medium text-ink">{row.product}</span>
+        ),
       },
-    },
-    {
-      key: "unitPrice",
-      header: "단가",
-      className: "w-[96px]",
-      render: (row) => formatPrice(row.unitPrice || 0),
-    },
-    {
-      key: "note",
-      header: "요청사항",
-      render: (row) => row.note || <span className="text-[#94a3b8]">-</span>,
-    },
-    {
-      key: "greeting",
-      header: "인사장",
-      className: "w-[140px]",
-      render: (row) => {
-        const draft = savedGreetingsByProduct[row.product];
-        const isSaved = Boolean(draft);
+      {
+        key: "qty",
+        header: "수량",
+        className: "w-[88px] px-1 py-0",
+        render: (row) => {
+          const rowIndex = productItems.indexOf(row);
+          if (rowIndex < 0) {
+            return row.qty;
+          }
 
-        return (
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              size="sm"
-              className={cn(
-                "h-8 px-2 text-xs",
-                isSaved
-                  ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A] hover:bg-[#c6e6c6]"
-                  : "border-green bg-green text-white hover:bg-[#128a52]",
-              )}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (isSaved) {
-                  setViewingGreetingProduct(row.product);
-                  setIsGreetingViewOpen(true);
-                  return;
+          return (
+            <input
+              type="number"
+              min={1}
+              required
+              aria-label={`${row.product} 수량`}
+              value={row.qty}
+              onChange={(event) => {
+                const nextQty = Number(event.target.value);
+                if (!Number.isNaN(nextQty)) {
+                  updateProductQty(rowIndex, nextQty);
                 }
-                openGreetingForm(row.product);
               }}
-            >
-              {isSaved ? "인사장보기" : "인사장주문"}
-            </Button>
-            {isSaved ? (
-              <button
+              className="mx-auto block h-8 w-16 rounded border border-[#cbd5e1] bg-white px-1 text-center text-sm text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          );
+        },
+      },
+      {
+        key: "unitPrice",
+        header: "단가",
+        className: "w-[96px]",
+        render: (row) => formatPrice(row.unitPrice || 0),
+      },
+      {
+        key: "note",
+        header: "요청사항",
+        render: (row) =>
+          row.note || <span className="text-[#94a3b8]">-</span>,
+      },
+    ];
+
+    if (includeGreeting) {
+      cols.push({
+        key: "greeting",
+        header: "인사장",
+        className: "w-[140px]",
+        render: (row) => {
+          const draft = savedGreetingsByProduct[row.product];
+          const isSaved = Boolean(draft);
+
+          return (
+            <div className="flex items-center gap-1">
+              <Button
                 type="button"
-                aria-label={`${row.product} 인사장 제거`}
-                className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
+                size="sm"
+                className={cn(
+                  "h-8 px-2 text-xs",
+                  isSaved
+                    ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A] hover:bg-[#c6e6c6]"
+                    : "border-green bg-green text-white hover:bg-[#128a52]",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
-                  onRemoveGreeting?.(row.product);
+                  if (isSaved) {
+                    setViewingGreetingProduct(row.product);
+                    setIsGreetingViewOpen(true);
+                    return;
+                  }
+                  openGreetingForm(row.product);
                 }}
               >
-                <X className="size-4" strokeWidth={2.5} />
-              </button>
-            ) : null}
-          </div>
-        );
-      },
-    },
-    {
+                {isSaved ? "인사장보기" : "인사장주문"}
+              </Button>
+              {isSaved ? (
+                <button
+                  type="button"
+                  aria-label={`${row.product} 인사장 제거`}
+                  className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRemoveGreeting?.(row.product);
+                  }}
+                >
+                  <X className="size-4" strokeWidth={2.5} />
+                </button>
+              ) : null}
+            </div>
+          );
+        },
+      });
+    }
+
+    cols.push({
       key: "action",
       header: "",
       className: "w-[44px] px-1",
@@ -3087,8 +3185,13 @@ function ProductOrderPanel({
           </button>
         );
       },
-    },
-  ];
+    });
+
+    return cols;
+  };
+
+  const productColumns = buildProductColumns(true);
+  const boxProductColumns = buildProductColumns(false);
 
   if (isHydrating) {
     return (
@@ -3106,8 +3209,17 @@ function ProductOrderPanel({
     );
   }
 
+  const boxProductItems = productItems.filter(
+    (item) => item.lineSection === "box",
+  );
+  const giftUnitProductItems = productItems.filter(
+    (item) => item.lineSection !== "box",
+  );
+
   const editorName = getAuthUser()?.name?.trim() || getAuthUser()?.username || "—";
-  const greetingTargetProducts = productItems.map((item) => item.product);
+  const greetingTargetProducts = (
+    isDelivery ? giftUnitProductItems : productItems
+  ).map((item) => item.product);
   const greetingCountOnProducts = greetingTargetProducts.filter(
     (name) => savedGreetingsByProduct[name],
   ).length;
@@ -3422,173 +3534,463 @@ function ProductOrderPanel({
       )}
 
       {/* Products */}
-      <div className="mb-4">
-        <div className="mb-2.5 flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={!orderType}
-            onClick={() => {
-              if (!orderType) {
-                setAlertDialog({
-                  open: true,
-                  message: "배달 또는 택배를 먼저 선택해 주세요.",
-                });
-                return;
-              }
-              setIsProductDialogOpen(true);
-            }}
-            className={cn(
-              "rounded-lg px-3 py-2 text-[12.5px] font-bold",
-              orderType
-                ? "bg-[#1A365D] text-white"
-                : "cursor-not-allowed bg-[#CBD5E0] text-white",
-            )}
-          >
-            + 상품추가
-          </button>
-          <button
-            type="button"
-            disabled={!orderType || productItems.length === 0}
-            onClick={handleApplyInsaAll}
-            className={cn(
-              "rounded-lg px-3 py-2 text-[12.5px] font-bold",
-              orderType && productItems.length > 0
-                ? "bg-[#EBF4FD] text-[#3182CE]"
-                : "cursor-not-allowed bg-[#EDF2F7] text-[#A0AEC0]",
-            )}
-          >
-            인사장주문 동일적용
-          </button>
-        </div>
-        {productItems.length > 0 ? (
-          <p className="mb-2 text-[11px] text-[#64748B]">
-            총 {productItems.length}건 · 수량{" "}
-            {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
-            <span className="font-bold text-[#1A202C]">
-              {formatPrice(productListTotal)}
-            </span>
-          </p>
-        ) : null}
-
-        {isWideProductList ? (
-          <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
-            <Table
-              caption="제품 주문 상품 목록"
-              columns={productColumns}
-              data={productItems}
-              emptyMessage="등록된 상품이 없습니다. 「+ 상품추가」로 추가해 주세요."
-              scrollable={!isDesktop}
-              visibleRows={isDesktop ? undefined : 4}
-            />
-          </div>
-        ) : productItems.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
-            등록된 상품이 없습니다. 「+ 상품추가」로 추가해 주세요.
-          </p>
-        ) : (
-          <ul className="space-y-2.5">
-            {productItems.map((row, rowIndex) => {
-              const draft = savedGreetingsByProduct[row.product];
-              const isSaved = Boolean(draft);
-
-              return (
-                <li
-                  key={`${row.product}-${rowIndex}`}
-                  className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
+      <div className="mb-4 space-y-3">
+        {isDelivery ? (
+          <>
+            {/* ① 박스상품 */}
+            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-[13px] font-bold text-[#1A202C]">
+                  ① 박스 상품
+                </h4>
+                <button
+                  type="button"
+                  disabled={!orderType}
+                  onClick={() => {
+                    if (!orderType) {
+                      setAlertDialog({
+                        open: true,
+                        message: "배달 또는 택배를 먼저 선택해 주세요.",
+                      });
+                      return;
+                    }
+                    setProductDialogMode("box");
+                    setIsProductDialogOpen(true);
+                  }}
+                  className={cn(
+                    "rounded-lg border border-[#CBD5E0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1A365D]",
+                    !orderType && "cursor-not-allowed opacity-50",
+                  )}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
-                      {row.product}
-                    </p>
-                    <button
-                      type="button"
-                      aria-label={`${row.product} 삭제`}
-                      onClick={() => removeProductItem(rowIndex)}
-                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-2 gap-2.5">
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-                        수량
-                      </span>
-                      <input
-                        type="number"
-                        min={1}
-                        required
-                        aria-label={`${row.product} 수량`}
-                        value={row.qty}
-                        onChange={(event) => {
-                          const nextQty = Number(event.target.value);
-                          if (!Number.isNaN(nextQty)) {
-                            updateProductQty(rowIndex, nextQty);
-                          }
-                        }}
-                        className="h-9 w-full rounded-md border border-[#E2E8F0] bg-white px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                      />
-                    </label>
-                    <div>
-                      <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-                        단가
-                      </span>
-                      <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
-                        {formatPrice(row.unitPrice || 0)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
-                    <span className="text-[11px] font-bold text-[#64748B]">
-                      인사장
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
-                          isSaved
-                            ? "bg-[#DCF0DC] text-[#2F855A]"
-                            : "bg-[#EDF2F7] text-[#64748B]",
-                        )}
-                        onClick={() => {
-                          if (isSaved) {
-                            setViewingGreetingProduct(row.product);
-                            setIsGreetingViewOpen(true);
-                            return;
-                          }
-                          openGreetingForm(row.product);
-                        }}
+                  + 박스상품 추가
+                </button>
+              </div>
+              {isWideProductList ? (
+                <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
+                  <Table
+                    caption="박스 상품 목록"
+                    columns={boxProductColumns}
+                    data={boxProductItems}
+                    emptyMessage="박스단위로만 주문 가능합니다 (인사장 없음). '+ 박스상품 추가'로 담아주세요."
+                    scrollable={!isDesktop}
+                    visibleRows={isDesktop ? undefined : 4}
+                  />
+                </div>
+              ) : boxProductItems.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
+                  박스단위로만 주문 가능합니다 (인사장 없음). &apos;+ 박스상품
+                  추가&apos;로 담아주세요.
+                </p>
+              ) : (
+                <ul className="space-y-2.5">
+                  {boxProductItems.map((row) => {
+                    const rowIndex = productItems.indexOf(row);
+                    return (
+                      <li
+                        key={`box-${row.product}-${rowIndex}`}
+                        className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
                       >
-                        {isSaved ? "인사장보기" : "인사장주문"}
-                      </button>
-                      {isSaved ? (
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
+                            {row.product}
+                          </p>
+                          <button
+                            type="button"
+                            aria-label={`${row.product} 삭제`}
+                            onClick={() => removeProductItem(rowIndex)}
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2.5">
+                          <label className="block">
+                            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+                              수량
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              required
+                              aria-label={`${row.product} 수량`}
+                              value={row.qty}
+                              onChange={(event) => {
+                                const nextQty = Number(event.target.value);
+                                if (!Number.isNaN(nextQty)) {
+                                  updateProductQty(rowIndex, nextQty);
+                                }
+                              }}
+                              className="h-9 w-full rounded-md border border-[#E2E8F0] bg-white px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                          </label>
+                          <div>
+                            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+                              단가
+                            </span>
+                            <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
+                              {formatPrice(row.unitPrice || 0)}
+                            </p>
+                          </div>
+                        </div>
+                        {row.note ? (
+                          <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
+                            <span className="font-semibold text-[#64748B]">
+                              요청사항 ·{" "}
+                            </span>
+                            {row.note}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {/* ② 선물세트 (인사장 주문) */}
+            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-[13px] font-bold text-[#1A202C]">
+                  ② 선물세트 (인사장 주문)
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={!orderType}
+                    onClick={() => {
+                      if (!orderType) {
+                        setAlertDialog({
+                          open: true,
+                          message: "배달 또는 택배를 먼저 선택해 주세요.",
+                        });
+                        return;
+                      }
+                      setProductDialogMode("giftUnit");
+                      setIsProductDialogOpen(true);
+                    }}
+                    className={cn(
+                      "rounded-lg border border-[#9AE6B4] bg-[#F0FFF4] px-3 py-2 text-[12.5px] font-bold text-[#276749]",
+                      !orderType && "cursor-not-allowed opacity-50",
+                    )}
+                  >
+                    + 선물세트 낱개 추가
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!orderType || giftUnitProductItems.length === 0}
+                    onClick={handleApplyInsaAll}
+                    className={cn(
+                      "rounded-lg px-3 py-2 text-[12.5px] font-bold",
+                      orderType && giftUnitProductItems.length > 0
+                        ? "bg-[#EBF4FD] text-[#3182CE]"
+                        : "cursor-not-allowed bg-[#EDF2F7] text-[#A0AEC0]",
+                    )}
+                  >
+                    인사장주문 동일적용
+                  </button>
+                </div>
+              </div>
+              {isWideProductList ? (
+                <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
+                  <Table
+                    caption="선물세트 낱개 상품 목록"
+                    columns={productColumns}
+                    data={giftUnitProductItems}
+                    emptyMessage="선물세트 낱개 상품만 검색·주문할 수 있습니다. '+ 선물세트 낱개 추가'로 담아주세요."
+                    scrollable={!isDesktop}
+                    visibleRows={isDesktop ? undefined : 4}
+                  />
+                </div>
+              ) : giftUnitProductItems.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
+                  선물세트 낱개 상품만 검색·주문할 수 있습니다. &apos;+
+                  선물세트 낱개 추가&apos;로 담아주세요.
+                </p>
+              ) : (
+                <ul className="space-y-2.5">
+                  {giftUnitProductItems.map((row) => {
+                    const rowIndex = productItems.indexOf(row);
+                    const draft = savedGreetingsByProduct[row.product];
+                    const isSaved = Boolean(draft);
+                    return (
+                      <li
+                        key={`gift-${row.product}-${rowIndex}`}
+                        className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
+                            {row.product}
+                          </p>
+                          <button
+                            type="button"
+                            aria-label={`${row.product} 삭제`}
+                            onClick={() => removeProductItem(rowIndex)}
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2.5">
+                          <label className="block">
+                            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+                              수량
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              required
+                              aria-label={`${row.product} 수량`}
+                              value={row.qty}
+                              onChange={(event) => {
+                                const nextQty = Number(event.target.value);
+                                if (!Number.isNaN(nextQty)) {
+                                  updateProductQty(rowIndex, nextQty);
+                                }
+                              }}
+                              className="h-9 w-full rounded-md border border-[#E2E8F0] bg-white px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                          </label>
+                          <div>
+                            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+                              단가
+                            </span>
+                            <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
+                              {formatPrice(row.unitPrice || 0)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
+                          <span className="text-[11px] font-bold text-[#64748B]">
+                            인사장
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              className={cn(
+                                "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+                                isSaved
+                                  ? "bg-[#DCF0DC] text-[#2F855A]"
+                                  : "bg-[#EDF2F7] text-[#64748B]",
+                              )}
+                              onClick={() => {
+                                if (isSaved) {
+                                  setViewingGreetingProduct(row.product);
+                                  setIsGreetingViewOpen(true);
+                                  return;
+                                }
+                                openGreetingForm(row.product);
+                              }}
+                            >
+                              {isSaved ? "인사장보기" : "인사장주문"}
+                            </button>
+                            {isSaved ? (
+                              <button
+                                type="button"
+                                aria-label={`${row.product} 인사장 제거`}
+                                className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
+                                onClick={() => onRemoveGreeting?.(row.product)}
+                              >
+                                <X className="size-4" strokeWidth={2.5} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        {row.note ? (
+                          <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
+                            <span className="font-semibold text-[#64748B]">
+                              요청사항 ·{" "}
+                            </span>
+                            {row.note}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {productItems.length > 0 ? (
+              <p className="text-[11px] text-[#64748B]">
+                총 {productItems.length}건 · 수량{" "}
+                {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
+                <span className="font-bold text-[#1A202C]">
+                  {formatPrice(productListTotal)}
+                </span>
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <div className="mb-2.5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!orderType}
+                onClick={() => {
+                  if (!orderType) {
+                    setAlertDialog({
+                      open: true,
+                      message: "배달 또는 택배를 먼저 선택해 주세요.",
+                    });
+                    return;
+                  }
+                  setProductDialogMode("all");
+                  setIsProductDialogOpen(true);
+                }}
+                className={cn(
+                  "rounded-lg px-3 py-2 text-[12.5px] font-bold",
+                  orderType
+                    ? "bg-[#1A365D] text-white"
+                    : "cursor-not-allowed bg-[#CBD5E0] text-white",
+                )}
+              >
+                + 상품추가
+              </button>
+              <button
+                type="button"
+                disabled={!orderType || productItems.length === 0}
+                onClick={handleApplyInsaAll}
+                className={cn(
+                  "rounded-lg px-3 py-2 text-[12.5px] font-bold",
+                  orderType && productItems.length > 0
+                    ? "bg-[#EBF4FD] text-[#3182CE]"
+                    : "cursor-not-allowed bg-[#EDF2F7] text-[#A0AEC0]",
+                )}
+              >
+                인사장주문 동일적용
+              </button>
+            </div>
+            {productItems.length > 0 ? (
+              <p className="mb-2 text-[11px] text-[#64748B]">
+                총 {productItems.length}건 · 수량{" "}
+                {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
+                <span className="font-bold text-[#1A202C]">
+                  {formatPrice(productListTotal)}
+                </span>
+              </p>
+            ) : null}
+
+            {isWideProductList ? (
+              <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
+                <Table
+                  caption="제품 주문 상품 목록"
+                  columns={productColumns}
+                  data={productItems}
+                  emptyMessage="등록된 상품이 없습니다. 「+ 상품추가」로 추가해 주세요."
+                  scrollable={!isDesktop}
+                  visibleRows={isDesktop ? undefined : 4}
+                />
+              </div>
+            ) : productItems.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
+                등록된 상품이 없습니다. 「+ 상품추가」로 추가해 주세요.
+              </p>
+            ) : (
+              <ul className="space-y-2.5">
+                {productItems.map((row, rowIndex) => {
+                  const draft = savedGreetingsByProduct[row.product];
+                  const isSaved = Boolean(draft);
+
+                  return (
+                    <li
+                      key={`${row.product}-${rowIndex}`}
+                      className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
+                          {row.product}
+                        </p>
                         <button
                           type="button"
-                          aria-label={`${row.product} 인사장 제거`}
-                          className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
-                          onClick={() => onRemoveGreeting?.(row.product)}
+                          aria-label={`${row.product} 삭제`}
+                          onClick={() => removeProductItem(rowIndex)}
+                          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
                         >
-                          <X className="size-4" strokeWidth={2.5} />
+                          <Trash2 className="size-4" />
                         </button>
-                      ) : null}
-                    </div>
-                  </div>
+                      </div>
 
-                  {row.note ? (
-                    <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
-                      <span className="font-semibold text-[#64748B]">
-                        요청사항 ·{" "}
-                      </span>
-                      {row.note}
-                    </p>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                      <div className="mt-3 grid grid-cols-2 gap-2.5">
+                        <label className="block">
+                          <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+                            수량
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            required
+                            aria-label={`${row.product} 수량`}
+                            value={row.qty}
+                            onChange={(event) => {
+                              const nextQty = Number(event.target.value);
+                              if (!Number.isNaN(nextQty)) {
+                                updateProductQty(rowIndex, nextQty);
+                              }
+                            }}
+                            className="h-9 w-full rounded-md border border-[#E2E8F0] bg-white px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                        </label>
+                        <div>
+                          <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+                            단가
+                          </span>
+                          <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
+                            {formatPrice(row.unitPrice || 0)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
+                        <span className="text-[11px] font-bold text-[#64748B]">
+                          인사장
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+                              isSaved
+                                ? "bg-[#DCF0DC] text-[#2F855A]"
+                                : "bg-[#EDF2F7] text-[#64748B]",
+                            )}
+                            onClick={() => {
+                              if (isSaved) {
+                                setViewingGreetingProduct(row.product);
+                                setIsGreetingViewOpen(true);
+                                return;
+                              }
+                              openGreetingForm(row.product);
+                            }}
+                          >
+                            {isSaved ? "인사장보기" : "인사장주문"}
+                          </button>
+                          {isSaved ? (
+                            <button
+                              type="button"
+                              aria-label={`${row.product} 인사장 제거`}
+                              className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
+                              onClick={() => onRemoveGreeting?.(row.product)}
+                            >
+                              <X className="size-4" strokeWidth={2.5} />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {row.note ? (
+                        <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
+                          <span className="font-semibold text-[#64748B]">
+                            요청사항 ·{" "}
+                          </span>
+                          {row.note}
+                        </p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
         )}
       </div>
 
@@ -3654,6 +4056,7 @@ function ProductOrderPanel({
         open={isProductDialogOpen && orderType !== null}
         defaultOrderKind={orderType ?? "delivery"}
         openStockOnly={openStockOnly}
+        mode={productDialogMode}
         onClose={() => setIsProductDialogOpen(false)}
         onAddItems={addProductItems}
       />
