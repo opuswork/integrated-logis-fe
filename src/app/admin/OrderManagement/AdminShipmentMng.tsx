@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
+import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { canPressShipmentFinalActions, canWriteShipmentOps, getAuthUser } from "@/lib/auth";
@@ -15,6 +16,8 @@ import {
   type ShipmentOpsOrder,
 } from "@/lib/shipment-ops";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 15;
 
 function YnBadge({ yes }: { yes: boolean }) {
   return (
@@ -90,6 +93,7 @@ export function AdminShipmentMng() {
   const [storeFilter, setStoreFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [workerFilter, setWorkerFilter] = useState("all");
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) {
@@ -157,6 +161,17 @@ export function AdminShipmentMng() {
       return true;
     });
   }, [rows, storeFilter, statusFilter, workerFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [storeFilter, statusFilter, workerFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   const urgentCount = filtered.filter(isUrgent).length;
 
@@ -289,7 +304,7 @@ export function AdminShipmentMng() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => {
+                {pageRows.map((row) => {
                   const urgent = isUrgent(row);
                   const greetingYes =
                     row.greetingCount === 0 ? null : row.greetingDone;
@@ -478,7 +493,15 @@ export function AdminShipmentMng() {
               <p className="py-8 text-center text-sm text-[#64748B]">
                 표시할 주문이 없습니다.
               </p>
-            ) : null}
+            ) : (
+              <div className="mt-3 flex justify-center">
+                <Pagination
+                  page={safePage}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
