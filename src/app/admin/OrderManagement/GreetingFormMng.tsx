@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
+import { formatMonthDayTime } from "@/lib/date-format";
 import { API_BASE_URL } from "@/lib/env";
 import { cn } from "@/lib/utils";
 
@@ -67,14 +68,6 @@ function resolveImageUrl(url: string) {
     return url;
   }
   return `${API_BASE_URL}${url.startsWith("/") ? url : `/${url}`}`;
-}
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString("ko-KR");
 }
 
 function formatDate(value: string) {
@@ -280,7 +273,7 @@ export function GreetingFormMng() {
               specialNote: item.specialNote?.trim() || "-",
               businessCard: item.businessCard?.trim() || "선택하세요",
               imageUrl: item.imageUrl,
-              createdAt: formatDateTime(item.createdAt),
+              createdAt: formatMonthDayTime(item.createdAt),
               createdDate: formatDate(item.createdAt),
             };
           }),

@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { canPressShipmentFinalActions, canWriteShipmentOps, getAuthUser } from "@/lib/auth";
+import { formatMonthDay } from "@/lib/date-format";
 import {
   mapShipmentOpsOrder,
   parseApiErrorMessage,
@@ -353,13 +355,14 @@ export function AdminShipmentMng() {
                       <td className="px-2 py-2">{row.productSummary}</td>
                       <td className="px-2 py-2">{row.quantity}</td>
                       <td className="px-2 py-2">
-                        <input
-                          type="date"
-                          min={todayIsoDate()}
+                        <MdCalendarPicker
+                          valueIso={row.requestedShipDate}
+                          yearHint={row.requestedShipDate}
+                          minIso={todayIsoDate()}
                           disabled={!canOperate || savingId === `d-${row.id}`}
-                          value={row.requestedShipDate ?? ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
+                          title="출고요청일 (m/d)"
+                          inputClassName="rounded border border-[#E2E8F0] px-1.5 py-1 text-[12px] disabled:opacity-50"
+                          onChangeIso={(v) => {
                             if (!v) return;
                             void runOp(
                               row.id,
@@ -367,7 +370,6 @@ export function AdminShipmentMng() {
                               `d-${row.id}`,
                             );
                           }}
-                          className="rounded border border-[#E2E8F0] px-1.5 py-1 text-[12px] disabled:opacity-50"
                         />
                       </td>
                       <td className="px-2 py-2">{row.loadType}</td>
@@ -397,9 +399,7 @@ export function AdminShipmentMng() {
                         )}
                       </td>
                       <td className="px-2 py-2">
-                        {row.releaseDoneAt
-                          ? row.releaseDoneAt.slice(0, 10).replaceAll("-", ".")
-                          : "—"}
+                        {formatMonthDay(row.releaseDoneAt)}
                       </td>
                       <td className="px-2 py-2">
                         {greetingYes === null ? (

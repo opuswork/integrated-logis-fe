@@ -27,6 +27,7 @@ import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, getAuthUser } from "@/lib/auth";
+import { formatMonthDay } from "@/lib/date-format";
 import { openDaumPostcode } from "@/lib/daum-postcode";
 import { API_BASE_URL } from "@/lib/env";
 import {
@@ -3363,14 +3364,16 @@ function ProductOrderPanel({
 
         <div className="flex gap-3">
           <div className="flex-1">
-            <label className={omLabelClass}>주문자일자</label>
-            <input
-              type="date"
-              value={orderDate}
-              readOnly
-              tabIndex={-1}
-              className={cn(omInputClass, "pointer-events-none bg-[#EDF2F7]")}
-            />
+            <label className={omLabelClass}>주문일자</label>
+            <div
+              className={cn(
+                omInputClass,
+                "pointer-events-none flex items-center bg-[#EDF2F7] tabular-nums",
+              )}
+              aria-readonly
+            >
+              {formatMonthDay(orderDate)}
+            </div>
           </div>
           <div className="flex-1">
             <ChurchSearchField
