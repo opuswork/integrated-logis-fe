@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
+import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
@@ -15,6 +16,8 @@ import {
   type ShipmentOpsOrder,
 } from "@/lib/shipment-ops";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 15;
 
 function CellBtn({
   children,
@@ -65,6 +68,7 @@ export function AdminReleaseMng() {
   const [storeFilter, setStoreFilter] = useState("");
   const [packFilter, setPackFilter] = useState("");
   const [shipFilter, setShipFilter] = useState("");
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) {
@@ -121,6 +125,17 @@ export function AdminReleaseMng() {
       return true;
     });
   }, [rows, showAll, dateFilter, storeFilter, packFilter, shipFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [dateFilter, showAll, storeFilter, packFilter, shipFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   const packDoneCount = filtered.filter((r) => r.packDone).length;
 
@@ -282,7 +297,8 @@ export function AdminReleaseMng() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row, idx) => {
+                {pageRows.map((row, idx) => {
+                  const rowNumber = (safePage - 1) * PAGE_SIZE + idx + 1;
                   const releaseEnabled =
                     canOperate &&
                     row.packDone &&
@@ -294,7 +310,7 @@ export function AdminReleaseMng() {
                     !row.finalConfirmDone;
                   return (
                     <tr key={row.id} className="border-t border-[#E2E8F0]">
-                      <td className="px-2 py-2">{idx + 1}</td>
+                      <td className="px-2 py-2">{rowNumber}</td>
                       <td className="px-2 py-2">
                         {formatMonthDay(row.orderDate)}
                       </td>
@@ -390,7 +406,15 @@ export function AdminReleaseMng() {
               <p className="py-8 text-center text-sm text-[#64748B]">
                 표시할 주문이 없습니다.
               </p>
-            ) : null}
+            ) : (
+              <div className="mt-3 flex justify-center">
+                <Pagination
+                  page={safePage}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                />
+              </div>
+            )}
           </div>
         )}
         <div className="space-y-1 border-t border-[#E2E8F0] px-3 py-2 text-[11px] text-[#64748B]">

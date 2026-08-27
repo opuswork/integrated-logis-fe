@@ -12,6 +12,7 @@ import {
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { Button } from "@/components/ui/button";
 import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
+import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import {
@@ -38,6 +39,8 @@ import {
 import { cn } from "@/lib/utils";
 
 type PackagingWorker = "STORE" | "FACTORY" | null;
+
+const PAGE_SIZE = 15;
 
 type AdminOrderRow = {
   id: number;
@@ -277,6 +280,7 @@ export function AdminOrderList({
   const [statusFilter, setStatusFilter] = useState("all");
   const [orderDate, setOrderDate] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
   const [viewingOrderNumber, setViewingOrderNumber] = useState<string | null>(
     null,
   );
@@ -442,6 +446,17 @@ export function AdminOrderList({
     });
   }, [orders, regionFilter, statusFilter, orderDate, keyword]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [regionFilter, statusFilter, orderDate, keyword]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filteredOrders.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
   const patchChecklist = async (
     orderId: number,
     body: Record<string, unknown>,
@@ -598,7 +613,7 @@ export function AdminOrderList({
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.map((row) => {
+                {pageRows.map((row) => {
                   const mutable = canMutateRow(authUser, row);
                   const locked = !mutable;
                   const datesLocked =
@@ -924,7 +939,15 @@ export function AdminOrderList({
               <p className="py-8 text-center text-sm text-[#64748b]">
                 표시할 주문이 없습니다.
               </p>
-            ) : null}
+            ) : (
+              <div className="mt-3 flex justify-center">
+                <Pagination
+                  page={safePage}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                />
+              </div>
+            )}
           </div>
         )}
 
