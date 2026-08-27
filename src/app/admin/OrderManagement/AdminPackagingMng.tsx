@@ -5,9 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
+import { formatMonthDay } from "@/lib/date-format";
 import {
   SaveCancelledError,
   canvasToPngBlob,
@@ -276,9 +278,7 @@ export function AdminPackagingMng() {
             list.map((row) => (
               <tr key={row.id} className="border-t border-[#E2E8F0]">
                 <td className="px-2 py-2">
-                  {row.requestedShipDate
-                    ? row.requestedShipDate.replaceAll("-", ".")
-                    : "—"}
+                  {formatMonthDay(row.requestedShipDate)}
                 </td>
                 <td className="px-2 py-2 font-semibold text-[#1A365D]">
                   {detailLabel(row)}
@@ -301,17 +301,18 @@ export function AdminPackagingMng() {
                   />
                 </td>
                 <td className="overflow-visible whitespace-nowrap px-2 py-2 align-middle">
-                  <input
-                    type="date"
+                  <MdCalendarPicker
+                    valueIso={packDateDraft[row.id] ?? todayIsoDate()}
+                    yearHint={packDateDraft[row.id] ?? todayIsoDate()}
                     disabled={!canOperate}
-                    value={packDateDraft[row.id] ?? todayIsoDate()}
-                    onChange={(e) =>
+                    title="포장완료일 (m/d)"
+                    inputClassName="box-border h-8 min-h-8 min-w-[7rem] rounded border border-[#E2E8F0] px-2 text-[12px] leading-none"
+                    onChangeIso={(v) =>
                       setPackDateDraft((p) => ({
                         ...p,
-                        [row.id]: e.target.value,
+                        [row.id]: v,
                       }))
                     }
-                    className="box-border h-8 min-h-8 min-w-[9.5rem] rounded border border-[#E2E8F0] px-2 text-[12px] leading-none"
                   />
                 </td>
                 <td className="px-2 py-2">
@@ -427,9 +428,7 @@ export function AdminPackagingMng() {
                   preRows.map((row) => (
                     <tr key={row.id} className="border-t border-[#E2E8F0]">
                       <td className="px-2 py-2">
-                        {row.requestedShipDate
-                          ? row.requestedShipDate.replaceAll("-", ".")
-                          : "—"}
+                        {formatMonthDay(row.requestedShipDate)}
                       </td>
                       <td className="px-2 py-2 font-semibold text-[#1A365D]">
                         {detailLabel(row)}

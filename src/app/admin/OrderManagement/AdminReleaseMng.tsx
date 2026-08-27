@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
+import { formatMonthDay } from "@/lib/date-format";
 import {
   mapShipmentOpsOrder,
   parseApiErrorMessage,
@@ -171,14 +173,16 @@ export function AdminReleaseMng() {
             >
               ‹
             </button>
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => {
+            <MdCalendarPicker
+              valueIso={dateFilter}
+              yearHint={dateFilter}
+              title="출고요청일 검색 (m/d)"
+              inputClassName="rounded border border-[#E2E8F0] px-2 py-1 text-[13.5px] font-bold text-[#1A365D]"
+              onChangeIso={(v) => {
+                if (!v) return;
                 setShowAll(false);
-                setDateFilter(e.target.value);
+                setDateFilter(v);
               }}
-              className="rounded border border-[#E2E8F0] px-2 py-1 text-[13.5px] font-bold text-[#1A365D]"
             />
             <button
               type="button"
@@ -292,7 +296,7 @@ export function AdminReleaseMng() {
                     <tr key={row.id} className="border-t border-[#E2E8F0]">
                       <td className="px-2 py-2">{idx + 1}</td>
                       <td className="px-2 py-2">
-                        {row.orderDate.replaceAll("-", ".")}
+                        {formatMonthDay(row.orderDate)}
                       </td>
                       <td className="px-2 py-2">{row.storeLabel}</td>
                       <td className="px-2 py-2">{row.churchName}</td>
@@ -301,17 +305,13 @@ export function AdminReleaseMng() {
                       <td className="px-2 py-2">{row.productSummary}</td>
                       <td className="px-2 py-2">{row.quantity}</td>
                       <td className="px-2 py-2">
-                        {row.requestedShipDate
-                          ? row.requestedShipDate.replaceAll("-", ".")
-                          : "—"}
+                        {formatMonthDay(row.requestedShipDate)}
                       </td>
                       <td className="px-2 py-2">{row.loadType}</td>
                       <td className="px-2 py-2">{row.unitType}</td>
                       <td className="px-2 py-2">{row.specialNote}</td>
                       <td className="px-2 py-2">
-                        {row.packDate
-                          ? row.packDate.replaceAll("-", ".")
-                          : "—"}
+                        {formatMonthDay(row.packDate)}
                       </td>
                       <td className="px-2 py-2">
                         {row.packPt ? (

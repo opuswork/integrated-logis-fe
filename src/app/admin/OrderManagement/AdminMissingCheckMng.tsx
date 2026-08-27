@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
+import { formatMonthDay } from "@/lib/date-format";
 import {
   mapShipmentOpsOrder,
   type ShipmentOpsOrder,
@@ -18,10 +19,6 @@ import { cn } from "@/lib/utils";
 
 function formatInt(n: number) {
   return n.toLocaleString("ko-KR");
-}
-
-function formatOrderDate(iso: string) {
-  return iso.replaceAll("-", ".");
 }
 
 function missingReasons(row: ShipmentOpsOrder): string[] {
@@ -219,7 +216,7 @@ export function AdminMissingCheckMng() {
                 warnings.map(({ row, reasons }) => (
                   <tr key={row.id} className="border-b border-[#EEF1F5]">
                     <td className="px-4 py-2.5 tabular-nums text-[#64748B]">
-                      {formatOrderDate(row.orderDate)}
+                      {formatMonthDay(row.orderDate)}
                     </td>
                     <td className="px-4 py-2.5 font-semibold text-[#1A202C]">
                       {row.clientLabel}

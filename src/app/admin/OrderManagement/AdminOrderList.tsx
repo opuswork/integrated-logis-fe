@@ -22,6 +22,7 @@ import {
   type AdminRegion,
   type AuthUser,
 } from "@/lib/auth";
+import { formatMonthDay } from "@/lib/date-format";
 import {
   canEditOrderStatus,
   memberFacingStatusLabel,
@@ -104,13 +105,6 @@ function isParcelType(type: string, fulfillmentType: string | null) {
 
 function canMutateRow(user: AuthUser | null, row: AdminOrderRow) {
   return canWriteOrderChecklist(user, row.storeRegion);
-}
-
-function formatMdDate(iso: string | null | undefined) {
-  if (!iso || iso.length < 10) return "—";
-  const [, m, d] = iso.slice(0, 10).split("-");
-  if (!m || !d) return "—";
-  return `${Number(m)}/${Number(d)}`;
 }
 
 /** Compare YYYY-MM-DD (or notes date) to filter MM-DD, ignoring year. */
@@ -607,6 +601,9 @@ export function AdminOrderList({
                 {filteredOrders.map((row) => {
                   const mutable = canMutateRow(authUser, row);
                   const locked = !mutable;
+                  const datesLocked =
+                    row.status === "RECEIVED" ||
+                    row.statusLabel === "배송완료";
                   const draft = drafts[row.id] ?? {
                     worker: row.packagingWorker ?? "",
                   };
@@ -721,7 +718,7 @@ export function AdminOrderList({
                         )}
                       </td>
                       <td className="px-2 py-2 align-middle">
-                        {mutable ? (
+                        {mutable && !datesLocked ? (
                           <MdDateField
                             iso={row.deliveryRequestDate || null}
                             disabled={savingId === `dd-${row.id}`}
@@ -740,13 +737,13 @@ export function AdminOrderList({
                           />
                         ) : (
                           <span className="tabular-nums">
-                            {formatMdDate(row.deliveryRequestDate)}
+                            {formatMonthDay(row.deliveryRequestDate)}
                           </span>
                         )}
                       </td>
                       <td className="px-2 py-2 align-middle">{row.name}</td>
                       <td className="px-2 py-2 align-middle">
-                        {mutable ? (
+                        {mutable && !datesLocked ? (
                           (() => {
                             const maxShip = row.deliveryRequestDate
                               ? addDaysIso(row.deliveryRequestDate, -1)
@@ -786,7 +783,7 @@ export function AdminOrderList({
                           })()
                         ) : (
                           <span className="tabular-nums">
-                            {formatMdDate(row.requestedShipDate)}
+                            {formatMonthDay(row.requestedShipDate)}
                           </span>
                         )}
                       </td>
