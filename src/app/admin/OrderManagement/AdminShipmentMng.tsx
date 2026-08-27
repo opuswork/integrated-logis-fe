@@ -453,7 +453,9 @@ export function AdminShipmentMng() {
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
-                        {showFinalConfirmButton ? (
+                        {isFactoryParcel ? (
+                          <span className="text-[#A0AEC0]">—</span>
+                        ) : showFinalConfirmButton ? (
                           row.finalConfirmDone ? (
                             <CellBtn disabled>완료</CellBtn>
                           ) : (
