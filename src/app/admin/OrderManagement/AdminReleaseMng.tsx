@@ -393,7 +393,7 @@ export function AdminReleaseMng() {
                               : "출고완료됨"
                             : isFactoryParcel
                               ? "택배픽업"
-                              : "완료"}
+                              : "매장출고"}
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
