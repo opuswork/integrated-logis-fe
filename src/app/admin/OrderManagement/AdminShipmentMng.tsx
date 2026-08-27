@@ -449,7 +449,7 @@ export function AdminShipmentMng() {
                             )
                           }
                         >
-                          {row.finalCompleteDone ? "완료됨" : "최종완료"}
+                          {row.finalCompleteDone ? "완료됨" : "수령확인"}
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
