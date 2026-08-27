@@ -2,13 +2,18 @@
 
 import { Calendar as CalendarIcon } from "lucide-react";
 import dayjs from "dayjs";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Calendar from "react-calendar";
 
 import { cn } from "@/lib/utils";
 
 import "react-calendar/dist/Calendar.css";
 import "./md-calendar-picker.css";
+
+const PANEL_WIDTH = 276;
+const PANEL_EST_HEIGHT = 320;
+const GAP = 4;
 
 function toMd(date: Date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -50,6 +55,25 @@ function parseActiveDate(
   return new Date();
 }
 
+type PanelPos = { top: number; left: number };
+
+function computePanelPos(trigger: DOMRect): PanelPos {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let left = trigger.left;
+  if (left + PANEL_WIDTH > vw - 8) {
+    left = Math.max(8, trigger.right - PANEL_WIDTH);
+  }
+  if (left < 8) left = 8;
+
+  const below = trigger.bottom + GAP;
+  const above = trigger.top - GAP - PANEL_EST_HEIGHT;
+  const fitsBelow = below + PANEL_EST_HEIGHT <= vh - 8;
+  const top = fitsBelow ? below : Math.max(8, above);
+
+  return { top, left };
+}
+
 type MdCalendarPickerProps = {
   valueMd?: string;
   valueIso?: string | null;
@@ -86,14 +110,32 @@ export function MdCalendarPicker({
   maxIso,
 }: MdCalendarPickerProps) {
   const panelId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<PanelPos>({ top: 0, left: 0 });
+  const [mounted, setMounted] = useState(false);
 
   const effectiveMd = valueMd || isoToMd(valueIso) || "";
   const display = mdToDisplay(effectiveMd);
   const [activeStartDate, setActiveStartDate] = useState(() =>
     parseActiveDate(effectiveMd || null, yearHint ?? valueIso),
   );
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const updatePos = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    setPos(computePanelPos(el.getBoundingClientRect()));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePos();
+  }, [open, updatePos]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,20 +147,26 @@ export function MdCalendarPicker({
   useEffect(() => {
     if (!open) return;
     const onDoc = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    const onReposition = () => updatePos();
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
     return () => {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
     };
-  }, [open]);
+  }, [open, updatePos]);
 
   const tileDisabled = ({ date, view }: { date: Date; view: string }) => {
     if (view !== "month") return false;
@@ -128,9 +176,79 @@ export function MdCalendarPicker({
     return false;
   };
 
+  const panel =
+    open && !disabled && mounted
+      ? createPortal(
+          <div
+            ref={panelRef}
+            id={panelId}
+            role="dialog"
+            aria-label={title || "날짜 선택"}
+            className="fixed z-[200] rounded-lg border border-line bg-white p-2 shadow-lg"
+            style={{ top: pos.top, left: pos.left }}
+          >
+            <Calendar
+              locale="ko-KR"
+              calendarType="gregory"
+              value={
+                effectiveMd
+                  ? parseActiveDate(effectiveMd, yearHint ?? valueIso)
+                  : null
+              }
+              activeStartDate={activeStartDate}
+              onActiveStartDateChange={({ activeStartDate: next }) => {
+                if (next) setActiveStartDate(next);
+              }}
+              onChange={(value) => {
+                const date = Array.isArray(value) ? value[0] : value;
+                if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                  return;
+                }
+                const md = toMd(date);
+                const pickedIso = dayjs(date).format("YYYY-MM-DD");
+                if (minIso && pickedIso < minIso) return;
+                if (maxIso && pickedIso > maxIso) return;
+
+                onChangeMd?.(md);
+                onChangeIso?.(pickedIso);
+                setOpen(false);
+              }}
+              tileDisabled={tileDisabled}
+              next2Label={null}
+              prev2Label={null}
+              nextLabel="▷"
+              prevLabel="◁"
+              navigationLabel={({ date }) => dayjs(date).format("M월")}
+              formatDay={(_locale, date) => String(date.getDate())}
+              formatShortWeekday={(_locale, date) =>
+                ["일", "월", "화", "수", "목", "금", "토"][date.getDay()] ?? ""
+              }
+              className="md-calendar"
+            />
+            {allowClear || onClear ? (
+              <div className="mt-1 flex justify-end border-t border-line pt-1.5">
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-[11px] font-semibold text-[#64748b] hover:bg-[#f1f5f9]"
+                  onClick={() => {
+                    onClear?.();
+                    onChangeMd?.("");
+                    setOpen(false);
+                  }}
+                >
+                  지우기
+                </button>
+              </div>
+            ) : null}
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div ref={rootRef} className={cn("relative inline-flex", className)}>
+    <div className={cn("relative inline-flex", className)}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         title={title}
@@ -156,63 +274,7 @@ export function MdCalendarPicker({
           <CalendarIcon className="size-3.5 shrink-0 text-[#64748b]" />
         ) : null}
       </button>
-
-      {open && !disabled ? (
-        <div
-          id={panelId}
-          className="absolute left-0 top-[calc(100%+4px)] z-50 rounded-lg border border-line bg-white p-2 shadow-lg"
-        >
-          <Calendar
-            locale="ko-KR"
-            calendarType="gregory"
-            value={effectiveMd ? parseActiveDate(effectiveMd, yearHint ?? valueIso) : null}
-            activeStartDate={activeStartDate}
-            onActiveStartDateChange={({ activeStartDate: next }) => {
-              if (next) setActiveStartDate(next);
-            }}
-            onChange={(value) => {
-              const date = Array.isArray(value) ? value[0] : value;
-              if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-                return;
-              }
-              const md = toMd(date);
-              const pickedIso = dayjs(date).format("YYYY-MM-DD");
-              if (minIso && pickedIso < minIso) return;
-              if (maxIso && pickedIso > maxIso) return;
-
-              onChangeMd?.(md);
-              onChangeIso?.(pickedIso);
-              setOpen(false);
-            }}
-            tileDisabled={tileDisabled}
-            next2Label={null}
-            prev2Label={null}
-            nextLabel="▷"
-            prevLabel="◁"
-            navigationLabel={({ date }) => dayjs(date).format("M월")}
-            formatDay={(_locale, date) => String(date.getDate())}
-            formatShortWeekday={(_locale, date) =>
-              ["일", "월", "화", "수", "목", "금", "토"][date.getDay()] ?? ""
-            }
-            className="md-calendar"
-          />
-          {allowClear || onClear ? (
-            <div className="mt-1 flex justify-end border-t border-line pt-1.5">
-              <button
-                type="button"
-                className="rounded px-2 py-1 text-[11px] font-semibold text-[#64748b] hover:bg-[#f1f5f9]"
-                onClick={() => {
-                  onClear?.();
-                  onChangeMd?.("");
-                  setOpen(false);
-                }}
-              >
-                지우기
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      {panel}
     </div>
   );
 }
