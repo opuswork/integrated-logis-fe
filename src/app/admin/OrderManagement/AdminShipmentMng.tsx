@@ -312,13 +312,18 @@ export function AdminShipmentMng() {
                   const isStoreWorker =
                     row.packagingWorker === "STORE" ||
                     row.workerLabel === "매장";
+                  const isFactoryParcel =
+                    !isStoreWorker &&
+                    (row.isParcel || row.loadType === "택배");
                   const canFinal = canPressShipmentFinalActions(
                     auth,
                     row.storeRegion,
                   );
+                  // 공장+택배는 출고관리 「택배픽업」으로 이미 배송완료 → 최종완료 비활성
                   const finalCompleteEnabled =
                     canFinal &&
                     !isStoreWorker &&
+                    !isFactoryParcel &&
                     row.releaseDone &&
                     !row.finalCompleteDone;
                   // 상차/박스만 최종확인 버튼 — isParcel이 어긋나도 loadType 기준
@@ -513,8 +518,10 @@ export function AdminShipmentMng() {
       <p className="mt-3 text-[11px] leading-relaxed text-[#64748B]">
         출고요청일은 오늘 이후 날짜만 선택 가능하며 선택 즉시 저장됩니다.
         포장·출고·출고요청일은 공장관리자(및 최고관리자)가 처리합니다.
-        최종완료·최종확인은 관할 매장관리자(및 최고관리자)만 누를 수 있으며,
-        공장관리자는 비활성입니다. Factory-G는 목록만 조회합니다.
+        공장·택배 건은 출고관리 「택배픽업」으로 배송완료되며 이 화면의
+        최종완료는 쓰지 않습니다. 상차 건의 최종완료·최종확인은 관할
+        매장관리자(및 최고관리자)만 누를 수 있으며, 공장관리자는
+        비활성입니다. Factory-G는 목록만 조회합니다.
       </p>
     </div>
   );

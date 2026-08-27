@@ -28,7 +28,7 @@ function CellBtn({
   children: React.ReactNode;
   disabled?: boolean;
   onClick?: () => void;
-  variant?: "ghost" | "confirm";
+  variant?: "ghost" | "confirm" | "danger";
 }) {
   return (
     <button
@@ -39,6 +39,8 @@ function CellBtn({
         "rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors",
         variant === "confirm" &&
           "bg-[#3182CE] text-white hover:bg-[#2B6CB0] disabled:bg-[#CBD5E0]",
+        variant === "danger" &&
+          "bg-[#E53E3E] text-white hover:bg-[#C53030] disabled:bg-[#CBD5E0]",
         variant === "ghost" &&
           "border border-[#E2E8F0] bg-white text-[#1A202C] hover:bg-[#F5F7FA] disabled:opacity-40",
         disabled && "cursor-not-allowed",
@@ -299,6 +301,10 @@ export function AdminReleaseMng() {
               <tbody>
                 {pageRows.map((row, idx) => {
                   const rowNumber = (safePage - 1) * PAGE_SIZE + idx + 1;
+                  const isFactoryParcel =
+                    row.packagingWorker !== "STORE" &&
+                    row.workerLabel !== "매장" &&
+                    (row.isParcel || row.loadType === "택배");
                   const releaseEnabled =
                     canOperate &&
                     row.packDone &&
@@ -361,7 +367,15 @@ export function AdminReleaseMng() {
                       </td>
                       <td className="px-2 py-2">
                         <CellBtn
-                          variant={releaseEnabled ? "confirm" : "ghost"}
+                          variant={
+                            isFactoryParcel
+                              ? releaseEnabled
+                                ? "danger"
+                                : "ghost"
+                              : releaseEnabled
+                                ? "confirm"
+                                : "ghost"
+                          }
                           disabled={
                             !releaseEnabled || savingId === `r-${row.id}`
                           }
@@ -373,11 +387,19 @@ export function AdminReleaseMng() {
                             )
                           }
                         >
-                          {row.releaseDone ? "출고완료됨" : "완료"}
+                          {row.releaseDone
+                            ? isFactoryParcel
+                              ? "픽업완료"
+                              : "출고완료됨"
+                            : isFactoryParcel
+                              ? "택배픽업"
+                              : "완료"}
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
-                        {row.finalConfirmDone ? (
+                        {isFactoryParcel ? (
+                          <span className="text-[#A0AEC0]">—</span>
+                        ) : row.finalConfirmDone ? (
                           <CellBtn disabled>확인됨</CellBtn>
                         ) : (
                           <CellBtn
@@ -424,8 +446,9 @@ export function AdminReleaseMng() {
           </p>
           <p>
             출고완료는 포장완료·출고요청일 입력 후 공장(또는 최고관리자)이
-            처리합니다. 출고요청일이 없으면 완료 버튼이 비활성입니다. 최종확인은
-            배송관리 최종완료 후 공장 계정이 처리합니다.
+            처리합니다. 공장·택배 건은 「택배픽업」으로 배송완료까지
+            처리되며, 출고관리 최종확인은 상차 건만 사용합니다. 출고요청일이
+            없으면 완료 버튼이 비활성입니다.
           </p>
         </div>
       </div>
