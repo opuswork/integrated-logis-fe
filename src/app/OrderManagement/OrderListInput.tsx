@@ -24,6 +24,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
 import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, getAuthUser } from "@/lib/auth";
@@ -2202,7 +2203,8 @@ function ProductOrderPanel({
   const [resultDialog, setResultDialog] = useState<{
     open: boolean;
     success: boolean;
-  }>({ open: false, success: false });
+    kind: "accept" | "cancel" | "fail";
+  }>({ open: false, success: false, kind: "fail" });
   const [acceptedOrderNumber, setAcceptedOrderNumber] = useState<string | null>(
     null,
   );
@@ -2832,7 +2834,7 @@ function ProductOrderPanel({
     const validationError = validateRequired();
     if (validationError) {
       setFormError(validationError);
-      setResultDialog({ open: true, success: false });
+      setResultDialog({ open: true, success: false, kind: "fail" });
       return;
     }
 
@@ -2848,7 +2850,7 @@ function ProductOrderPanel({
 
       if (!auth?.id || !getAccessToken()) {
         setFormError("로그인이 필요합니다.");
-        setResultDialog({ open: true, success: false });
+        setResultDialog({ open: true, success: false, kind: "fail" });
         return;
       }
 
@@ -2882,7 +2884,7 @@ function ProductOrderPanel({
         BRANCH_STORES.find((store) => store.id === branchStore)?.name ?? "";
       if (!selectedBranch) {
         setFormError("주문 작업 지역(남부/중부/서부)을 선택해 주세요.");
-        setResultDialog({ open: true, success: false });
+        setResultDialog({ open: true, success: false, kind: "fail" });
         return;
       }
       const year = new Date().getFullYear();
@@ -2972,7 +2974,11 @@ function ProductOrderPanel({
             }),
           });
 
-      setResultDialog({ open: true, success: response.ok });
+      setResultDialog({
+        open: true,
+        success: response.ok,
+        kind: response.ok ? "accept" : "fail",
+      });
       if (!response.ok) {
         const errBody = (await response.json().catch(() => null)) as {
           message?: string | string[];
@@ -3019,10 +3025,14 @@ function ProductOrderPanel({
           ? "주문서 변경 접수에 실패하였습니다."
           : "제품주문서 접수에 실패하였습니다.",
       );
-      setResultDialog({ open: true, success: false });
+      setResultDialog({ open: true, success: false, kind: "fail" });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleDiscardNewOrder = () => {
+    setResultDialog({ open: true, success: true, kind: "cancel" });
   };
 
   const handleCancelOrder = async () => {
@@ -3049,14 +3059,14 @@ function ProductOrderPanel({
         throw new Error(message || "주문서 취소에 실패했습니다.");
       }
       setCancelConfirmOpen(false);
-      setResultDialog({ open: true, success: true });
+      setResultDialog({ open: true, success: true, kind: "cancel" });
       setFormError("");
     } catch (err) {
       setCancelConfirmOpen(false);
       setFormError(
         err instanceof Error ? err.message : "주문서 취소에 실패했습니다.",
       );
-      setResultDialog({ open: true, success: false });
+      setResultDialog({ open: true, success: false, kind: "fail" });
     } finally {
       setIsCancelling(false);
     }
@@ -3993,7 +4003,7 @@ function ProductOrderPanel({
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           disabled={isSubmitting || isCancelling}
@@ -4002,25 +4012,35 @@ function ProductOrderPanel({
           }}
           className="w-full rounded-[10px] bg-[#2F855A] py-3.5 text-[14.5px] font-bold text-white disabled:cursor-not-allowed disabled:bg-[#CBD5E0]"
         >
-          {isSubmitting
-            ? isEditMode
-              ? "저장 중..."
-              : "접수 중..."
-            : isEditMode
-              ? "변경내용접수"
-              : "주문접수완료"}
+          {isSubmitting ? (
+            <span className="inline-flex items-center justify-center gap-2">
+              <Spinner
+                size="sm"
+                label={isEditMode ? "저장 중" : "접수 중"}
+              />
+              {isEditMode ? "저장 중..." : "접수 중..."}
+            </span>
+          ) : isEditMode ? (
+            "변경내용접수"
+          ) : (
+            "주문접수완료"
+          )}
         </button>
-        {isEditMode ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full border-[#E53E3E] bg-white text-[#E53E3E] hover:bg-[#FDEEEE]"
-            disabled={isSubmitting || isCancelling}
-            onClick={() => setCancelConfirmOpen(true)}
-          >
-            주문서 취소
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full border-[#E53E3E] bg-white py-3.5 text-[14.5px] font-bold text-[#E53E3E] hover:bg-[#FDEEEE]"
+          disabled={isSubmitting || isCancelling}
+          onClick={() => {
+            if (isEditMode) {
+              setCancelConfirmOpen(true);
+            } else {
+              handleDiscardNewOrder();
+            }
+          }}
+        >
+          주문접수취소
+        </Button>
       </div>
 
       <ProductAddDialog
@@ -4096,25 +4116,29 @@ function ProductOrderPanel({
       <Dialog
         open={resultDialog.open}
         title={
-          resultDialog.success
-            ? isEditMode
-              ? "처리 완료"
-              : "접수 완료"
-            : isEditMode
-              ? "처리 실패"
-              : "접수 실패"
+          resultDialog.kind === "cancel"
+            ? "취소 완료"
+            : resultDialog.success
+              ? isEditMode
+                ? "처리 완료"
+                : "접수 완료"
+              : isEditMode
+                ? "처리 실패"
+                : "접수 실패"
         }
         onClose={closeResultDialog}
       >
         <p className="text-sm leading-6 text-ink">
-          {resultDialog.success
-            ? isEditMode
-              ? "주문서가 처리되었습니다."
-              : "제품주문서가 접수되었습니다."
-            : formError ||
-              (isEditMode
-                ? "주문서 처리에 실패하였습니다."
-                : "제품주문서 접수에 실패하였습니다.")}
+          {resultDialog.kind === "cancel"
+            ? "주문이 취소 되었습니다."
+            : resultDialog.success
+              ? isEditMode
+                ? "주문서가 처리되었습니다."
+                : "제품주문서가 접수되었습니다."
+              : formError ||
+                (isEditMode
+                  ? "주문서 처리에 실패하였습니다."
+                  : "제품주문서 접수에 실패하였습니다.")}
         </p>
         <div className="mt-5 flex justify-end">
           <Button
