@@ -65,7 +65,40 @@ export type ShipmentOpsOrder = {
   shipProgressLabel: "미출고" | "완료";
   notes: string | null;
   specialNote: string;
+  /** Per-line expand (배송관리). Empty if API omitted items. */
+  items: { productName: string; quantity: number }[];
 };
+
+export type ShipmentLineRow = ShipmentOpsOrder & {
+  lineKey: string;
+  lineOrderNumber: string;
+  lineIndex: number;
+};
+
+/** Expand one order row into one display row per product line (ORD-…-1, -2, …). */
+export function expandShipmentOpsRows(
+  orders: ShipmentOpsOrder[],
+): ShipmentLineRow[] {
+  const out: ShipmentLineRow[] = [];
+  for (const order of orders) {
+    const lines =
+      order.items.length > 0
+        ? order.items
+        : [{ productName: order.productSummary || "—", quantity: order.quantity }];
+    lines.forEach((item, index) => {
+      const lineIndex = index + 1;
+      out.push({
+        ...order,
+        lineKey: `${order.id}-${lineIndex}`,
+        lineOrderNumber: `${order.orderNumber}-${lineIndex}`,
+        lineIndex,
+        productSummary: item.productName || "—",
+        quantity: item.quantity,
+      });
+    });
+  }
+  return out;
+}
 
 function toDateOnly(value?: string | null) {
   if (!value) return null;
@@ -126,14 +159,17 @@ export function mapShipmentOpsOrder(order: {
   const isParcel = !(
     isDeliveryOrderType(typeFromNotes) || fulfillmentType === "PICKUP"
   );
-  const items = order.items ?? [];
-  const quantity = items.reduce((sum, item) => sum + (item.quantity ?? 0), 0);
+  const items = (order.items ?? []).map((item) => ({
+    productName: item.productName?.trim() || "—",
+    quantity: item.quantity ?? 0,
+  }));
+  const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const productSummary =
     items.length === 0
       ? "—"
       : items.length === 1
-        ? (items[0]?.productName ?? "—")
-        : `${items[0]?.productName ?? "상품"} 외 ${items.length - 1}`;
+        ? items[0]!.productName
+        : `${items[0]!.productName} 외 ${items.length - 1}`;
   const specialNote =
     order.greetingForms
       ?.map((g) => g.specialNote?.trim())
@@ -217,6 +253,7 @@ export function mapShipmentOpsOrder(order: {
     shipProgressLabel: finalCompleteDone ? "완료" : "미출고",
     notes: order.notes ?? null,
     specialNote,
+    items,
   };
 }
 
