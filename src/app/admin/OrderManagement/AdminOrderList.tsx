@@ -25,8 +25,11 @@ import {
 } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
+  ASSIGNMENT_CHANGE_ALERT,
   canEditOrderStatus,
   memberFacingStatusLabel,
+  STORE_REGION_CHANGE_ALERT,
+  WORKER_CHANGE_ALERT,
   type DeliveryOrderStatus,
 } from "@/lib/order-delivery";
 import {
@@ -282,6 +285,14 @@ export function AdminOrderList({
 
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
   const [drafts, setDrafts] = useState<Record<number, DraftState>>({});
+  const [workerEditing, setWorkerEditing] = useState<Record<number, boolean>>(
+    {},
+  );
+  const [regionEditing, setRegionEditing] = useState<Record<number, boolean>>(
+    {},
+  );
+  /** setStoreRegion 저장 이력 — 주문확인 전 plain label 표시 기준 */
+  const [regionSaved, setRegionSaved] = useState<Record<number, boolean>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -383,10 +394,7 @@ export function AdminOrderList({
           const next = { ...prev };
           for (const row of rows) {
             if (!next[row.id]) {
-              next[row.id] = {
-                worker: row.packagingWorker ?? "",
-                storeRegion: row.storeRegion ?? "",
-              };
+              next[row.id] = { worker: "", storeRegion: "" };
             }
           }
           return next;
@@ -512,9 +520,147 @@ export function AdminOrderList({
         };
       });
 
+      const action = typeof body.action === "string" ? body.action : "";
+      if (action === "worker") {
+        setWorkerEditing((prev) => {
+          const next = { ...prev };
+          delete next[orderId];
+          return next;
+        });
+      } else if (action === "setStoreRegion") {
+        setRegionEditing((prev) => {
+          const next = { ...prev };
+          delete next[orderId];
+          return next;
+        });
+        setRegionSaved((prev) => ({ ...prev, [orderId]: true }));
+      }
+
       setActionError("");
     } catch {
       setActionError("저장에 실패했습니다.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  /** ○수정: factory-alert 전용 API (작업자/지역 값 유지) */
+  const flagAssignmentAlert = async (
+    row: AdminOrderRow,
+    key: string,
+    kind: "worker" | "storeRegion",
+  ) => {
+    setSavingId(key);
+    setActionError("");
+    try {
+      const response = await apiFetch(`/api/orders/${row.id}/factory-alert`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ set: kind }),
+      });
+      const data = (await response.json()) as
+        | Parameters<typeof mapApiOrder>[0]
+        | { message?: string | string[] };
+      if (!response.ok) {
+        setActionError(
+          formatChecklistApiError(
+            "message" in data ? data.message : undefined,
+            "assignmentReset",
+          ),
+        );
+        return;
+      }
+      const mapped = mapApiOrder(data as Parameters<typeof mapApiOrder>[0]);
+      setOrders((prev) => prev.map((r) => (r.id === row.id ? mapped : r)));
+      setActionError("");
+    } catch {
+      setActionError(
+        "경고등 설정에 실패했습니다. 백엔드 재배포 후 다시 시도해 주세요.",
+      );
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  /** 작업자 초기화 → ○수정 + 선택 UI */
+  const beginWorkerEdit = (row: AdminOrderRow) => {
+    setWorkerEditing((prev) => ({ ...prev, [row.id]: true }));
+    setDrafts((prev) => ({
+      ...prev,
+      [row.id]: {
+        worker: "",
+        storeRegion: prev[row.id]?.storeRegion ?? "",
+      },
+    }));
+    void flagAssignmentAlert(row, `wr-${row.id}`, "worker");
+  };
+
+  /** 주문매장 초기화 → ○수정 + 선택 UI */
+  const beginRegionEdit = (row: AdminOrderRow) => {
+    setRegionEditing((prev) => ({ ...prev, [row.id]: true }));
+    setDrafts((prev) => ({
+      ...prev,
+      [row.id]: {
+        worker: prev[row.id]?.worker ?? "",
+        storeRegion: "",
+      },
+    }));
+    void flagAssignmentAlert(row, `rr-${row.id}`, "storeRegion");
+  };
+
+  /** 취소 → 뱃지 UI 복귀 + 초기화로 켠 경고등 해제 */
+  const cancelAssignmentEdit = async (
+    row: AdminOrderRow,
+    kind: "worker" | "storeRegion",
+  ) => {
+    if (kind === "worker") {
+      setWorkerEditing((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+    } else {
+      setRegionEditing((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+    }
+    setDrafts((prev) => ({
+      ...prev,
+      [row.id]: {
+        worker: row.packagingWorker ?? "",
+        storeRegion: row.storeRegion ?? "",
+      },
+    }));
+    setActionError("");
+
+    const alert = row.factoryAlert?.trim() ?? "";
+    const shouldClearAlert =
+      (kind === "worker" &&
+        (alert === WORKER_CHANGE_ALERT ||
+          alert === ASSIGNMENT_CHANGE_ALERT)) ||
+      (kind === "storeRegion" &&
+        (alert === STORE_REGION_CHANGE_ALERT ||
+          alert === ASSIGNMENT_CHANGE_ALERT));
+    if (!shouldClearAlert) {
+      return;
+    }
+    setSavingId(kind === "worker" ? `wc-${row.id}` : `rc-${row.id}`);
+    try {
+      const response = await apiFetch(`/api/orders/${row.id}/factory-alert`, {
+        method: "PATCH",
+      });
+      const data = (await response.json()) as
+        | Parameters<typeof mapApiOrder>[0]
+        | { message?: string | string[] };
+      if (!response.ok || !("id" in data)) {
+        return;
+      }
+      const mapped = mapApiOrder(data);
+      setOrders((prev) => prev.map((r) => (r.id === row.id ? mapped : r)));
+    } catch {
+      /* UI는 이미 복귀 */
     } finally {
       setSavingId(null);
     }
@@ -649,12 +795,22 @@ export function AdminOrderList({
                     row.status === "RECEIVED" ||
                     row.statusLabel === "배송완료";
                   const draft = drafts[row.id] ?? {
-                    worker: row.packagingWorker ?? "",
-                    storeRegion: row.storeRegion ?? "",
+                    worker: "",
+                    storeRegion: "",
                   };
                   const parcel = isParcelType(row.type, row.fulfillmentType);
                   const needsGreeting = row.greetingCount > 0;
                   const confirmed = Boolean(row.orderConfirmedAt);
+                  const workerResetting = workerEditing[row.id] === true;
+                  const regionResetting = regionEditing[row.id] === true;
+                  // 값 없음(또는 초기화 후) → 선택 UI, 저장 후 → label, 주문확인 후 → 뱃지
+                  const workerSelectUi =
+                    assignmentEditable &&
+                    (workerResetting || !row.packagingWorker);
+                  const regionSelectUi =
+                    assignmentEditable &&
+                    (regionResetting ||
+                      (!confirmed && regionSaved[row.id] !== true));
 
                   return (
                     <tr
@@ -665,17 +821,7 @@ export function AdminOrderList({
                       )}
                     >
                       <td className="px-2 py-2 align-top">
-                        {!assignmentEditable ? (
-                          row.packagingWorker ? (
-                            <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
-                              {row.packagingWorker === "STORE"
-                                ? "매장"
-                                : "공장"}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-[#94a3b8]">—</span>
-                          )
-                        ) : (
+                        {workerSelectUi ? (
                           <div className="flex flex-col gap-1">
                             <select
                               value={draft.worker ?? ""}
@@ -693,37 +839,64 @@ export function AdminOrderList({
                               <option value="STORE">매장</option>
                               <option value="FACTORY">공장</option>
                             </select>
-                            <CellBtn
-                              disabled={
-                                !draft.worker || savingId === `w-${row.id}`
-                              }
-                              onClick={() =>
-                                void patchChecklist(
-                                  row.id,
-                                  {
-                                    action: "worker",
-                                    packagingWorker: draft.worker,
-                                  },
-                                  `w-${row.id}`,
-                                )
-                              }
-                            >
-                              저장
-                            </CellBtn>
+                            <div className="flex flex-wrap gap-1">
+                              <CellBtn
+                                disabled={
+                                  !draft.worker || savingId === `w-${row.id}`
+                                }
+                                onClick={() =>
+                                  void patchChecklist(
+                                    row.id,
+                                    {
+                                      action: "worker",
+                                      packagingWorker: draft.worker,
+                                    },
+                                    `w-${row.id}`,
+                                  )
+                                }
+                              >
+                                저장
+                              </CellBtn>
+                              {workerResetting ? (
+                                <CellBtn
+                                  variant="ghost"
+                                  disabled={savingId === `wc-${row.id}`}
+                                  onClick={() =>
+                                    void cancelAssignmentEdit(row, "worker")
+                                  }
+                                >
+                                  취소
+                                </CellBtn>
+                              ) : null}
+                            </div>
                           </div>
+                        ) : !row.packagingWorker ? (
+                          <span className="text-[11px] text-[#94a3b8]">—</span>
+                        ) : confirmed || !assignmentEditable ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                              {row.packagingWorker === "STORE"
+                                ? "매장"
+                                : "공장"}
+                            </span>
+                            {assignmentEditable ? (
+                              <CellBtn
+                                variant="ghost"
+                                disabled={savingId === `wr-${row.id}`}
+                                onClick={() => beginWorkerEdit(row)}
+                              >
+                                초기화
+                              </CellBtn>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-ink">
+                            {row.packagingWorker === "STORE" ? "매장" : "공장"}
+                          </span>
                         )}
                       </td>
                       <td className="px-2 py-2 align-top">
-                        {!assignmentEditable ? (
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                              regionClass(row.storeRegion),
-                            )}
-                          >
-                            {regionLabel(row.storeRegion)}
-                          </span>
-                        ) : (
+                        {regionSelectUi ? (
                           <div className="flex flex-col gap-1">
                             <select
                               value={draft.storeRegion ?? ""}
@@ -741,25 +914,65 @@ export function AdminOrderList({
                               <option value="JUNGBU">중부</option>
                               <option value="SEOBU">서부</option>
                             </select>
-                            <CellBtn
-                              disabled={
-                                !draft.storeRegion ||
-                                savingId === `sr-${row.id}`
-                              }
-                              onClick={() =>
-                                void patchChecklist(
-                                  row.id,
-                                  {
-                                    action: "setStoreRegion",
-                                    storeRegion: draft.storeRegion,
-                                  },
-                                  `sr-${row.id}`,
-                                )
-                              }
-                            >
-                              저장
-                            </CellBtn>
+                            <div className="flex flex-wrap gap-1">
+                              <CellBtn
+                                disabled={
+                                  !draft.storeRegion ||
+                                  savingId === `sr-${row.id}`
+                                }
+                                onClick={() =>
+                                  void patchChecklist(
+                                    row.id,
+                                    {
+                                      action: "setStoreRegion",
+                                      storeRegion: draft.storeRegion,
+                                    },
+                                    `sr-${row.id}`,
+                                  )
+                                }
+                              >
+                                저장
+                              </CellBtn>
+                              {regionResetting ? (
+                                <CellBtn
+                                  variant="ghost"
+                                  disabled={savingId === `rc-${row.id}`}
+                                  onClick={() =>
+                                    void cancelAssignmentEdit(
+                                      row,
+                                      "storeRegion",
+                                    )
+                                  }
+                                >
+                                  취소
+                                </CellBtn>
+                              ) : null}
+                            </div>
                           </div>
+                        ) : confirmed || !assignmentEditable ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                regionClass(row.storeRegion),
+                              )}
+                            >
+                              {regionLabel(row.storeRegion)}
+                            </span>
+                            {assignmentEditable ? (
+                              <CellBtn
+                                variant="ghost"
+                                disabled={savingId === `rr-${row.id}`}
+                                onClick={() => beginRegionEdit(row)}
+                              >
+                                초기화
+                              </CellBtn>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-ink">
+                            {regionLabel(row.storeRegion)}
+                          </span>
                         )}
                       </td>
                       <td className="px-2 py-2 align-middle font-medium">
