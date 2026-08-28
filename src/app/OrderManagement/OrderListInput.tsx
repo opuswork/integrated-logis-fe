@@ -12,6 +12,7 @@ import {
 
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { MemberGreetingMng } from "@/app/OrderManagement/MemberGreetingMng";
+import { MemberPartnerMng } from "@/app/OrderManagement/MemberPartnerMng";
 import { LogoutButton } from "@/components/auth-guard";
 import {
   GreetingNumberChipPicker,
@@ -53,7 +54,12 @@ import {
 } from "@/lib/order-delivery";
 import { cn } from "@/lib/utils";
 
-const MEMBER_NAV = ["새 주문서 작성", "인사장관리", "내 주문 현황"] as const;
+const MEMBER_NAV = [
+  "새 주문서 작성",
+  "인사장관리",
+  "내 주문 현황",
+  "거래처관리",
+] as const;
 const GREETING_NUMBERS = ["1", "2", "3", "4"] as const;
 const GREETING_SIZES = ["8칸", "6칸", "4칸", "자체"] as const;
 const GREETING_RECEIVE_PLACES = [
@@ -245,6 +251,10 @@ const PAGE_META: Record<
   "내 주문 현황": {
     title: "내 주문 현황",
     description: "접수한 주문과 인사장 작업 상태를 확인합니다.",
+  },
+  거래처관리: {
+    title: "거래처관리",
+    description: "자주 쓰는 거래처를 등록하면 제품주문서에 자동 입력됩니다.",
   },
 };
 
@@ -1759,6 +1769,136 @@ function ChurchSearchField({
           키워드를 입력해 중앙을 검색한 뒤 목록에서 선택해 주세요.
         </p>
       )}
+    </div>
+  );
+}
+
+type PartnerSuggest = {
+  id: number;
+  name: string;
+  contactName: string;
+  phone: string;
+  address: string;
+  email: string | null;
+};
+
+function DeliveryCompanyField({
+  value,
+  onChange,
+  onSelectPartner,
+  inputClassName,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSelectPartner: (partner: PartnerSuggest) => void;
+  inputClassName: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<PartnerSuggest[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const q = value.trim();
+    if (q.length < 1) {
+      setSuggestions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      void apiFetch(`/api/partners?q=${encodeURIComponent(q)}`)
+        .then(async (res) => {
+          const data = (await res.json()) as
+            | PartnerSuggest[]
+            | { message?: string };
+          if (cancelled) return;
+          if (!res.ok || !Array.isArray(data)) {
+            setSuggestions([]);
+            return;
+          }
+          setSuggestions(data);
+        })
+        .catch(() => {
+          if (!cancelled) setSuggestions([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [value]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <input
+        type="text"
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-controls="delivery-partner-suggestions"
+        aria-autocomplete="list"
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setIsOpen(true);
+        }}
+        onFocus={() => setIsOpen(true)}
+        placeholder="업체명 (등록 거래처 자동완성)"
+        autoComplete="off"
+        required
+        className={inputClassName}
+      />
+      {isOpen && value.trim() ? (
+        <ul
+          id="delivery-partner-suggestions"
+          role="listbox"
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[7px] border border-line bg-white shadow-lg"
+        >
+          {loading ? (
+            <li className="px-3 py-2.5 text-sm text-[#64748b]">검색 중...</li>
+          ) : suggestions.length === 0 ? (
+            <li className="px-3 py-2.5 text-sm text-[#64748b]">
+              일치하는 거래처가 없습니다.
+            </li>
+          ) : (
+            suggestions.map((partner) => (
+              <li key={partner.id} role="option">
+                <button
+                  type="button"
+                  className="flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onSelectPartner(partner);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="text-sm font-semibold text-ink">
+                    {partner.name}
+                  </span>
+                  <span className="text-xs text-[#64748b]">
+                    {partner.contactName} · {partner.phone}
+                  </span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -3482,14 +3622,21 @@ function ProductOrderPanel({
             />
           </div>
           <label className={omLabelClass}>업체명 *</label>
-          <input
-            type="text"
-            value={deliveryCompanyName}
-            onChange={(event) => setDeliveryCompanyName(event.target.value)}
-            placeholder="업체명"
-            required
-            className={omInputClass}
-          />
+          <div className="mb-3">
+            <DeliveryCompanyField
+              value={deliveryCompanyName}
+              onChange={setDeliveryCompanyName}
+              inputClassName={cn(omInputClass, "mb-0")}
+              onSelectPartner={(partner) => {
+                setDeliveryCompanyName(partner.name);
+                setRecipientName(partner.contactName);
+                setRecipientPhone(formatPhoneInput(partner.phone));
+                const split = splitAddressAndDetail(partner.address);
+                setRecipientAddress(split.address);
+                setRecipientAddressDetail(split.detail);
+              }}
+            />
+          </div>
           <label className={omLabelClass}>받는 분 성함 *</label>
           <input
             type="text"
@@ -4842,6 +4989,8 @@ export function OrderListInput({
         return null;
       case "내 주문 현황":
         return null;
+      case "거래처관리":
+        return null;
     }
   };
 
@@ -4983,6 +5132,8 @@ export function OrderListInput({
             onEditOrder={handleStartEditOrder}
           />
         );
+      case "거래처관리":
+        return <MemberPartnerMng />;
     }
   };
 
