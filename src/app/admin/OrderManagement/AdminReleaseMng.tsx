@@ -305,6 +305,12 @@ export function AdminReleaseMng() {
                     row.packagingWorker !== "STORE" &&
                     row.workerLabel !== "매장" &&
                     (row.isParcel || row.loadType === "택배");
+                  const isFactorySangcha =
+                    row.packagingWorker !== "STORE" &&
+                    row.workerLabel !== "매장" &&
+                    row.loadType === "상차";
+                  const hideReleaseFinalConfirm =
+                    isFactoryParcel || isFactorySangcha;
                   const releaseEnabled =
                     canOperate &&
                     row.packDone &&
@@ -397,7 +403,7 @@ export function AdminReleaseMng() {
                         </CellBtn>
                       </td>
                       <td className="px-2 py-2">
-                        {isFactoryParcel ? (
+                        {hideReleaseFinalConfirm ? (
                           <span className="text-[#A0AEC0]">—</span>
                         ) : row.finalConfirmDone ? (
                           <CellBtn disabled>확인됨</CellBtn>
@@ -447,7 +453,8 @@ export function AdminReleaseMng() {
           <p>
             출고완료는 포장완료·출고요청일 입력 후 공장(또는 최고관리자)이
             처리합니다. 공장·택배 건은 「택배픽업」으로 배송완료까지
-            처리되며, 출고관리 최종확인은 상차 건만 사용합니다. 출고요청일이
+            처리되며, 출고관리 최종확인은 사용하지 않습니다. 공장·상차는
+            배송관리 수령완료로 종료합니다. 출고요청일이
             없으면 완료 버튼이 비활성입니다.
           </p>
         </div>
