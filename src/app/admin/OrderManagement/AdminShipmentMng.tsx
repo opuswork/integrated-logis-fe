@@ -310,7 +310,7 @@ export function AdminShipmentMng() {
                   <th className="px-2 py-2">인사장완료</th>
                   <th className="px-2 py-2">상태</th>
                   <th className="px-2 py-2">수령확인</th>
-                  <th className="px-2 py-2">수령완료</th>
+                  <th className="px-2 py-2">최종확인</th>
                 </tr>
               </thead>
               <tbody>

@@ -193,10 +193,12 @@ export function AdminMissingCheckMng() {
           <span className="text-[#E53E3E]">({warnings.length}건)</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
+          <table className="w-full min-w-[780px] border-collapse text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11.5px] font-bold text-[#64748B]">
                 <th className="px-4 py-2.5">주문일자</th>
+                <th className="px-4 py-2.5">중앙</th>
+                <th className="px-4 py-2.5">이름</th>
                 <th className="px-4 py-2.5">거래처</th>
                 <th className="px-4 py-2.5">수량</th>
                 <th className="px-4 py-2.5">누락된 확인내용</th>
@@ -206,7 +208,7 @@ export function AdminMissingCheckMng() {
               {warnings.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={6}
                     className="px-4 py-8 text-center text-[#64748B]"
                   >
                     누락된 공정이 없습니다.
@@ -217,6 +219,12 @@ export function AdminMissingCheckMng() {
                   <tr key={row.id} className="border-b border-[#EEF1F5]">
                     <td className="px-4 py-2.5 tabular-nums text-[#64748B]">
                       {formatMonthDay(row.orderDate)}
+                    </td>
+                    <td className="px-4 py-2.5 text-[#1A202C]">
+                      {row.churchName}
+                    </td>
+                    <td className="px-4 py-2.5 font-semibold text-[#1A202C]">
+                      {row.name}
                     </td>
                     <td className="px-4 py-2.5 font-semibold text-[#1A202C]">
                       {row.clientLabel}
