@@ -2248,7 +2248,7 @@ function ProductOrderPanel({
   hasUnsavedGreeting?: boolean;
   savedGreetingsByProduct?: Record<string, GreetingDraft>;
   onUnsavedGreetingResolved?: () => void;
-  /** After successful 접수하기 / 변경내용접수 / 취소 confirm — e.g. go to list. */
+  /** After 접수하기 / 변경내용접수 / 취소 confirm / 주문서닫기 — e.g. go to list. */
   onOrderAccepted?: (orderNumber?: string) => void;
   /** Called when draft content changes (for leave-guard). */
   onDirtyChange?: (dirty: boolean) => void;
@@ -3187,6 +3187,11 @@ function ProductOrderPanel({
 
   const handleDiscardNewOrder = () => {
     setResultDialog({ open: true, success: true, kind: "cancel" });
+  };
+
+  /** 수정 모드: 저장·취소 없이 주문서만 닫음 (주문 데이터 변경 없음) */
+  const handleCloseEditForm = () => {
+    onOrderAccepted?.(editOrderNumber ?? undefined);
   };
 
   const handleCancelOrder = async () => {
@@ -4215,7 +4220,7 @@ function ProductOrderPanel({
           disabled={isSubmitting || isCancelling}
           onClick={() => {
             if (isEditMode) {
-              setCancelConfirmOpen(true);
+              handleCloseEditForm();
             } else {
               handleDiscardNewOrder();
             }
