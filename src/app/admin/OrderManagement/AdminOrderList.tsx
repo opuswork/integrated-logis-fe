@@ -282,9 +282,12 @@ export function AdminOrderList({
 
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
   const [drafts, setDrafts] = useState<Record<number, DraftState>>({});
-  const [assignmentEditing, setAssignmentEditing] = useState<
-    Record<number, boolean>
-  >({});
+  const [workerEditing, setWorkerEditing] = useState<Record<number, boolean>>(
+    {},
+  );
+  const [regionEditing, setRegionEditing] = useState<Record<number, boolean>>(
+    {},
+  );
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -505,41 +508,65 @@ export function AdminOrderList({
         prev.map((row) => (row.id === orderId ? mapped : row)),
       );
       const action = typeof body.action === "string" ? body.action : "";
-      if (
-        action === "workerClear" ||
-        action === "assignmentReset" ||
-        (action === "setStoreRegion" && key.startsWith("ar-"))
-      ) {
-        setAssignmentEditing((prev) => ({ ...prev, [orderId]: true }));
-        setDrafts((prev) => ({
+
+      setDrafts((prev) => {
+        const cur = prev[orderId] ?? { worker: "", storeRegion: "" };
+        if (action === "workerClear" || key.startsWith("wr-")) {
+          return {
+            ...prev,
+            [orderId]: {
+              worker: "",
+              storeRegion: mapped.storeRegion ?? cur.storeRegion,
+            },
+          };
+        }
+        if (action === "worker" && mapped.packagingWorker) {
+          return {
+            ...prev,
+            [orderId]: {
+              worker: mapped.packagingWorker ?? "",
+              storeRegion: mapped.storeRegion ?? cur.storeRegion,
+            },
+          };
+        }
+        if (action === "setStoreRegion") {
+          return {
+            ...prev,
+            [orderId]: {
+              worker: mapped.packagingWorker ?? cur.worker,
+              storeRegion: mapped.storeRegion ?? "",
+            },
+          };
+        }
+        return {
           ...prev,
           [orderId]: {
-            worker: "",
-            storeRegion: mapped.storeRegion ?? "",
+            worker: mapped.packagingWorker ?? cur.worker,
+            storeRegion: mapped.storeRegion ?? cur.storeRegion,
           },
-        }));
+        };
+      });
+
+      if (action === "workerClear" || key.startsWith("wr-")) {
+        setWorkerEditing((prev) => ({ ...prev, [orderId]: true }));
       } else if (action === "worker" && mapped.packagingWorker) {
-        setAssignmentEditing((prev) => {
+        setWorkerEditing((prev) => {
           const next = { ...prev };
           delete next[orderId];
           return next;
         });
-        setDrafts((prev) => ({
-          ...prev,
-          [orderId]: {
-            worker: mapped.packagingWorker ?? "",
-            storeRegion: mapped.storeRegion ?? "",
-          },
-        }));
-      } else {
-        setDrafts((prev) => ({
-          ...prev,
-          [orderId]: {
-            worker: mapped.packagingWorker ?? "",
-            storeRegion: mapped.storeRegion ?? "",
-          },
-        }));
       }
+
+      if (action === "setStoreRegion" && key.startsWith("rr-")) {
+        setRegionEditing((prev) => ({ ...prev, [orderId]: true }));
+      } else if (action === "setStoreRegion" && key.startsWith("sr-")) {
+        setRegionEditing((prev) => {
+          const next = { ...prev };
+          delete next[orderId];
+          return next;
+        });
+      }
+
       setActionError("");
     } catch {
       setActionError("저장에 실패했습니다.");
@@ -548,25 +575,45 @@ export function AdminOrderList({
     }
   };
 
-  /** 작업자/주문매장 초기화 — 어느 쪽이든 ○수정 + 양쪽 편집. assignmentReset 미배포 BE 호환. */
-  const beginAssignmentEdit = (row: AdminOrderRow) => {
-    setAssignmentEditing((prev) => ({ ...prev, [row.id]: true }));
+  /** 작업자만 초기화 → ○수정 + 작업자 열 편집 */
+  const beginWorkerEdit = (row: AdminOrderRow) => {
+    setWorkerEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
       ...prev,
       [row.id]: {
         worker: "",
-        storeRegion: row.storeRegion ?? "",
+        storeRegion:
+          prev[row.id]?.storeRegion ?? row.storeRegion ?? "",
       },
     }));
     if (row.packagingWorker) {
-      void patchChecklist(row.id, { action: "workerClear" }, `ar-${row.id}`);
+      void patchChecklist(row.id, { action: "workerClear" }, `wr-${row.id}`);
       return;
     }
     if (row.storeRegion) {
       void patchChecklist(
         row.id,
         { action: "setStoreRegion", storeRegion: row.storeRegion },
-        `ar-${row.id}`,
+        `wr-${row.id}`,
+      );
+    }
+  };
+
+  /** 주문매장만 초기화 → ○수정 + 주문매장 열 편집 */
+  const beginRegionEdit = (row: AdminOrderRow) => {
+    setRegionEditing((prev) => ({ ...prev, [row.id]: true }));
+    setDrafts((prev) => ({
+      ...prev,
+      [row.id]: {
+        worker: prev[row.id]?.worker ?? row.packagingWorker ?? "",
+        storeRegion: row.storeRegion ?? "",
+      },
+    }));
+    if (row.storeRegion) {
+      void patchChecklist(
+        row.id,
+        { action: "setStoreRegion", storeRegion: row.storeRegion },
+        `rr-${row.id}`,
       );
     }
   };
@@ -693,11 +740,10 @@ export function AdminOrderList({
                     mutable &&
                     !row.packDept &&
                     row.statusLabel === "접수완료";
-                  const forceAssignmentEdit = Boolean(
-                    assignmentEditing[row.id],
-                  );
-                  const assignmentEditingUi =
-                    assignmentEditable && forceAssignmentEdit;
+                  const workerEditUi =
+                    assignmentEditable && Boolean(workerEditing[row.id]);
+                  const regionEditUi =
+                    assignmentEditable && Boolean(regionEditing[row.id]);
                   const datesLocked =
                     row.status === "RECEIVED" ||
                     row.statusLabel === "배송완료";
@@ -728,7 +774,7 @@ export function AdminOrderList({
                           ) : (
                             <span className="text-[11px] text-[#94a3b8]">—</span>
                           )
-                        ) : assignmentEditingUi ? (
+                        ) : workerEditUi ? (
                           <div className="flex flex-col gap-1">
                             <select
                               value={draft.worker ?? ""}
@@ -778,8 +824,11 @@ export function AdminOrderList({
                               </span>
                             )}
                             <CellBtn
-                              disabled={savingId === `ar-${row.id}`}
-                              onClick={() => beginAssignmentEdit(row)}
+                              disabled={
+                                savingId === `wr-${row.id}` ||
+                                savingId === `w-${row.id}`
+                              }
+                              onClick={() => beginWorkerEdit(row)}
                             >
                               초기화
                             </CellBtn>
@@ -796,7 +845,7 @@ export function AdminOrderList({
                           >
                             {regionLabel(row.storeRegion)}
                           </span>
-                        ) : assignmentEditingUi ? (
+                        ) : regionEditUi ? (
                           <div className="flex flex-col gap-1">
                             <select
                               value={draft.storeRegion ?? ""}
@@ -817,7 +866,6 @@ export function AdminOrderList({
                             <CellBtn
                               disabled={
                                 !draft.storeRegion ||
-                                draft.storeRegion === row.storeRegion ||
                                 savingId === `sr-${row.id}`
                               }
                               onClick={() =>
@@ -845,8 +893,11 @@ export function AdminOrderList({
                               {regionLabel(row.storeRegion)}
                             </span>
                             <CellBtn
-                              disabled={savingId === `ar-${row.id}`}
-                              onClick={() => beginAssignmentEdit(row)}
+                              disabled={
+                                savingId === `rr-${row.id}` ||
+                                savingId === `sr-${row.id}`
+                              }
+                              onClick={() => beginRegionEdit(row)}
                             >
                               초기화
                             </CellBtn>
