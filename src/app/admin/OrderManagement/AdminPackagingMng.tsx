@@ -302,7 +302,7 @@ export function AdminPackagingMng() {
                 <td className="px-2 py-2">{row.greetingMaterial}</td>
                 <td className="px-2 py-2">{row.greetingLocation}</td>
                 <td className="px-2 py-2">{row.slipLabel}</td>
-                <td className="px-2 py-2">{row.specialNote}</td>
+                <td className="px-2 py-2">{row.extraNote}</td>
                 <td className="overflow-visible whitespace-nowrap px-2 py-2 align-middle">
                   <input
                     disabled={!canOperate}
@@ -452,7 +452,7 @@ export function AdminPackagingMng() {
                       <td className="px-2 py-2">{row.greetingMaterial}</td>
                       <td className="px-2 py-2">{row.greetingLocation}</td>
                       <td className="px-2 py-2">{row.slipLabel}</td>
-                      <td className="px-2 py-2">{row.specialNote}</td>
+                      <td className="px-2 py-2">{row.extraNote}</td>
                       <td className="px-2 py-2">
                         <select
                           disabled={!canOperate}

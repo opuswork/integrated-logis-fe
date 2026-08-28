@@ -285,7 +285,7 @@ export function AdminReleaseMng() {
                       </td>
                       <td className="px-2 py-2">{row.loadType}</td>
                       <td className="px-2 py-2">{row.unitType}</td>
-                      <td className="px-2 py-2">{row.specialNote}</td>
+                      <td className="px-2 py-2">{row.extraNote}</td>
                       <td className="px-2 py-2">
                         {formatMonthDay(row.packDate)}
                       </td>

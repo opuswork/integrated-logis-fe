@@ -2330,6 +2330,7 @@ function ProductOrderPanel({
   const [senderAddress, setSenderAddress] = useState("");
   const [senderAddressDetail, setSenderAddressDetail] = useState("");
   const [branchStore, setBranchStore] = useState<BranchStoreId | null>(null);
+  const [extraNote, setExtraNote] = useState("");
   const [isDirector, setIsDirector] = useState<boolean>(false);
   const [viewingGreetingProduct, setViewingGreetingProduct] = useState<
     string | null
@@ -2389,6 +2390,7 @@ function ProductOrderPanel({
       Boolean(senderAddress.trim()) ||
       Boolean(senderAddressDetail.trim()) ||
       Boolean(branchStore) ||
+      Boolean(extraNote.trim()) ||
       (blankCustomerFields &&
         (Boolean(ordererName.trim()) ||
           Boolean(ordererPhone.trim()) ||
@@ -2415,6 +2417,7 @@ function ProductOrderPanel({
     senderAddress,
     senderAddressDetail,
     branchStore,
+    extraNote,
     blankCustomerFields,
     ordererName,
     ordererPhone,
@@ -2511,6 +2514,7 @@ function ProductOrderPanel({
               orderNumber: string;
               status: string;
               notes?: string | null;
+              extraNote?: string | null;
               items?: Array<{
                 productName: string;
                 quantity: number;
@@ -2565,6 +2569,7 @@ function ProductOrderPanel({
         setOrderType(isDeliveryOrder ? "delivery" : "parcel");
         setEditOrderId(order.id);
         setEditOrderStatus(order.status);
+        setExtraNote(order.extraNote ?? "");
 
         setOrdererPhone(formatPhoneInput(parseOrdererPhoneFromNotes(notes)));
         setOrderDate(parseOrderDateFromNotes(notes));
@@ -3091,6 +3096,7 @@ function ProductOrderPanel({
           0,
         ),
         notes,
+        extraNote: extraNote.trim(),
         items: productItems.map((item) => ({
           productName: item.product,
           quantity: item.qty,
@@ -4160,6 +4166,21 @@ function ProductOrderPanel({
           </>
         )}
       </div>
+      ) : null}
+
+      {orderType ? (
+        <div className="mb-4">
+          <label htmlFor="order-extra-note" className={omLabelClass}>
+            특이사항
+          </label>
+          <textarea
+            id="order-extra-note"
+            value={extraNote}
+            onChange={(event) => setExtraNote(event.target.value)}
+            placeholder="특이사항을 입력해 주세요"
+            className="min-h-[74px] w-full resize-none rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C] placeholder:text-[#A0AEC0]"
+          />
+        </div>
       ) : null}
 
       {isEditMode ? (
