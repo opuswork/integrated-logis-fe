@@ -944,11 +944,11 @@ export function OrderPrintPreview({
     <div className="space-y-3">
       <div className="flex flex-col gap-3 print:hidden min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between">
         {!embedded ? (
-          <div>
-            <h3 className="text-lg font-semibold text-ink min-[1040px]:text-[22px]">
-              주문서 미리보기
-            </h3>
-            <p className="mt-1 hidden text-[13px] text-muted-foreground min-[1040px]:block">
+        <div>
+          <h3 className="text-lg font-semibold text-ink min-[1040px]:text-[22px]">
+            주문서 미리보기
+          </h3>
+          <p className="mt-1 hidden text-[13px] text-muted-foreground min-[1040px]:block">
               상품 1건당 1장입니다. NO는 주문번호-순번 형식입니다.
             </p>
           </div>
@@ -956,8 +956,8 @@ export function OrderPrintPreview({
           <div>
             <p className="text-[13px] text-muted-foreground">
               {selectedPage.orderNumber} · 총 {pagesForSelectedOrder.length}장
-            </p>
-          </div>
+          </p>
+        </div>
         )}
         <div className="flex flex-wrap gap-2">
           <Button
@@ -1027,8 +1027,8 @@ export function OrderPrintPreview({
               관리자가 승인을 취소했습니다. 주문서를 다시 확인해 주세요.
             </p>
             <div className="mt-5 flex justify-end">
-              <Button
-                type="button"
+        <Button
+          type="button"
                 className="border-[#ea580c] bg-[#ea580c] text-white hover:bg-[#c2410c]"
                 disabled={clearingFactoryAlert}
                 onClick={() => {
@@ -1036,7 +1036,7 @@ export function OrderPrintPreview({
                 }}
               >
                 {clearingFactoryAlert ? "확인 중..." : "확인"}
-              </Button>
+        </Button>
             </div>
           </div>
         </div>

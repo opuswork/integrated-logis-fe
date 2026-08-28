@@ -219,8 +219,12 @@ function formatChecklistApiError(
     if (action === "workerClear" && !/workerClear/i.test(text)) {
       return "작업자 초기화를 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
     }
-    if (action === "setStoreRegion" && !/setStoreRegion/i.test(text)) {
-      return "주문매장 변경을 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
+    if (
+      (action === "assignmentReset" || action === "setStoreRegion") &&
+      !/assignmentReset/i.test(text) &&
+      !/setStoreRegion/i.test(text)
+    ) {
+      return "작업자·주문매장 변경을 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
     }
     if (
       (action === "setDeliveryRequestDate" ||
@@ -278,6 +282,9 @@ export function AdminOrderList({
 
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
   const [drafts, setDrafts] = useState<Record<number, DraftState>>({});
+  const [assignmentEditing, setAssignmentEditing] = useState<
+    Record<number, boolean>
+  >({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -497,20 +504,54 @@ export function AdminOrderList({
       setOrders((prev) =>
         prev.map((row) => (row.id === orderId ? mapped : row)),
       );
-      // After workerClear, packagingWorker is null → select + 저장 again.
-      setDrafts((prev) => ({
-        ...prev,
-        [orderId]: {
-          worker: mapped.packagingWorker ?? "",
-          storeRegion: mapped.storeRegion ?? "",
-        },
-      }));
+      const action = typeof body.action === "string" ? body.action : "";
+      if (action === "assignmentReset" || action === "workerClear") {
+        setAssignmentEditing((prev) => ({ ...prev, [orderId]: true }));
+        setDrafts((prev) => ({
+          ...prev,
+          [orderId]: {
+            worker: "",
+            storeRegion: mapped.storeRegion ?? "",
+          },
+        }));
+      } else if (action === "worker" && mapped.packagingWorker) {
+        setAssignmentEditing((prev) => {
+          const next = { ...prev };
+          delete next[orderId];
+          return next;
+        });
+        setDrafts((prev) => ({
+          ...prev,
+          [orderId]: {
+            worker: mapped.packagingWorker ?? "",
+            storeRegion: mapped.storeRegion ?? "",
+          },
+        }));
+      } else {
+        setDrafts((prev) => ({
+          ...prev,
+          [orderId]: {
+            worker: mapped.packagingWorker ?? "",
+            storeRegion: mapped.storeRegion ?? "",
+          },
+        }));
+      }
       setActionError("");
     } catch {
       setActionError("저장에 실패했습니다.");
     } finally {
       setSavingId(null);
     }
+  };
+
+  const beginAssignmentEdit = (row: AdminOrderRow) => {
+    void patchChecklist(
+      row.id,
+      {
+        action: row.packagingWorker ? "workerClear" : "assignmentReset",
+      },
+      `ar-${row.id}`,
+    );
   };
 
   const updateDraft = (id: number, patch: Partial<DraftState>) => {
@@ -631,7 +672,19 @@ export function AdminOrderList({
                 {pageRows.map((row) => {
                   const mutable = canMutateRow(authUser, row);
                   const locked = !mutable;
-                  const assignmentEditable = mutable && !row.packDept;
+                  const assignmentEditable =
+                    mutable &&
+                    !row.packDept &&
+                    row.statusLabel === "접수완료";
+                  const forceAssignmentEdit = Boolean(
+                    assignmentEditing[row.id],
+                  );
+                  const workerEditing =
+                    assignmentEditable &&
+                    (forceAssignmentEdit || !row.packagingWorker);
+                  const regionEditing =
+                    assignmentEditable &&
+                    (forceAssignmentEdit || !row.storeRegion);
                   const datesLocked =
                     row.status === "RECEIVED" ||
                     row.statusLabel === "배송완료";
@@ -652,17 +705,19 @@ export function AdminOrderList({
                       )}
                     >
                       <td className="px-2 py-2 align-top">
-                        {row.packagingWorker && !assignmentEditable ? (
-                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
-                            {row.packagingWorker === "STORE" ? "매장" : "공장"}
-                          </span>
-                        ) : (
+                        {!assignmentEditable ? (
+                          row.packagingWorker ? (
+                            <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                              {row.packagingWorker === "STORE"
+                                ? "매장"
+                                : "공장"}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-[#94a3b8]">—</span>
+                          )
+                        ) : workerEditing ? (
                           <div className="flex flex-col gap-1">
                             <select
-                              disabled={
-                                !assignmentEditable ||
-                                Boolean(row.packagingWorker)
-                              }
                               value={draft.worker ?? ""}
                               onChange={(e) =>
                                 updateDraft(row.id, {
@@ -672,61 +727,57 @@ export function AdminOrderList({
                                     | "",
                                 })
                               }
-                              className="rounded border border-line px-1.5 py-1 disabled:opacity-50"
+                              className="rounded border border-line px-1.5 py-1"
                             >
                               <option value="">선택</option>
                               <option value="STORE">매장</option>
                               <option value="FACTORY">공장</option>
                             </select>
-                            {!row.packagingWorker ? (
-                              <CellBtn
-                                disabled={
-                                  !assignmentEditable ||
-                                  !draft.worker ||
-                                  savingId === `w-${row.id}`
-                                }
-                                onClick={() =>
-                                  void patchChecklist(
-                                    row.id,
-                                    {
-                                      action: "worker",
-                                      packagingWorker: draft.worker,
-                                    },
-                                    `w-${row.id}`,
-                                  )
-                                }
-                              >
-                                저장
-                              </CellBtn>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] text-[#64748b]">
-                                  {row.packagingWorker === "STORE"
-                                    ? "매장"
-                                    : "공장"}
-                                </span>
-                                <CellBtn
-                                  disabled={
-                                    !assignmentEditable ||
-                                    savingId === `wc-${row.id}`
-                                  }
-                                  onClick={() =>
-                                    void patchChecklist(
-                                      row.id,
-                                      { action: "workerClear" },
-                                      `wc-${row.id}`,
-                                    )
-                                  }
-                                >
-                                  초기화
-                                </CellBtn>
-                              </div>
-                            )}
+                            <CellBtn
+                              disabled={
+                                !draft.worker || savingId === `w-${row.id}`
+                              }
+                              onClick={() =>
+                                void patchChecklist(
+                                  row.id,
+                                  {
+                                    action: "worker",
+                                    packagingWorker: draft.worker,
+                                  },
+                                  `w-${row.id}`,
+                                )
+                              }
+                            >
+                              저장
+                            </CellBtn>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                              {row.packagingWorker === "STORE"
+                                ? "매장"
+                                : "공장"}
+                            </span>
+                            <CellBtn
+                              disabled={savingId === `ar-${row.id}`}
+                              onClick={() => beginAssignmentEdit(row)}
+                            >
+                              초기화
+                            </CellBtn>
                           </div>
                         )}
                       </td>
-                      <td className="px-2 py-2 align-middle">
-                        {assignmentEditable ? (
+                      <td className="px-2 py-2 align-top">
+                        {!assignmentEditable ? (
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              regionClass(row.storeRegion),
+                            )}
+                          >
+                            {regionLabel(row.storeRegion)}
+                          </span>
+                        ) : regionEditing ? (
                           <div className="flex flex-col gap-1">
                             <select
                               value={draft.storeRegion ?? ""}
@@ -765,14 +816,22 @@ export function AdminOrderList({
                             </CellBtn>
                           </div>
                         ) : (
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                              regionClass(row.storeRegion),
-                            )}
-                          >
-                            {regionLabel(row.storeRegion)}
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                regionClass(row.storeRegion),
+                              )}
+                            >
+                              {regionLabel(row.storeRegion)}
+                            </span>
+                            <CellBtn
+                              disabled={savingId === `ar-${row.id}`}
+                              onClick={() => beginAssignmentEdit(row)}
+                            >
+                              초기화
+                            </CellBtn>
+                          </div>
                         )}
                       </td>
                       <td className="px-2 py-2 align-middle font-medium">
