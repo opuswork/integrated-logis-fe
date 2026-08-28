@@ -76,6 +76,17 @@ type DraftState = {
   storeRegion: AdminRegion | "";
 };
 
+/** 상태 '접수'만 '선택'(빈 값)으로 시작하고, 그 외에는 저장된 값을 표시 */
+function initialDraft(row: AdminOrderRow): DraftState {
+  if (row.statusLabel === "접수") {
+    return { worker: "", storeRegion: "" };
+  }
+  return {
+    worker: row.packagingWorker ?? "",
+    storeRegion: row.storeRegion ?? "",
+  };
+}
+
 function regionFromNotes(notes?: string | null): AdminRegion | null {
   const branch = parseBranchStoreFromNotes(notes);
   if (branch.includes("남부")) return "NAMBU";
@@ -394,7 +405,7 @@ export function AdminOrderList({
           const next = { ...prev };
           for (const row of rows) {
             if (!next[row.id]) {
-              next[row.id] = { worker: "", storeRegion: "" };
+              next[row.id] = initialDraft(row);
             }
           }
           return next;
@@ -582,27 +593,27 @@ export function AdminOrderList({
     }
   };
 
-  /** 작업자 초기화 → ○수정 + 선택 UI */
+  /** 작업자 초기화 → ○수정 + 현재 값이 채워진 선택 UI */
   const beginWorkerEdit = (row: AdminOrderRow) => {
     setWorkerEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
       ...prev,
       [row.id]: {
-        worker: "",
+        worker: row.packagingWorker ?? "",
         storeRegion: prev[row.id]?.storeRegion ?? "",
       },
     }));
     void flagAssignmentAlert(row, `wr-${row.id}`, "worker");
   };
 
-  /** 주문매장 초기화 → ○수정 + 선택 UI */
+  /** 주문매장 초기화 → ○수정 + 현재 값이 채워진 선택 UI */
   const beginRegionEdit = (row: AdminOrderRow) => {
     setRegionEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
       ...prev,
       [row.id]: {
         worker: prev[row.id]?.worker ?? "",
-        storeRegion: "",
+        storeRegion: row.storeRegion ?? "",
       },
     }));
     void flagAssignmentAlert(row, `rr-${row.id}`, "storeRegion");
@@ -794,10 +805,7 @@ export function AdminOrderList({
                   const datesLocked =
                     row.status === "RECEIVED" ||
                     row.statusLabel === "배송완료";
-                  const draft = drafts[row.id] ?? {
-                    worker: "",
-                    storeRegion: "",
-                  };
+                  const draft = drafts[row.id] ?? initialDraft(row);
                   const parcel = isParcelType(row.type, row.fulfillmentType);
                   const needsGreeting = row.greetingCount > 0;
                   const confirmed = Boolean(row.orderConfirmedAt);
