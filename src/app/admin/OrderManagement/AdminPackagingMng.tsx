@@ -3,6 +3,7 @@
 import html2canvas from "html2canvas-pro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { EditAlertBadge } from "@/components/ui/edit-alert-badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
@@ -18,7 +19,6 @@ import {
   savePngBlob,
 } from "@/lib/region-screen-capture";
 import {
-  hasEditAlert,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -30,12 +30,6 @@ import { cn } from "@/lib/utils";
 
 type PackTab = "pre" | "factory" | "sock";
 
-function EditAlertBadge({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <span className="ml-1 text-[11px] font-bold text-[#E53E3E]">○수정</span>
-  );
-}
 function CellBtn({
   children,
   disabled,
@@ -250,7 +244,7 @@ export function AdminPackagingMng() {
   const detailLabel = (row: ShipmentOpsOrder) => (
     <>
       {row.name}
-      <EditAlertBadge show={hasEditAlert(row.factoryAlert)} />
+      <EditAlertBadge factoryAlert={row.factoryAlert} />
       {` ${row.clientLabel} : ${row.productSummary} ${row.quantity}세트`}
     </>
   );

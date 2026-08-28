@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { EditAlertBadge } from "@/components/ui/edit-alert-badge";
 import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
@@ -10,7 +11,6 @@ import { canPressShipmentFinalActions, canWriteShipmentOps, getAuthUser } from "
 import { formatMonthDay } from "@/lib/date-format";
 import {
   expandShipmentOpsRows,
-  hasEditAlert,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -21,12 +21,6 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 15;
 
-function EditAlertBadge({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <span className="ml-1 text-[11px] font-bold text-[#E53E3E]">○수정</span>
-  );
-}
 function YnBadge({ yes }: { yes: boolean }) {
   return (
     <span
@@ -381,7 +375,7 @@ export function AdminShipmentMng() {
                       <td className="px-2 py-2">{row.churchName}</td>
                       <td className="px-2 py-2">
                         {row.name}
-                        <EditAlertBadge show={hasEditAlert(row.factoryAlert)} />
+                        <EditAlertBadge factoryAlert={row.factoryAlert} />
                         {urgent ? (
                           <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-[#FFEDD5] px-1.5 py-0.5 text-[10px] font-bold text-[#9C4221]">
                             <span className="size-1.5 rounded-full bg-[#F6AD55]" />
