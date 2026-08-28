@@ -4221,7 +4221,7 @@ function ProductOrderPanel({
             }
           }}
         >
-          주문접수취소
+          {isEditMode ? "주문서닫기" : "주문접수취소"}
         </Button>
       </div>
 
