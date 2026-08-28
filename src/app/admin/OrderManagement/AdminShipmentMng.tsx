@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { EditAlertBadge } from "@/components/ui/edit-alert-badge";
+import {
+  FactoryAlertModal,
+  pickFactoryAlertTarget,
+} from "@/components/ui/factory-alert-modal";
 import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
@@ -10,7 +14,6 @@ import { apiFetch } from "@/lib/api";
 import { canPressShipmentFinalActions, canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
-  clearLegacyAssignmentAlertsOnce,
   expandShipmentOpsRows,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
@@ -88,6 +91,7 @@ function isUrgent(row: ShipmentOpsOrder) {
 export function AdminShipmentMng() {
   const auth = getAuthUser();
   const canOperate = canWriteShipmentOps(auth);
+  const isFactory = auth?.role === "factory";
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -114,12 +118,9 @@ export function AdminShipmentMng() {
         return;
       }
       setRows(
-        await clearLegacyAssignmentAlertsOnce(
-          data
-            .filter((o: { status?: string }) => o.status !== "CANCELLED")
-            .map(mapShipmentOpsOrder),
-          apiFetch,
-        ),
+        data
+          .filter((o: { status?: string }) => o.status !== "CANCELLED")
+          .map(mapShipmentOpsOrder),
       );
     } catch {
       if (!silent) {
@@ -185,6 +186,10 @@ export function AdminShipmentMng() {
   );
 
   const urgentCount = filtered.filter(isUrgent).length;
+  const factoryAlert = useMemo(
+    () => (isFactory ? pickFactoryAlertTarget(rows) : null),
+    [isFactory, rows],
+  );
 
   const runOp = async (
     orderId: number,
@@ -541,6 +546,13 @@ export function AdminShipmentMng() {
         매장관리자(및 최고관리자)만 누를 수 있으며, 공장관리자는
         비활성입니다. Factory-G는 목록만 조회합니다.
       </p>
+
+      {factoryAlert ? (
+        <FactoryAlertModal
+          alert={factoryAlert}
+          onCleared={() => void load(true)}
+        />
+      ) : null}
     </div>
   );
 }

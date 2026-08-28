@@ -194,5 +194,20 @@ export function isDeliveryConfirmed(order: {
 
 export const FACTORY_CHANGE_ALERT_MESSAGE = "주문서 변경요청발생!";
 
-/** 주문관리에서 작업자·주문매장 변경 시 포장/출고/배송 이름 옆 ○수정 */
+/** @deprecated 레거시 통합 메시지 — heal/클리어 호환용 */
 export const ASSIGNMENT_CHANGE_ALERT = "작업자·주문매장 변경";
+
+/** 작업자 초기화 시 공장 모달·○수정 */
+export const WORKER_CHANGE_ALERT = "'작업자'변경 경고입니다.";
+
+/** 주문매장 초기화 시 공장 모달·○수정 */
+export const STORE_REGION_CHANGE_ALERT = "'주문매장'변경 경고입니다.:";
+
+export function isAssignmentFactoryAlert(message?: string | null) {
+  const m = message?.trim();
+  return (
+    m === ASSIGNMENT_CHANGE_ALERT ||
+    m === WORKER_CHANGE_ALERT ||
+    m === STORE_REGION_CHANGE_ALERT
+  );
+}

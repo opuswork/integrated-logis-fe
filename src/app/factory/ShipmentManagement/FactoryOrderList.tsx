@@ -5,6 +5,10 @@ import { useEffect, useMemo, useState, type ReactNode, type ClipboardEvent, type
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
+import {
+  FactoryAlertModal,
+  type FactoryAlertTarget,
+} from "@/components/ui/factory-alert-modal";
 import { Input } from "@/components/ui/input";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
@@ -14,7 +18,6 @@ import {
   isMemberShippingStatus,
   isWaitingFactoryLoadStatus,
   memberFacingStatusLabel,
-  FACTORY_CHANGE_ALERT_MESSAGE,
 } from "@/lib/order-delivery";
 import {
   parseOrderDateFromNotes,
@@ -251,12 +254,7 @@ export function FactoryOrderList() {
   const [viewingOrderNumber, setViewingOrderNumber] = useState<string | null>(
     null,
   );
-  const [listAlert, setListAlert] = useState<{
-    id: number;
-    orderNumber: string;
-    message: string;
-  } | null>(null);
-  const [clearingListAlert, setClearingListAlert] = useState(false);
+  const [listAlert, setListAlert] = useState<FactoryAlertTarget | null>(null);
 
   const loadOrders = async (silent = false) => {
     if (!silent) {
@@ -528,48 +526,13 @@ export function FactoryOrderList() {
       />
 
       {listAlert && !viewingOrderNumber ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="factory-list-change-alert-title"
-            className="w-full max-w-md rounded-xl border border-line bg-panel p-5 shadow-[0_14px_34px_rgba(18,38,63,0.08)]"
-          >
-            <h2
-              id="factory-list-change-alert-title"
-              className="text-lg font-semibold text-ink"
-            >
-              {listAlert.message || FACTORY_CHANGE_ALERT_MESSAGE}
-            </h2>
-            <p className="mt-3 text-base leading-relaxed text-ink">
-              주문번호 {listAlert.orderNumber}. 관리자가 승인을 취소했습니다.
-            </p>
-            <div className="mt-5 flex justify-end">
-              <Button
-                type="button"
-                className="border-[#ea580c] bg-[#ea580c] text-white hover:bg-[#c2410c]"
-                disabled={clearingListAlert}
-                onClick={() => {
-                  void (async () => {
-                    setClearingListAlert(true);
-                    try {
-                      await apiFetch(
-                        `/api/orders/${listAlert.id}/factory-alert`,
-                        { method: "PATCH" },
-                      );
-                      setListAlert(null);
-                      await loadOrders(true);
-                    } finally {
-                      setClearingListAlert(false);
-                    }
-                  })();
-                }}
-              >
-                {clearingListAlert ? "확인 중..." : "확인"}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <FactoryAlertModal
+          alert={listAlert}
+          onCleared={() => {
+            setListAlert(null);
+            void loadOrders(true);
+          }}
+        />
       ) : null}
     </div>
   );
