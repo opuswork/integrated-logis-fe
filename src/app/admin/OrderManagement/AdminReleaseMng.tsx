@@ -9,6 +9,7 @@ import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
+  clearLegacyAssignmentAlertsOnce,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -79,10 +80,13 @@ export function AdminReleaseMng() {
         return;
       }
       setRows(
-        data
-          .filter((o: { status?: string }) => o.status !== "CANCELLED")
-          .map(mapShipmentOpsOrder)
-          .filter((row) => row.packagingWorker !== "STORE"),
+        await clearLegacyAssignmentAlertsOnce(
+          data
+            .filter((o: { status?: string }) => o.status !== "CANCELLED")
+            .map(mapShipmentOpsOrder)
+            .filter((row) => row.packagingWorker !== "STORE"),
+          apiFetch,
+        ),
       );
     } catch {
       if (!silent) {

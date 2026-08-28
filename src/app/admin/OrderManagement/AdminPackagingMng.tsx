@@ -19,6 +19,7 @@ import {
   savePngBlob,
 } from "@/lib/region-screen-capture";
 import {
+  clearLegacyAssignmentAlertsOnce,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -136,10 +137,13 @@ export function AdminPackagingMng() {
         }
         return;
       }
-      const mapped = data
-        .filter((o: { status?: string }) => o.status !== "CANCELLED")
-        .map(mapShipmentOpsOrder)
-        .filter((row) => row.packagingWorker !== "STORE");
+      const mapped = await clearLegacyAssignmentAlertsOnce(
+        data
+          .filter((o: { status?: string }) => o.status !== "CANCELLED")
+          .map(mapShipmentOpsOrder)
+          .filter((row) => row.packagingWorker !== "STORE"),
+        apiFetch,
+      );
       setRows(mapped);
       setDeptDraft((prev) => {
         const next = { ...prev };

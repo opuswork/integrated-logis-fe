@@ -1,4 +1,5 @@
 import {
+  ASSIGNMENT_CHANGE_ALERT,
   isDeliveryOrderType,
   memberFacingStatusLabel,
   type DeliveryOrderStatus,
@@ -76,6 +77,58 @@ export type ShipmentOpsOrder = {
 /** 이름 옆 ○수정 표시 (비어 있지 않은 factoryAlert) */
 export function hasEditAlert(factoryAlert?: string | null) {
   return Boolean(factoryAlert?.trim());
+}
+
+const LEGACY_ASSIGNMENT_ALERT_CLEAR_KEY = "sanc_cleared_assignment_alerts_v1";
+
+/**
+ * 과거 초기화 버그로 DB에 남은 '작업자·주문매장 변경' 경고를
+ * 브라우저 세션당 1회 API로 제거한다. (이후 저장으로 새로 켜진 경고는 유지)
+ */
+export async function clearLegacyAssignmentAlertsOnce(
+  rows: ShipmentOpsOrder[],
+  apiFetch: (input: string, init?: RequestInit) => Promise<Response>,
+): Promise<ShipmentOpsOrder[]> {
+  if (typeof window === "undefined" || rows.length === 0) {
+    return rows;
+  }
+  try {
+    if (sessionStorage.getItem(LEGACY_ASSIGNMENT_ALERT_CLEAR_KEY)) {
+      return rows;
+    }
+  } catch {
+    return rows;
+  }
+
+  const targets = rows.filter(
+    (row) => row.factoryAlert === ASSIGNMENT_CHANGE_ALERT,
+  );
+  try {
+    sessionStorage.setItem(LEGACY_ASSIGNMENT_ALERT_CLEAR_KEY, "1");
+  } catch {
+    /* private mode 등 */
+  }
+  if (targets.length === 0) {
+    return rows;
+  }
+
+  await Promise.all(
+    targets.map(async (row) => {
+      try {
+        await apiFetch(`/api/orders/${row.id}/factory-alert`, {
+          method: "PATCH",
+        });
+      } catch {
+        /* ignore */
+      }
+    }),
+  );
+
+  return rows.map((row) =>
+    row.factoryAlert === ASSIGNMENT_CHANGE_ALERT
+      ? { ...row, factoryAlert: null }
+      : row,
+  );
 }
 
 export type ShipmentLineRow = ShipmentOpsOrder & {
