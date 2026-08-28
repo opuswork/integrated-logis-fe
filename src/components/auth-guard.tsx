@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { useIdleLogout } from "@/hooks/use-idle-logout";
+import { apiFetch } from "@/lib/api";
 import {
   clearAuthUser,
   getAuthUser,
@@ -12,8 +13,32 @@ import {
   type UserRole,
 } from "@/lib/auth";
 
+const SESSION_POLL_MS = 25_000;
+
 function IdleLogoutEffect({ timeoutMs }: { timeoutMs: number }) {
   useIdleLogout(timeoutMs);
+  return null;
+}
+
+function SessionPollEffect() {
+  useEffect(() => {
+    let cancelled = false;
+
+    const check = () => {
+      if (cancelled || !getAuthUser()) return;
+      void apiFetch("/api/auth/me").catch(() => {
+        /* network errors ignored; 401 handled in apiFetch */
+      });
+    };
+
+    check();
+    const id = window.setInterval(check, SESSION_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
   return null;
 }
 
@@ -60,6 +85,7 @@ export function AuthGuard({
 
   return (
     <>
+      <SessionPollEffect />
       {idleTimeoutMs != null && idleTimeoutMs > 0 ? (
         <IdleLogoutEffect timeoutMs={idleTimeoutMs} />
       ) : null}
