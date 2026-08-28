@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
@@ -12,7 +11,6 @@ import {
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
-  todayIsoDate,
   type ShipmentOpsOrder,
 } from "@/lib/shipment-ops";
 import { cn } from "@/lib/utils";
@@ -51,12 +49,6 @@ function CellBtn({
   );
 }
 
-function shiftDate(iso: string, delta: number) {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
-
 export function AdminReleaseMng() {
   const auth = getAuthUser();
   const canOperate = canWriteShipmentOps(auth);
@@ -65,8 +57,6 @@ export function AdminReleaseMng() {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState(todayIsoDate());
-  const [showAll, setShowAll] = useState(false);
   const [storeFilter, setStoreFilter] = useState("");
   const [packFilter, setPackFilter] = useState("");
   const [shipFilter, setShipFilter] = useState("");
@@ -110,15 +100,7 @@ export function AdminReleaseMng() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    return rows.filter((row) => {
-      if (!showAll) {
-        if (
-          row.requestedShipDate &&
-          row.requestedShipDate !== dateFilter
-        ) {
-          return false;
-        }
-      }
+    const list = rows.filter((row) => {
       if (storeFilter && row.storeLabel !== storeFilter) return false;
       if (packFilter === "완료" && !row.packDone) return false;
       if (packFilter === "미완료" && row.packDone) return false;
@@ -126,11 +108,16 @@ export function AdminReleaseMng() {
       if (shipFilter === "미완료" && row.releaseDone) return false;
       return true;
     });
-  }, [rows, showAll, dateFilter, storeFilter, packFilter, shipFilter]);
+    return list.sort((a, b) => {
+      const aKey = a.createdAt || a.orderDate || "";
+      const bKey = b.createdAt || b.orderDate || "";
+      return bKey.localeCompare(aKey);
+    });
+  }, [rows, storeFilter, packFilter, shipFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [dateFilter, showAll, storeFilter, packFilter, shipFilter]);
+  }, [storeFilter, packFilter, shipFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -179,51 +166,6 @@ export function AdminReleaseMng() {
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              className="rounded border border-[#E2E8F0] px-2 py-1 text-sm"
-              onClick={() => {
-                setShowAll(false);
-                setDateFilter((d) => shiftDate(d, -1));
-              }}
-            >
-              ‹
-            </button>
-            <MdCalendarPicker
-              valueIso={dateFilter}
-              yearHint={dateFilter}
-              title="출고요청일 검색 (m/d)"
-              inputClassName="rounded border border-[#E2E8F0] px-2 py-1 text-[13.5px] font-bold text-[#1A365D]"
-              onChangeIso={(v) => {
-                if (!v) return;
-                setShowAll(false);
-                setDateFilter(v);
-              }}
-            />
-            <button
-              type="button"
-              className="rounded border border-[#E2E8F0] px-2 py-1 text-sm"
-              onClick={() => {
-                setShowAll(false);
-                setDateFilter((d) => shiftDate(d, 1));
-              }}
-            >
-              ›
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAll(true)}
-              className={cn(
-                "rounded-[7px] border px-3 py-1.5 text-[12.5px] font-bold",
-                showAll
-                  ? "border-[#3182CE] bg-[#EBF4FD] text-[#1A365D]"
-                  : "border-[#E2E8F0] bg-white",
-              )}
-            >
-              전체보기
-            </button>
-          </div>
           <select
             value={storeFilter}
             onChange={(e) => setStoreFilter(e.target.value)}
