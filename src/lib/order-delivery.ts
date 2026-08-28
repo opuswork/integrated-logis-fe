@@ -193,3 +193,6 @@ export function isDeliveryConfirmed(order: {
 }
 
 export const FACTORY_CHANGE_ALERT_MESSAGE = "주문서 변경요청발생!";
+
+/** 주문관리에서 작업자·주문매장 변경 시 포장/출고/배송 이름 옆 ○수정 */
+export const ASSIGNMENT_CHANGE_ALERT = "작업자·주문매장 변경";

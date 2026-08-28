@@ -18,6 +18,7 @@ import {
   savePngBlob,
 } from "@/lib/region-screen-capture";
 import {
+  hasEditAlert,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -29,6 +30,12 @@ import { cn } from "@/lib/utils";
 
 type PackTab = "pre" | "factory" | "sock";
 
+function EditAlertBadge({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="ml-1 text-[11px] font-bold text-[#E53E3E]">○수정</span>
+  );
+}
 function CellBtn({
   children,
   disabled,
@@ -240,9 +247,13 @@ export function AdminPackagingMng() {
     );
   };
 
-  const detailLabel = (row: ShipmentOpsOrder) =>
-    `${row.name} ${row.clientLabel} : ${row.productSummary} ${row.quantity}세트`;
-
+  const detailLabel = (row: ShipmentOpsOrder) => (
+    <>
+      {row.name}
+      <EditAlertBadge show={hasEditAlert(row.factoryAlert)} />
+      {` ${row.clientLabel} : ${row.productSummary} ${row.quantity}세트`}
+    </>
+  );
   const renderDeptTable = (
     list: ShipmentOpsOrder[],
     emptyText: string,

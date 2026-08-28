@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
+  hasEditAlert,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -17,6 +18,12 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 15;
 
+function EditAlertBadge({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="ml-1 text-[11px] font-bold text-[#E53E3E]">○수정</span>
+  );
+}
 function CellBtn({
   children,
   disabled,
@@ -263,7 +270,10 @@ export function AdminReleaseMng() {
                       </td>
                       <td className="px-2 py-2">{row.storeLabel}</td>
                       <td className="px-2 py-2">{row.churchName}</td>
-                      <td className="px-2 py-2 font-semibold">{row.name}</td>
+                      <td className="px-2 py-2 font-semibold">
+                        {row.name}
+                        <EditAlertBadge show={hasEditAlert(row.factoryAlert)} />
+                      </td>
                       <td className="px-2 py-2">{row.clientLabel}</td>
                       <td className="px-2 py-2">{row.productSummary}</td>
                       <td className="px-2 py-2">{row.quantity}</td>
