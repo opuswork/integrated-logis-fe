@@ -25,6 +25,7 @@ import {
 } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
+  ASSIGNMENT_CHANGE_ALERT,
   canEditOrderStatus,
   memberFacingStatusLabel,
   type DeliveryOrderStatus,
@@ -586,76 +587,7 @@ export function AdminOrderList({
     }
   };
 
-  /** ○수정: factory-alert 전용 API (작업자/지역 값 유지) */
-  const flagAssignmentAlert = async (row: AdminOrderRow, key: string) => {
-    setSavingId(key);
-    setActionError("");
-    try {
-      const response = await apiFetch(
-        `/api/orders/${row.id}/factory-alert`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ set: "assignment" }),
-        },
-      );
-      const data = (await response.json()) as
-        | Parameters<typeof mapApiOrder>[0]
-        | { message?: string | string[] };
-      if (!response.ok) {
-        setActionError(
-          formatChecklistApiError(
-            "message" in data ? data.message : undefined,
-            "assignmentReset",
-          ),
-        );
-        return;
-      }
-      const mapped = mapApiOrder(data as Parameters<typeof mapApiOrder>[0]);
-      if (!mapped.factoryAlert?.trim()) {
-        setActionError(
-          "경고등 설정에 실패했습니다. 백엔드 재배포 후 다시 시도해 주세요.",
-        );
-        return;
-      }
-      setOrders((prev) =>
-        prev.map((r) => (r.id === row.id ? mapped : r)),
-      );
-      if (key.startsWith("wr-")) {
-        setWorkerEditing((prev) => ({ ...prev, [row.id]: true }));
-        setDrafts((prev) => ({
-          ...prev,
-          [row.id]: {
-            worker: "",
-            storeRegion:
-              mapped.storeRegion ??
-              prev[row.id]?.storeRegion ??
-              row.storeRegion ??
-              "",
-          },
-        }));
-      } else if (key.startsWith("rr-")) {
-        setRegionEditing((prev) => ({ ...prev, [row.id]: true }));
-        setDrafts((prev) => ({
-          ...prev,
-          [row.id]: {
-            worker:
-              prev[row.id]?.worker ?? mapped.packagingWorker ?? "",
-            storeRegion: mapped.storeRegion ?? row.storeRegion ?? "",
-          },
-        }));
-      }
-      setActionError("");
-    } catch {
-      setActionError(
-        "경고등 설정에 실패했습니다. 백엔드 재배포 후 다시 시도해 주세요.",
-      );
-    } finally {
-      setSavingId(null);
-    }
-  };
-
-  /** 작업자만 초기화 → UI 편집 + ○수정 (서버 작업자 유지) */
+  /** 작업자만 초기화 → 해당 열 편집만. 저장 시 ○수정 점등, 포장구분 시 소등 */
   const beginWorkerEdit = (row: AdminOrderRow) => {
     setWorkerEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
@@ -665,10 +597,13 @@ export function AdminOrderList({
         storeRegion: prev[row.id]?.storeRegion ?? row.storeRegion ?? "",
       },
     }));
-    void flagAssignmentAlert(row, `wr-${row.id}`);
+    // 초기화만 하고 저장 안 한 채 남은 배정 경고등 제거
+    if (row.factoryAlert === ASSIGNMENT_CHANGE_ALERT) {
+      void clearAssignmentAlert(row.id);
+    }
   };
 
-  /** 주문매장만 초기화 → UI 편집 + ○수정 (서버 주문매장 유지) */
+  /** 주문매장만 초기화 → 해당 열 편집만 */
   const beginRegionEdit = (row: AdminOrderRow) => {
     setRegionEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
@@ -678,7 +613,31 @@ export function AdminOrderList({
         storeRegion: row.storeRegion ?? "",
       },
     }));
-    void flagAssignmentAlert(row, `rr-${row.id}`);
+    if (row.factoryAlert === ASSIGNMENT_CHANGE_ALERT) {
+      void clearAssignmentAlert(row.id);
+    }
+  };
+
+  /** 배정 변경 경고등만 클리어 (주문서 변경요청 알림은 유지) */
+  const clearAssignmentAlert = async (orderId: number) => {
+    try {
+      const response = await apiFetch(`/api/orders/${orderId}/factory-alert`, {
+        method: "PATCH",
+      });
+      const data = (await response.json()) as
+        | Parameters<typeof mapApiOrder>[0]
+        | { message?: string | string[] };
+      if (!response.ok || !("id" in data)) {
+        return;
+      }
+      const mapped = mapApiOrder(data);
+      // clear API는 factoryAlert 전체를 null — 배정 경고만 대상이었을 때만 반영
+      setOrders((prev) =>
+        prev.map((r) => (r.id === orderId ? mapped : r)),
+      );
+    } catch {
+      // 편집은 유지
+    }
   };
 
   const updateDraft = (id: number, patch: Partial<DraftState>) => {
