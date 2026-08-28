@@ -9,6 +9,7 @@ import { apiFetch } from "@/lib/api";
 import { canPressShipmentFinalActions, canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
+  expandShipmentOpsRows,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -162,13 +163,18 @@ export function AdminShipmentMng() {
     });
   }, [rows, storeFilter, statusFilter, workerFilter]);
 
+  const expanded = useMemo(
+    () => expandShipmentOpsRows(filtered),
+    [filtered],
+  );
+
   useEffect(() => {
     setPage(1);
   }, [storeFilter, statusFilter, workerFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(expanded.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice(
+  const pageRows = expanded.slice(
     (safePage - 1) * PAGE_SIZE,
     safePage * PAGE_SIZE,
   );
@@ -204,6 +210,10 @@ export function AdminShipmentMng() {
               (r.fulfillmentType
                 ? { fulfillmentType: r.fulfillmentType }
                 : null),
+            items:
+              (payload.items as
+                | { productName?: string; quantity?: number }[]
+                | undefined) ?? r.items,
             finalCompleteDone:
               payload.finalCompleteDone ?? r.finalCompleteDone,
             finalConfirmDone: payload.finalConfirmDone ?? r.finalConfirmDone,
@@ -337,7 +347,7 @@ export function AdminShipmentMng() {
                       (isSangchaRow && row.finalCompleteDone));
                   return (
                     <tr
-                      key={row.id}
+                      key={row.lineKey}
                       className={cn(
                         "border-t border-[#E2E8F0]",
                         urgent && "bg-[#FFF7ED]",
@@ -356,7 +366,7 @@ export function AdminShipmentMng() {
                         </span>
                       </td>
                       <td className="px-2 py-2 font-semibold text-[#1A365D]">
-                        {row.orderNumber}
+                        {row.lineOrderNumber}
                       </td>
                       <td className="px-2 py-2">
                         <RegionTag label={row.storeLabel} />
