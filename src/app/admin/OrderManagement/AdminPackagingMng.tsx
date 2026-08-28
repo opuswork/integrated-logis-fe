@@ -6,6 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditAlertBadge } from "@/components/ui/edit-alert-badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  FactoryAlertModal,
+  pickFactoryAlertTarget,
+} from "@/components/ui/factory-alert-modal";
 import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
@@ -19,7 +23,6 @@ import {
   savePngBlob,
 } from "@/lib/region-screen-capture";
 import {
-  clearLegacyAssignmentAlertsOnce,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -64,6 +67,7 @@ function CellBtn({
 export function AdminPackagingMng() {
   const auth = getAuthUser();
   const canOperate = canWriteShipmentOps(auth);
+  const isFactory = auth?.role === "factory";
   const [tab, setTab] = useState<PackTab>("pre");
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,13 +141,10 @@ export function AdminPackagingMng() {
         }
         return;
       }
-      const mapped = await clearLegacyAssignmentAlertsOnce(
-        data
-          .filter((o: { status?: string }) => o.status !== "CANCELLED")
-          .map(mapShipmentOpsOrder)
-          .filter((row) => row.packagingWorker !== "STORE"),
-        apiFetch,
-      );
+      const mapped = data
+        .filter((o: { status?: string }) => o.status !== "CANCELLED")
+        .map(mapShipmentOpsOrder)
+        .filter((row) => row.packagingWorker !== "STORE");
       setRows(mapped);
       setDeptDraft((prev) => {
         const next = { ...prev };
@@ -195,6 +196,10 @@ export function AdminPackagingMng() {
           ),
         ),
     [rows],
+  );
+  const factoryAlert = useMemo(
+    () => (isFactory ? pickFactoryAlertTarget(rows) : null),
+    [isFactory, rows],
   );
 
   const runOp = async (
@@ -591,6 +596,13 @@ export function AdminPackagingMng() {
             </Button>
           </div>
         </Dialog>
+      ) : null}
+
+      {factoryAlert ? (
+        <FactoryAlertModal
+          alert={factoryAlert}
+          onCleared={() => void load(true)}
+        />
       ) : null}
     </div>
   );

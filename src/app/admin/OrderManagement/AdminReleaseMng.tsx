@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { EditAlertBadge } from "@/components/ui/edit-alert-badge";
+import {
+  FactoryAlertModal,
+  pickFactoryAlertTarget,
+} from "@/components/ui/factory-alert-modal";
 import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
-  clearLegacyAssignmentAlertsOnce,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
   patchShipmentOps,
@@ -54,6 +57,7 @@ function CellBtn({
 export function AdminReleaseMng() {
   const auth = getAuthUser();
   const canOperate = canWriteShipmentOps(auth);
+  const isFactory = auth?.role === "factory";
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -80,13 +84,10 @@ export function AdminReleaseMng() {
         return;
       }
       setRows(
-        await clearLegacyAssignmentAlertsOnce(
-          data
-            .filter((o: { status?: string }) => o.status !== "CANCELLED")
-            .map(mapShipmentOpsOrder)
-            .filter((row) => row.packagingWorker !== "STORE"),
-          apiFetch,
-        ),
+        data
+          .filter((o: { status?: string }) => o.status !== "CANCELLED")
+          .map(mapShipmentOpsOrder)
+          .filter((row) => row.packagingWorker !== "STORE"),
       );
     } catch {
       if (!silent) {
@@ -132,6 +133,10 @@ export function AdminReleaseMng() {
   );
 
   const packDoneCount = filtered.filter((r) => r.packDone).length;
+  const factoryAlert = useMemo(
+    () => (isFactory ? pickFactoryAlertTarget(rows) : null),
+    [isFactory, rows],
+  );
 
   const runOp = async (
     orderId: number,
@@ -399,6 +404,13 @@ export function AdminReleaseMng() {
 
       {actionError ? (
         <p className="mt-2 text-sm text-[#E53E3E]">{actionError}</p>
+      ) : null}
+
+      {factoryAlert ? (
+        <FactoryAlertModal
+          alert={factoryAlert}
+          onCleared={() => void load(true)}
+        />
       ) : null}
     </div>
   );
