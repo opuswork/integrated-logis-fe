@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/api";
 import { canPressShipmentFinalActions, canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
+  clearLegacyAssignmentAlertsOnce,
   expandShipmentOpsRows,
   mapShipmentOpsOrder,
   parseApiErrorMessage,
@@ -113,9 +114,12 @@ export function AdminShipmentMng() {
         return;
       }
       setRows(
-        data
-          .filter((o: { status?: string }) => o.status !== "CANCELLED")
-          .map(mapShipmentOpsOrder),
+        await clearLegacyAssignmentAlertsOnce(
+          data
+            .filter((o: { status?: string }) => o.status !== "CANCELLED")
+            .map(mapShipmentOpsOrder),
+          apiFetch,
+        ),
       );
     } catch {
       if (!silent) {
