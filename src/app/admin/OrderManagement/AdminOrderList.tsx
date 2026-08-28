@@ -505,7 +505,11 @@ export function AdminOrderList({
         prev.map((row) => (row.id === orderId ? mapped : row)),
       );
       const action = typeof body.action === "string" ? body.action : "";
-      if (action === "assignmentReset" || action === "workerClear") {
+      if (
+        action === "workerClear" ||
+        action === "assignmentReset" ||
+        (action === "setStoreRegion" && key.startsWith("ar-"))
+      ) {
         setAssignmentEditing((prev) => ({ ...prev, [orderId]: true }));
         setDrafts((prev) => ({
           ...prev,
@@ -544,14 +548,27 @@ export function AdminOrderList({
     }
   };
 
+  /** 작업자/주문매장 초기화 — 어느 쪽이든 ○수정 + 양쪽 편집. assignmentReset 미배포 BE 호환. */
   const beginAssignmentEdit = (row: AdminOrderRow) => {
-    void patchChecklist(
-      row.id,
-      {
-        action: row.packagingWorker ? "workerClear" : "assignmentReset",
+    setAssignmentEditing((prev) => ({ ...prev, [row.id]: true }));
+    setDrafts((prev) => ({
+      ...prev,
+      [row.id]: {
+        worker: "",
+        storeRegion: row.storeRegion ?? "",
       },
-      `ar-${row.id}`,
-    );
+    }));
+    if (row.packagingWorker) {
+      void patchChecklist(row.id, { action: "workerClear" }, `ar-${row.id}`);
+      return;
+    }
+    if (row.storeRegion) {
+      void patchChecklist(
+        row.id,
+        { action: "setStoreRegion", storeRegion: row.storeRegion },
+        `ar-${row.id}`,
+      );
+    }
   };
 
   const updateDraft = (id: number, patch: Partial<DraftState>) => {
