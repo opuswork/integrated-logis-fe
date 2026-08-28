@@ -2178,6 +2178,7 @@ function ProductOrderPanel({
   const [deliveryCompanyName, setDeliveryCompanyName] = useState("");
   const [parcelCompanyName, setParcelCompanyName] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
+  const [deliveryAmPm, setDeliveryAmPm] = useState<"" | "오전" | "오후">("");
   const [deliveryTime, setDeliveryTime] = useState("");
   const [parcelShipDate, setParcelShipDate] = useState("");
   const [recipientName, setRecipientName] = useState("");
@@ -2236,6 +2237,7 @@ function ProductOrderPanel({
       Boolean(deliveryCompanyName.trim()) ||
       Boolean(parcelCompanyName.trim()) ||
       Boolean(deliveryDate) ||
+      Boolean(deliveryAmPm) ||
       Boolean(deliveryTime) ||
       Boolean(parcelShipDate) ||
       Boolean(recipientName.trim()) ||
@@ -2261,6 +2263,7 @@ function ProductOrderPanel({
     deliveryCompanyName,
     parcelCompanyName,
     deliveryDate,
+    deliveryAmPm,
     deliveryTime,
     parcelShipDate,
     recipientName,
@@ -2441,12 +2444,19 @@ function ProductOrderPanel({
 
         const deliveryDt = parseDeliveryDateTimeFromNotes(notes).trim();
         if (deliveryDt) {
-          const [d, t] = deliveryDt.split(/\s+/);
-          setDeliveryDate(d?.slice(0, 10) ?? "");
-          setDeliveryTime(t?.slice(0, 5) ?? "");
+          const parts = deliveryDt.split(/\s+/).filter(Boolean);
+          setDeliveryDate(parts[0]?.slice(0, 10) ?? "");
+          if (parts[1] === "오전" || parts[1] === "오후") {
+            setDeliveryAmPm(parts[1]);
+            setDeliveryTime(parts[2]?.slice(0, 5) ?? "");
+          } else {
+            setDeliveryAmPm("");
+            setDeliveryTime(parts[1]?.slice(0, 5) ?? "");
+          }
         } else if (order.shipment?.estimatedWindow && isDeliveryOrder) {
           const iso = order.shipment.estimatedWindow;
           setDeliveryDate(iso.slice(0, 10));
+          setDeliveryAmPm("");
           setDeliveryTime(iso.slice(11, 16));
         }
 
@@ -2642,6 +2652,7 @@ function ProductOrderPanel({
     setDeliveryCompanyName("");
     setParcelCompanyName("");
     setDeliveryDate("");
+    setDeliveryAmPm("");
     setDeliveryTime("");
     setParcelShipDate("");
     setRecipientName("");
@@ -2753,6 +2764,7 @@ function ProductOrderPanel({
       }
       if (
         !deliveryDate ||
+        !deliveryAmPm ||
         !deliveryTime ||
         !recipientName.trim() ||
         !recipientPhone.trim() ||
@@ -2907,7 +2919,9 @@ function ProductOrderPanel({
         `중앙:${churchQuery.trim()}`,
         hasDeliveryItems ? `배달업체명:${deliveryCompanyName.trim()}` : null,
         hasParcelItems ? `택배업체명:${parcelCompanyName.trim()}` : null,
-        hasDeliveryItems ? `배달일:${deliveryDate} ${deliveryTime}` : null,
+        hasDeliveryItems
+          ? `배달일:${deliveryDate} ${deliveryAmPm} ${deliveryTime}`
+          : null,
         hasDeliveryItems
           ? `받는분:${recipientName.trim()} / ${recipientPhone.trim()} / ${fullRecipientAddress}`
           : null,
@@ -3439,13 +3453,34 @@ function ProductOrderPanel({
             }}
           />
           <label className={omLabelClass}>배달 시간 *</label>
-          <input
-            type="time"
-            value={deliveryTime}
-            onChange={(event) => setDeliveryTime(event.target.value)}
-            required
-            className={omInputClass}
-          />
+          <div className="mb-3 flex gap-2">
+            <select
+              value={deliveryAmPm}
+              onChange={(event) =>
+                setDeliveryAmPm(
+                  event.target.value === "오전" || event.target.value === "오후"
+                    ? event.target.value
+                    : "",
+                )
+              }
+              required
+              className={cn(
+                omInputClass,
+                "mb-0 w-[88px] shrink-0",
+              )}
+            >
+              <option value="">선택</option>
+              <option value="오전">오전</option>
+              <option value="오후">오후</option>
+            </select>
+            <input
+              type="time"
+              value={deliveryTime}
+              onChange={(event) => setDeliveryTime(event.target.value)}
+              required
+              className={cn(omInputClass, "mb-0 min-w-0 flex-1")}
+            />
+          </div>
           <label className={omLabelClass}>업체명 *</label>
           <input
             type="text"
