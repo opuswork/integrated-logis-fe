@@ -586,17 +586,73 @@ export function AdminOrderList({
     }
   };
 
-  /** ○수정만 서버에 켜고, 배정값(작업자)은 유지 — 포장/출고/배송 목록 유지 */
-  const flagAssignmentAlert = (row: AdminOrderRow, key: string) => {
-    if (row.storeRegion) {
-      void patchChecklist(
-        row.id,
-        { action: "setStoreRegion", storeRegion: row.storeRegion },
-        key,
+  /** ○수정: factory-alert 전용 API (작업자/지역 값 유지) */
+  const flagAssignmentAlert = async (row: AdminOrderRow, key: string) => {
+    setSavingId(key);
+    setActionError("");
+    try {
+      const response = await apiFetch(
+        `/api/orders/${row.id}/factory-alert`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ set: "assignment" }),
+        },
       );
-      return;
+      const data = (await response.json()) as
+        | Parameters<typeof mapApiOrder>[0]
+        | { message?: string | string[] };
+      if (!response.ok) {
+        setActionError(
+          formatChecklistApiError(
+            "message" in data ? data.message : undefined,
+            "assignmentReset",
+          ),
+        );
+        return;
+      }
+      const mapped = mapApiOrder(data as Parameters<typeof mapApiOrder>[0]);
+      if (!mapped.factoryAlert?.trim()) {
+        setActionError(
+          "경고등 설정에 실패했습니다. 백엔드 재배포 후 다시 시도해 주세요.",
+        );
+        return;
+      }
+      setOrders((prev) =>
+        prev.map((r) => (r.id === row.id ? mapped : r)),
+      );
+      if (key.startsWith("wr-")) {
+        setWorkerEditing((prev) => ({ ...prev, [row.id]: true }));
+        setDrafts((prev) => ({
+          ...prev,
+          [row.id]: {
+            worker: "",
+            storeRegion:
+              mapped.storeRegion ??
+              prev[row.id]?.storeRegion ??
+              row.storeRegion ??
+              "",
+          },
+        }));
+      } else if (key.startsWith("rr-")) {
+        setRegionEditing((prev) => ({ ...prev, [row.id]: true }));
+        setDrafts((prev) => ({
+          ...prev,
+          [row.id]: {
+            worker:
+              prev[row.id]?.worker ?? mapped.packagingWorker ?? "",
+            storeRegion: mapped.storeRegion ?? row.storeRegion ?? "",
+          },
+        }));
+      }
+      setActionError("");
+    } catch {
+      setActionError(
+        "경고등 설정에 실패했습니다. 백엔드 재배포 후 다시 시도해 주세요.",
+      );
+    } finally {
+      setSavingId(null);
     }
-    void patchChecklist(row.id, { action: "assignmentReset" }, key);
   };
 
   /** 작업자만 초기화 → UI 편집 + ○수정 (서버 작업자 유지) */
@@ -609,7 +665,7 @@ export function AdminOrderList({
         storeRegion: prev[row.id]?.storeRegion ?? row.storeRegion ?? "",
       },
     }));
-    flagAssignmentAlert(row, `wr-${row.id}`);
+    void flagAssignmentAlert(row, `wr-${row.id}`);
   };
 
   /** 주문매장만 초기화 → UI 편집 + ○수정 (서버 주문매장 유지) */
@@ -622,7 +678,7 @@ export function AdminOrderList({
         storeRegion: row.storeRegion ?? "",
       },
     }));
-    flagAssignmentAlert(row, `rr-${row.id}`);
+    void flagAssignmentAlert(row, `rr-${row.id}`);
   };
 
   const updateDraft = (id: number, patch: Partial<DraftState>) => {
