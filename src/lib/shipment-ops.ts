@@ -3,6 +3,8 @@ import {
   memberFacingStatusLabel,
   type DeliveryOrderStatus,
 } from "@/lib/order-delivery";
+
+export { ASSIGNMENT_CHANGE_ALERT } from "@/lib/order-delivery";
 import {
   parseBranchStoreFromNotes,
   parseChurchFromNotes,
@@ -65,9 +67,16 @@ export type ShipmentOpsOrder = {
   shipProgressLabel: "미출고" | "완료";
   notes: string | null;
   specialNote: string;
+  /** 작업자·주문매장 변경 또는 주문서 변경 등 공장 알림 */
+  factoryAlert: string | null;
   /** Per-line expand (배송관리). Empty if API omitted items. */
   items: { productName: string; quantity: number }[];
 };
+
+/** 이름 옆 ○수정 표시 (비어 있지 않은 factoryAlert) */
+export function hasEditAlert(factoryAlert?: string | null) {
+  return Boolean(factoryAlert?.trim());
+}
 
 export type ShipmentLineRow = ShipmentOpsOrder & {
   lineKey: string;
@@ -137,6 +146,7 @@ export function mapShipmentOpsOrder(order: {
   releaseDoneAt?: string | null;
   finalCompleteDone?: boolean;
   finalConfirmDone?: boolean;
+  factoryAlert?: string | null;
   items?: { productName?: string; quantity?: number }[];
   greetingForms?: {
     specialNote?: string | null;
@@ -256,6 +266,7 @@ export function mapShipmentOpsOrder(order: {
     shipProgressLabel: finalCompleteDone ? "완료" : "미출고",
     notes: order.notes ?? null,
     specialNote,
+    factoryAlert: order.factoryAlert?.trim() || null,
     items,
   };
 }

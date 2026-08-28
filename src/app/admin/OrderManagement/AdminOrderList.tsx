@@ -63,11 +63,14 @@ type AdminOrderRow = {
   slipDone: boolean;
   slipAuthor: string | null;
   readyForShipment: boolean;
+  packDept: "FACTORY_PACK" | "SOCK_PACK" | null;
+  factoryAlert: string | null;
   fulfillmentType: string | null;
 };
 
 type DraftState = {
   worker: "STORE" | "FACTORY" | "";
+  storeRegion: AdminRegion | "";
 };
 
 function regionFromNotes(notes?: string | null): AdminRegion | null {
@@ -216,6 +219,9 @@ function formatChecklistApiError(
     if (action === "workerClear" && !/workerClear/i.test(text)) {
       return "작업자 초기화를 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
     }
+    if (action === "setStoreRegion" && !/setStoreRegion/i.test(text)) {
+      return "주문매장 변경을 위해 서버를 재시작(또는 재배포)한 뒤 다시 시도해 주세요.";
+    }
     if (
       (action === "setDeliveryRequestDate" ||
         action === "setRequestedShipDate") &&
@@ -303,6 +309,8 @@ export function AdminOrderList({
       slipDone?: boolean;
       slipAuthor?: string | null;
       readyForShipment?: boolean;
+      packDept?: "FACTORY_PACK" | "SOCK_PACK" | null;
+      factoryAlert?: string | null;
       finalConfirmDone?: boolean;
       items?: unknown[];
       greetingForms?: unknown[];
@@ -339,6 +347,8 @@ export function AdminOrderList({
         slipDone: order.slipDone === true,
         slipAuthor: order.slipAuthor ?? null,
         readyForShipment: order.readyForShipment === true,
+        packDept: order.packDept ?? null,
+        factoryAlert: order.factoryAlert?.trim() || null,
         fulfillmentType: order.shipment?.fulfillmentType ?? null,
       };
     },
@@ -371,6 +381,7 @@ export function AdminOrderList({
             if (!next[row.id]) {
               next[row.id] = {
                 worker: row.packagingWorker ?? "",
+                storeRegion: row.storeRegion ?? "",
               };
             }
           }
@@ -491,6 +502,7 @@ export function AdminOrderList({
         ...prev,
         [orderId]: {
           worker: mapped.packagingWorker ?? "",
+          storeRegion: mapped.storeRegion ?? "",
         },
       }));
       setActionError("");
@@ -504,7 +516,10 @@ export function AdminOrderList({
   const updateDraft = (id: number, patch: Partial<DraftState>) => {
     setDrafts((prev) => ({
       ...prev,
-      [id]: { ...(prev[id] ?? { worker: "" }), ...patch },
+      [id]: {
+        ...(prev[id] ?? { worker: "", storeRegion: "" }),
+        ...patch,
+      },
     }));
   };
 
@@ -616,11 +631,13 @@ export function AdminOrderList({
                 {pageRows.map((row) => {
                   const mutable = canMutateRow(authUser, row);
                   const locked = !mutable;
+                  const assignmentEditable = mutable && !row.packDept;
                   const datesLocked =
                     row.status === "RECEIVED" ||
                     row.statusLabel === "배송완료";
                   const draft = drafts[row.id] ?? {
                     worker: row.packagingWorker ?? "",
+                    storeRegion: row.storeRegion ?? "",
                   };
                   const parcel = isParcelType(row.type, row.fulfillmentType);
                   const needsGreeting = row.greetingCount > 0;
@@ -635,8 +652,7 @@ export function AdminOrderList({
                       )}
                     >
                       <td className="px-2 py-2 align-top">
-                        {row.packagingWorker &&
-                        (locked || row.readyForShipment) ? (
+                        {row.packagingWorker && !assignmentEditable ? (
                           <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
                             {row.packagingWorker === "STORE" ? "매장" : "공장"}
                           </span>
@@ -644,7 +660,8 @@ export function AdminOrderList({
                           <div className="flex flex-col gap-1">
                             <select
                               disabled={
-                                locked || Boolean(row.packagingWorker)
+                                !assignmentEditable ||
+                                Boolean(row.packagingWorker)
                               }
                               value={draft.worker ?? ""}
                               onChange={(e) =>
@@ -664,7 +681,7 @@ export function AdminOrderList({
                             {!row.packagingWorker ? (
                               <CellBtn
                                 disabled={
-                                  locked ||
+                                  !assignmentEditable ||
                                   !draft.worker ||
                                   savingId === `w-${row.id}`
                                 }
@@ -690,7 +707,8 @@ export function AdminOrderList({
                                 </span>
                                 <CellBtn
                                   disabled={
-                                    locked || savingId === `wc-${row.id}`
+                                    !assignmentEditable ||
+                                    savingId === `wc-${row.id}`
                                   }
                                   onClick={() =>
                                     void patchChecklist(
@@ -708,14 +726,54 @@ export function AdminOrderList({
                         )}
                       </td>
                       <td className="px-2 py-2 align-middle">
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                            regionClass(row.storeRegion),
-                          )}
-                        >
-                          {regionLabel(row.storeRegion)}
-                        </span>
+                        {assignmentEditable ? (
+                          <div className="flex flex-col gap-1">
+                            <select
+                              value={draft.storeRegion ?? ""}
+                              onChange={(e) =>
+                                updateDraft(row.id, {
+                                  storeRegion: (e.target.value || "") as
+                                    | AdminRegion
+                                    | "",
+                                })
+                              }
+                              className="rounded border border-line px-1.5 py-1"
+                            >
+                              <option value="">선택</option>
+                              <option value="NAMBU">남부</option>
+                              <option value="JUNGBU">중부</option>
+                              <option value="SEOBU">서부</option>
+                            </select>
+                            <CellBtn
+                              disabled={
+                                !draft.storeRegion ||
+                                draft.storeRegion === row.storeRegion ||
+                                savingId === `sr-${row.id}`
+                              }
+                              onClick={() =>
+                                void patchChecklist(
+                                  row.id,
+                                  {
+                                    action: "setStoreRegion",
+                                    storeRegion: draft.storeRegion,
+                                  },
+                                  `sr-${row.id}`,
+                                )
+                              }
+                            >
+                              저장
+                            </CellBtn>
+                          </div>
+                        ) : (
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              regionClass(row.storeRegion),
+                            )}
+                          >
+                            {regionLabel(row.storeRegion)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-2 py-2 align-middle font-medium">
                         {mutable &&
