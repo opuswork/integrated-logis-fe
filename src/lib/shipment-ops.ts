@@ -71,7 +71,8 @@ export type ShipmentOpsOrder = {
   /** 미출고 | 완료 */
   shipProgressLabel: "미출고" | "완료";
   notes: string | null;
-  specialNote: string;
+  /** 제품주문서 특이사항 (Order.extraNote) */
+  extraNote: string;
   /** 작업자·주문매장 변경 또는 주문서 변경 등 공장 알림 */
   factoryAlert: string | null;
   /** Per-line expand (배송관리). Empty if API omitted items. */
@@ -135,6 +136,7 @@ export function mapShipmentOpsOrder(order: {
   status: DeliveryOrderStatus;
   createdAt: string;
   notes?: string | null;
+  extraNote?: string | null;
   storeRegion?: AdminRegion | null;
   packagingWorker?: PackagingWorker;
   paymentDone?: boolean;
@@ -154,7 +156,6 @@ export function mapShipmentOpsOrder(order: {
   factoryAlert?: string | null;
   items?: { productName?: string; quantity?: number }[];
   greetingForms?: {
-    specialNote?: string | null;
     churchName?: string | null;
   }[];
   shipment?: {
@@ -188,11 +189,7 @@ export function mapShipmentOpsOrder(order: {
       : items.length === 1
         ? items[0]!.productName
         : `${items[0]!.productName} 외 ${items.length - 1}`;
-  const specialNote =
-    order.greetingForms
-      ?.map((g) => g.specialNote?.trim())
-      .filter(Boolean)
-      .join(", ") || "—";
+  const extraNote = order.extraNote?.trim() || "—";
   const storeRegion = order.storeRegion ?? null;
   const storeFromNotes = parseBranchStoreFromNotes(order.notes);
   const churchFromNotes = parseChurchFromNotes(order.notes);
@@ -270,7 +267,7 @@ export function mapShipmentOpsOrder(order: {
     finalConfirmDone: order.finalConfirmDone === true,
     shipProgressLabel: finalCompleteDone ? "완료" : "미출고",
     notes: order.notes ?? null,
-    specialNote,
+    extraNote,
     factoryAlert: order.factoryAlert?.trim() || null,
     items,
   };
