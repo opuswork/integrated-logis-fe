@@ -679,12 +679,8 @@ export function AdminOrderList({
                   const forceAssignmentEdit = Boolean(
                     assignmentEditing[row.id],
                   );
-                  const workerEditing =
-                    assignmentEditable &&
-                    (forceAssignmentEdit || !row.packagingWorker);
-                  const regionEditing =
-                    assignmentEditable &&
-                    (forceAssignmentEdit || !row.storeRegion);
+                  const assignmentEditingUi =
+                    assignmentEditable && forceAssignmentEdit;
                   const datesLocked =
                     row.status === "RECEIVED" ||
                     row.statusLabel === "배송완료";
@@ -715,7 +711,7 @@ export function AdminOrderList({
                           ) : (
                             <span className="text-[11px] text-[#94a3b8]">—</span>
                           )
-                        ) : workerEditing ? (
+                        ) : assignmentEditingUi ? (
                           <div className="flex flex-col gap-1">
                             <select
                               value={draft.worker ?? ""}
@@ -753,11 +749,17 @@ export function AdminOrderList({
                           </div>
                         ) : (
                           <div className="flex flex-col items-start gap-1">
-                            <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
-                              {row.packagingWorker === "STORE"
-                                ? "매장"
-                                : "공장"}
-                            </span>
+                            {row.packagingWorker ? (
+                              <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                                {row.packagingWorker === "STORE"
+                                  ? "매장"
+                                  : "공장"}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-[#94a3b8]">
+                                —
+                              </span>
+                            )}
                             <CellBtn
                               disabled={savingId === `ar-${row.id}`}
                               onClick={() => beginAssignmentEdit(row)}
@@ -777,7 +779,7 @@ export function AdminOrderList({
                           >
                             {regionLabel(row.storeRegion)}
                           </span>
-                        ) : regionEditing ? (
+                        ) : assignmentEditingUi ? (
                           <div className="flex flex-col gap-1">
                             <select
                               value={draft.storeRegion ?? ""}
