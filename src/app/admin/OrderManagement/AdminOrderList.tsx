@@ -509,9 +509,10 @@ export function AdminOrderList({
       );
       const action = typeof body.action === "string" ? body.action : "";
 
-      setDrafts((prev) => {
-        const cur = prev[orderId] ?? { worker: "", storeRegion: "" };
-        if (action === "workerClear" || key.startsWith("wr-")) {
+      if (key.startsWith("wr-")) {
+        setWorkerEditing((prev) => ({ ...prev, [orderId]: true }));
+        setDrafts((prev) => {
+          const cur = prev[orderId] ?? { worker: "", storeRegion: "" };
           return {
             ...prev,
             [orderId]: {
@@ -519,8 +520,15 @@ export function AdminOrderList({
               storeRegion: mapped.storeRegion ?? cur.storeRegion,
             },
           };
-        }
-        if (action === "worker" && mapped.packagingWorker) {
+        });
+      } else if (action === "worker" && mapped.packagingWorker) {
+        setWorkerEditing((prev) => {
+          const next = { ...prev };
+          delete next[orderId];
+          return next;
+        });
+        setDrafts((prev) => {
+          const cur = prev[orderId] ?? { worker: "", storeRegion: "" };
           return {
             ...prev,
             [orderId]: {
@@ -528,8 +536,11 @@ export function AdminOrderList({
               storeRegion: mapped.storeRegion ?? cur.storeRegion,
             },
           };
-        }
-        if (action === "setStoreRegion") {
+        });
+      } else if (key.startsWith("rr-")) {
+        setRegionEditing((prev) => ({ ...prev, [orderId]: true }));
+        setDrafts((prev) => {
+          const cur = prev[orderId] ?? { worker: "", storeRegion: "" };
           return {
             ...prev,
             [orderId]: {
@@ -537,33 +548,33 @@ export function AdminOrderList({
               storeRegion: mapped.storeRegion ?? "",
             },
           };
-        }
-        return {
-          ...prev,
-          [orderId]: {
-            worker: mapped.packagingWorker ?? cur.worker,
-            storeRegion: mapped.storeRegion ?? cur.storeRegion,
-          },
-        };
-      });
-
-      if (action === "workerClear" || key.startsWith("wr-")) {
-        setWorkerEditing((prev) => ({ ...prev, [orderId]: true }));
-      } else if (action === "worker" && mapped.packagingWorker) {
-        setWorkerEditing((prev) => {
-          const next = { ...prev };
-          delete next[orderId];
-          return next;
         });
-      }
-
-      if (action === "setStoreRegion" && key.startsWith("rr-")) {
-        setRegionEditing((prev) => ({ ...prev, [orderId]: true }));
       } else if (action === "setStoreRegion" && key.startsWith("sr-")) {
         setRegionEditing((prev) => {
           const next = { ...prev };
           delete next[orderId];
           return next;
+        });
+        setDrafts((prev) => {
+          const cur = prev[orderId] ?? { worker: "", storeRegion: "" };
+          return {
+            ...prev,
+            [orderId]: {
+              worker: mapped.packagingWorker ?? cur.worker,
+              storeRegion: mapped.storeRegion ?? "",
+            },
+          };
+        });
+      } else {
+        setDrafts((prev) => {
+          const cur = prev[orderId] ?? { worker: "", storeRegion: "" };
+          return {
+            ...prev,
+            [orderId]: {
+              worker: mapped.packagingWorker ?? cur.worker,
+              storeRegion: mapped.storeRegion ?? cur.storeRegion,
+            },
+          };
         });
       }
 
@@ -575,31 +586,33 @@ export function AdminOrderList({
     }
   };
 
-  /** 작업자만 초기화 → ○수정 + 작업자 열 편집 */
+  /** ○수정만 서버에 켜고, 배정값(작업자)은 유지 — 포장/출고/배송 목록 유지 */
+  const flagAssignmentAlert = (row: AdminOrderRow, key: string) => {
+    if (row.storeRegion) {
+      void patchChecklist(
+        row.id,
+        { action: "setStoreRegion", storeRegion: row.storeRegion },
+        key,
+      );
+      return;
+    }
+    void patchChecklist(row.id, { action: "assignmentReset" }, key);
+  };
+
+  /** 작업자만 초기화 → UI 편집 + ○수정 (서버 작업자 유지) */
   const beginWorkerEdit = (row: AdminOrderRow) => {
     setWorkerEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
       ...prev,
       [row.id]: {
         worker: "",
-        storeRegion:
-          prev[row.id]?.storeRegion ?? row.storeRegion ?? "",
+        storeRegion: prev[row.id]?.storeRegion ?? row.storeRegion ?? "",
       },
     }));
-    if (row.packagingWorker) {
-      void patchChecklist(row.id, { action: "workerClear" }, `wr-${row.id}`);
-      return;
-    }
-    if (row.storeRegion) {
-      void patchChecklist(
-        row.id,
-        { action: "setStoreRegion", storeRegion: row.storeRegion },
-        `wr-${row.id}`,
-      );
-    }
+    flagAssignmentAlert(row, `wr-${row.id}`);
   };
 
-  /** 주문매장만 초기화 → ○수정 + 주문매장 열 편집 */
+  /** 주문매장만 초기화 → UI 편집 + ○수정 (서버 주문매장 유지) */
   const beginRegionEdit = (row: AdminOrderRow) => {
     setRegionEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
@@ -609,13 +622,7 @@ export function AdminOrderList({
         storeRegion: row.storeRegion ?? "",
       },
     }));
-    if (row.storeRegion) {
-      void patchChecklist(
-        row.id,
-        { action: "setStoreRegion", storeRegion: row.storeRegion },
-        `rr-${row.id}`,
-      );
-    }
+    flagAssignmentAlert(row, `rr-${row.id}`);
   };
 
   const updateDraft = (id: number, patch: Partial<DraftState>) => {
