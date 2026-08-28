@@ -870,8 +870,11 @@ export function AdminOrderList({
                     mutable &&
                     !row.packDept &&
                     row.statusLabel === "접수완료";
+                  const workerUnassigned =
+                    assignmentEditable && !row.packagingWorker;
                   const workerEditUi =
-                    assignmentEditable && Boolean(workerEditing[row.id]);
+                    assignmentEditable &&
+                    (workerUnassigned || Boolean(workerEditing[row.id]));
                   const regionEditUi =
                     assignmentEditable && Boolean(regionEditing[row.id]);
                   const datesLocked =
@@ -940,34 +943,30 @@ export function AdminOrderList({
                               >
                                 저장
                               </CellBtn>
-                              <CellBtn
-                                variant="ghost"
-                                disabled={
-                                  savingId === `w-${row.id}` ||
-                                  savingId === `wc-${row.id}` ||
-                                  savingId === `wr-${row.id}`
-                                }
-                                onClick={() =>
-                                  void cancelAssignmentEdit(row, "worker")
-                                }
-                              >
-                                취소
-                              </CellBtn>
+                              {!workerUnassigned ? (
+                                <CellBtn
+                                  variant="ghost"
+                                  disabled={
+                                    savingId === `w-${row.id}` ||
+                                    savingId === `wc-${row.id}` ||
+                                    savingId === `wr-${row.id}`
+                                  }
+                                  onClick={() =>
+                                    void cancelAssignmentEdit(row, "worker")
+                                  }
+                                >
+                                  취소
+                                </CellBtn>
+                              ) : null}
                             </div>
                           </div>
                         ) : (
                           <div className="flex flex-col items-start gap-1">
-                            {row.packagingWorker ? (
-                              <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
-                                {row.packagingWorker === "STORE"
-                                  ? "매장"
-                                  : "공장"}
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-[#94a3b8]">
-                                —
-                              </span>
-                            )}
+                            <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                              {row.packagingWorker === "STORE"
+                                ? "매장"
+                                : "공장"}
+                            </span>
                             <CellBtn
                               disabled={
                                 savingId === `wr-${row.id}` ||
