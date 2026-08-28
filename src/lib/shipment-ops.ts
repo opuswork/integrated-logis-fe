@@ -90,7 +90,10 @@ export function expandShipmentOpsRows(
       out.push({
         ...order,
         lineKey: `${order.id}-${lineIndex}`,
-        lineOrderNumber: `${order.orderNumber}-${lineIndex}`,
+        lineOrderNumber:
+          lines.length === 1
+            ? order.orderNumber
+            : `${order.orderNumber}-${lineIndex}`,
         lineIndex,
         productSummary: item.productName || "—",
         quantity: item.quantity,
