@@ -154,6 +154,7 @@ function MemberEditPanel({
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -272,6 +273,49 @@ function MemberEditPanel({
     }
   };
 
+  const handleResetPassword = async () => {
+    if (isResetting || isSaving) {
+      return;
+    }
+    if (
+      !window.confirm(
+        `${member.fullname} 회원의 비밀번호를 연락처 숫자로 초기화할까요?`,
+      )
+    ) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setIsResetting(true);
+
+    try {
+      const response = await apiFetch(
+        `/api/members/${member.id}/reset-password`,
+        { method: "POST" },
+      );
+      const data = (await response.json()) as {
+        message?: string;
+        initialPassword?: string;
+      };
+
+      if (!response.ok) {
+        setError(data.message ?? "비밀번호 초기화에 실패했습니다.");
+        return;
+      }
+
+      setSuccess(
+        data.initialPassword
+          ? `비밀번호를 ${data.initialPassword} 로 초기화했습니다. 회원에게 안내해 주세요.`
+          : (data.message ?? "비밀번호를 초기화했습니다."),
+      );
+    } catch {
+      setError("비밀번호 초기화에 실패했습니다.");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const canAssignPrivilege = Boolean(getAuthUser()?.isSuperAdmin);
 
   return (
@@ -351,14 +395,36 @@ function MemberEditPanel({
           <Button
             type="submit"
             className="border-green bg-green text-white hover:bg-[#128a52]"
-            disabled={isSaving}
+            disabled={isSaving || isResetting}
           >
             {isSaving ? "저장 중..." : "저장"}
           </Button>
-          <Button type="button" variant="outline" disabled={isSaving} onClick={onCancel}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSaving || isResetting}
+            onClick={onCancel}
+          >
             취소
           </Button>
+          {member.role === "MEMBER" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="ml-auto border-[#DD6B20] text-[#DD6B20] hover:bg-[#FFFAF0]"
+              disabled={isSaving || isResetting}
+              onClick={() => void handleResetPassword()}
+            >
+              {isResetting ? "초기화 중..." : "비밀번호 초기화"}
+            </Button>
+          ) : null}
         </div>
+        {member.role === "MEMBER" ? (
+          <p className="text-[11px] text-muted-foreground">
+            초기화하면 비밀번호가 아이디와 같은 연락처 숫자로 바뀌고, 해당
+            회원의 기존 로그인 세션은 해제됩니다.
+          </p>
+        ) : null}
       </form>
     </Dialog>
   );
