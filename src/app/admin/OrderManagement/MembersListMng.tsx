@@ -155,6 +155,10 @@ function MemberEditPanel({
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  /** 비밀번호가 이미 초기값(연락처 숫자)인지. null이면 확인 중 */
+  const [isInitialPassword, setIsInitialPassword] = useState<boolean | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -168,6 +172,30 @@ function MemberEditPanel({
     setError("");
     setSuccess("");
   }, [member]);
+
+  useEffect(() => {
+    if (member.role !== "MEMBER") {
+      setIsInitialPassword(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsInitialPassword(null);
+
+    void apiFetch(`/api/members/${member.id}/password-state`)
+      .then(async (response) => {
+        const data = (await response.json()) as { isInitial?: boolean };
+        if (cancelled) return;
+        setIsInitialPassword(response.ok ? Boolean(data.isInitial) : false);
+      })
+      .catch(() => {
+        if (!cancelled) setIsInitialPassword(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [member.id, member.role]);
 
   const handleSave = async (event: FormEvent) => {
     event.preventDefault();
@@ -264,6 +292,9 @@ function MemberEditPanel({
         churchName: data.user.church?.name?.trim() || member.churchName,
       };
 
+      if (password) {
+        setIsInitialPassword(false);
+      }
       setSuccess(data.message ?? "회원 정보가 저장되었습니다.");
       onSaved(updated);
     } catch {
@@ -304,6 +335,7 @@ function MemberEditPanel({
         return;
       }
 
+      setIsInitialPassword(true);
       setSuccess(
         data.initialPassword
           ? `비밀번호를 ${data.initialPassword} 로 초기화했습니다. 회원에게 안내해 주세요.`
@@ -412,7 +444,7 @@ function MemberEditPanel({
               type="button"
               variant="outline"
               className="ml-auto border-[#DD6B20] text-[#DD6B20] hover:bg-[#FFFAF0]"
-              disabled={isSaving || isResetting}
+              disabled={isSaving || isResetting || isInitialPassword !== false}
               onClick={() => void handleResetPassword()}
             >
               {isResetting ? "초기화 중..." : "비밀번호 초기화"}
@@ -421,8 +453,11 @@ function MemberEditPanel({
         </div>
         {member.role === "MEMBER" ? (
           <p className="text-[11px] text-muted-foreground">
-            초기화하면 비밀번호가 아이디와 같은 연락처 숫자로 바뀌고, 해당
-            회원의 기존 로그인 세션은 해제됩니다.
+            {isInitialPassword === null
+              ? "비밀번호 상태를 확인하는 중입니다."
+              : isInitialPassword
+                ? "비밀번호가 이미 연락처 숫자로 되어 있어 회원이 로그인할 수 있습니다. 추가 초기화는 필요하지 않습니다."
+                : "초기화하면 비밀번호가 아이디와 같은 연락처 숫자로 바뀌고, 해당 회원의 기존 로그인 세션은 해제됩니다."}
           </p>
         ) : null}
       </form>
