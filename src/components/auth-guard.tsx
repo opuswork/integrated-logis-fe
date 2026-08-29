@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { LiveChatWidget } from "@/components/chat/live-chat-widget";
 import { useIdleLogout } from "@/hooks/use-idle-logout";
 import { apiFetch } from "@/lib/api";
 import {
@@ -90,6 +91,9 @@ export function AuthGuard({
         <IdleLogoutEffect timeoutMs={idleTimeoutMs} />
       ) : null}
       {children}
+      {user.role === "admin" || user.role === "factory" ? (
+        <LiveChatWidget />
+      ) : null}
     </>
   );
 }
