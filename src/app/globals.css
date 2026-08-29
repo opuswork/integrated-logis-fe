@@ -163,6 +163,23 @@
   }
 }
 
+/* 작업자·주문매장 변경 경고등 점멸 */
+@keyframes edit-alert-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.edit-alert-blink {
+  animation: edit-alert-blink 1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edit-alert-blink {
+    animation: none;
+  }
+}
+
 /* Keep 선물세트 주문서 cell backgrounds when using browser Print. */
 @media print {
   .gift-set-print-sheet,
