@@ -21,8 +21,27 @@ type MemberRow = {
   email: string;
   role: string;
   adminRegion: string;
+  accountSource: string;
   churchName: string;
 };
+
+/** 직접 가입이 아닌 계정만 표기 (본인확인 전 계정) */
+const ACCOUNT_SOURCE_LABEL: Record<string, string> = {
+  ADMIN_ORDER: "대리생성",
+  BULK_IMPORT: "일괄등록",
+};
+
+function AccountSourceBadge({ accountSource }: { accountSource: string }) {
+  const label = ACCOUNT_SOURCE_LABEL[accountSource];
+  if (!label) {
+    return null;
+  }
+  return (
+    <span className="ml-1.5 align-middle rounded-full bg-[#EDF2F7] px-1.5 py-0.5 text-[11px] font-semibold text-[#64748b]">
+      {label}
+    </span>
+  );
+}
 
 /** UI privilege codes for the role dropdown */
 type PrivilegeCode =
@@ -240,6 +259,7 @@ function MemberEditPanel({
         email: data.user.email ?? "",
         role: data.user.role,
         adminRegion: data.user.adminRegion ?? "",
+        accountSource: member.accountSource,
         churchName: data.user.church?.name?.trim() || member.churchName,
       };
 
@@ -370,6 +390,7 @@ function MobileMemberCard({
                 · {member.churchName}
               </span>
             ) : null}
+            <AccountSourceBadge accountSource={member.accountSource} />
           </p>
           <p className="mt-0.5 text-xs text-[#64748b]">{member.username}</p>
           <p className="mt-1 text-xs text-[#64748b]">{member.phone}</p>
@@ -415,6 +436,7 @@ export function MembersListMng() {
           email: string | null;
           role: string;
           adminRegion?: string | null;
+          accountSource?: string | null;
           church?: { name?: string | null } | null;
         }>;
       };
@@ -439,6 +461,7 @@ export function MembersListMng() {
             email: member.email ?? "",
             role: member.role,
             adminRegion: member.adminRegion ?? "",
+            accountSource: member.accountSource ?? "SELF_SIGNUP",
             churchName: member.church?.name?.trim() || "",
           })),
       );
@@ -479,8 +502,12 @@ export function MembersListMng() {
     {
       key: "fullname",
       header: "이름",
-      render: (row) =>
-        row.churchName ? `${row.fullname} · ${row.churchName}` : row.fullname,
+      render: (row) => (
+        <>
+          {row.churchName ? `${row.fullname} · ${row.churchName}` : row.fullname}
+          <AccountSourceBadge accountSource={row.accountSource} />
+        </>
+      ),
     },
     { key: "phone", header: "연락처" },
     {
