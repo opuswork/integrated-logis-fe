@@ -2072,6 +2072,8 @@ function AddressField({
   detailValue,
   onDetailChange,
   required = true,
+  locked = false,
+  labelExtra,
 }: {
   id: string;
   label: string;
@@ -2080,6 +2082,9 @@ function AddressField({
   detailValue: string;
   onDetailChange: (value: string) => void;
   required?: boolean;
+  /** true면 주소 검색·상세주소 수정을 막습니다 (보내는 주소와 같음). */
+  locked?: boolean;
+  labelExtra?: ReactNode;
 }) {
   const [isSearching, setIsSearching] = useState(false);
   const detailId = `${id}-detail`;
@@ -2102,9 +2107,12 @@ function AddressField({
   return (
     <div className="space-y-2">
       <div>
-        <label htmlFor={id} className={omLabelClass}>
-          {required ? <RequiredLabel>{label}</RequiredLabel> : label}
-        </label>
+        <div className="mb-[5px] flex items-center justify-between gap-2">
+          <label htmlFor={id} className="block text-[12px] font-bold text-[#64748B]">
+            {required ? <RequiredLabel>{label}</RequiredLabel> : label}
+          </label>
+          {labelExtra}
+        </div>
         <div className="flex gap-2">
           <input
             id={id}
@@ -2118,7 +2126,7 @@ function AddressField({
           <Button
             type="button"
             className="shrink-0 border-[#1f2937] bg-[#1f2937] px-4 text-white hover:bg-[#111827]"
-            disabled={isSearching}
+            disabled={isSearching || locked}
             onClick={() => {
               void handleSearch();
             }}
@@ -2137,7 +2145,7 @@ function AddressField({
           value={detailValue}
           onChange={(event) => onDetailChange(event.target.value)}
           placeholder="동·호수 / 호실 (예: 101동 1203호)"
-          disabled={!value.trim()}
+          disabled={!value.trim() || locked}
           className="mb-3 w-full rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C] placeholder:text-[#A0AEC0] disabled:bg-[#EDF2F7] disabled:text-[#A0AEC0]"
         />
       </div>
@@ -2479,6 +2487,7 @@ function ProductOrderPanel({
   const [senderPhone, setSenderPhone] = useState("");
   const [senderAddress, setSenderAddress] = useState("");
   const [senderAddressDetail, setSenderAddressDetail] = useState("");
+  const [sameAsSenderAddress, setSameAsSenderAddress] = useState(false);
   const [branchStore, setBranchStore] = useState<BranchStoreId | null>(null);
   const [extraNote, setExtraNote] = useState("");
   const [isDirector, setIsDirector] = useState<boolean>(false);
@@ -2962,7 +2971,16 @@ function ProductOrderPanel({
     setSenderPhone("");
     setSenderAddress("");
     setSenderAddressDetail("");
+    setSameAsSenderAddress(false);
   };
+
+  useEffect(() => {
+    if (!sameAsSenderAddress) {
+      return;
+    }
+    setRecipientAddress(senderAddress);
+    setRecipientAddressDetail(senderAddressDetail);
+  }, [sameAsSenderAddress, senderAddress, senderAddressDetail]);
 
   const productListTotal = productItems.reduce(
     (sum, item) => sum + item.qty * (item.unitPrice || 0),
@@ -3951,11 +3969,30 @@ function ProductOrderPanel({
           />
           <AddressField
             id="parcel-recipient-address"
-            label="받는 사람 주소 *"
+            label="받는 사람 주소"
             value={recipientAddress}
             onChange={setRecipientAddress}
             detailValue={recipientAddressDetail}
             onDetailChange={setRecipientAddressDetail}
+            locked={sameAsSenderAddress}
+            labelExtra={
+              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
+                <input
+                  type="checkbox"
+                  checked={sameAsSenderAddress}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSameAsSenderAddress(checked);
+                    if (checked) {
+                      setRecipientAddress(senderAddress);
+                      setRecipientAddressDetail(senderAddressDetail);
+                    }
+                  }}
+                  className="size-4 accent-[#6B46C1]"
+                />
+                보내는 사람 주소와 같음
+              </label>
+            }
           />
         </div>
       )}
