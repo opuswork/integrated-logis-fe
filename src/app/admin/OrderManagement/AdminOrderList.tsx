@@ -302,8 +302,6 @@ export function AdminOrderList({
   const [regionEditing, setRegionEditing] = useState<Record<number, boolean>>(
     {},
   );
-  /** setStoreRegion 저장 이력 — 주문확인 전 plain label 표시 기준 */
-  const [regionSaved, setRegionSaved] = useState<Record<number, boolean>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -544,7 +542,6 @@ export function AdminOrderList({
           delete next[orderId];
           return next;
         });
-        setRegionSaved((prev) => ({ ...prev, [orderId]: true }));
       }
 
       setActionError("");
@@ -815,10 +812,9 @@ export function AdminOrderList({
                   const workerSelectUi =
                     assignmentEditable &&
                     (workerResetting || !row.packagingWorker);
+                  // 주문매장은 주문 생성 시 정해지므로 값이 있으면 선택 UI를 건너뜀
                   const regionSelectUi =
-                    assignmentEditable &&
-                    (regionResetting ||
-                      (!confirmed && regionSaved[row.id] !== true));
+                    assignmentEditable && (regionResetting || !row.storeRegion);
 
                   return (
                     <tr
@@ -978,9 +974,18 @@ export function AdminOrderList({
                             ) : null}
                           </div>
                         ) : (
-                          <span className="text-[11px] font-semibold text-ink">
-                            {regionLabel(row.storeRegion)}
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-[11px] font-semibold text-ink">
+                              {regionLabel(row.storeRegion)}
+                            </span>
+                            <CellBtn
+                              variant="ghost"
+                              disabled={savingId === `rr-${row.id}`}
+                              onClick={() => beginRegionEdit(row)}
+                            >
+                              초기화
+                            </CellBtn>
+                          </div>
                         )}
                       </td>
                       <td className="px-2 py-2 align-middle font-medium">
