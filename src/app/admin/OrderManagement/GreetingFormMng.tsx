@@ -258,9 +258,13 @@ export function GreetingFormMng() {
               ordererName: item.ordererName?.trim() || "-",
               churchName: item.churchName?.trim() || "-",
               phone: item.phone?.trim() || "-",
-              greetingNumber: item.includeSelf
-                ? `${item.greetingNumber}(+자체)`
-                : item.greetingNumber,
+              greetingNumber: [
+                item.greetingNumber?.trim() || null,
+                item.includeSelf ? "자체" : null,
+                item.businessCard === "동봉" ? "명함" : null,
+              ]
+                .filter(Boolean)
+                .join(" + ") || "-",
               content: item.content,
               quantity: item.quantity,
               size: item.size,

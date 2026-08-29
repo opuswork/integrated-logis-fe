@@ -58,6 +58,68 @@ export function parseBusinessCardFromNotes(notes: string | null | undefined) {
   return parseOrderNoteField(notes, "명함동봉") === "Y";
 }
 
+export const GREETING_CATALOG_NUMBERS = ["1", "2", "3", "4"] as const;
+
+export function isGreetingCatalogNumber(value: string | null | undefined) {
+  return GREETING_CATALOG_NUMBERS.includes(
+    String(value ?? "").trim() as (typeof GREETING_CATALOG_NUMBERS)[number],
+  );
+}
+
+export type GreetingSelection = {
+  hasCatalog: boolean;
+  includeSelf: boolean;
+  includeCard: boolean;
+};
+
+/** 인사장번호 1~4 / 자체 / 명함 선택 상태를 폼·notes에서 모읍니다. */
+export function resolveGreetingSelection(input: {
+  greetingNumber?: string | null;
+  includeSelf?: boolean | null;
+  businessCard?: string | null;
+  notes?: string | null;
+} = {}): GreetingSelection {
+  const number =
+    input.greetingNumber?.trim() ||
+    parseGreetingNumberFromNotes(input.notes);
+  return {
+    hasCatalog: isGreetingCatalogNumber(number),
+    includeSelf:
+      Boolean(input.includeSelf) || parseGreetingSelfFromNotes(input.notes),
+    includeCard:
+      input.businessCard === "동봉" || parseBusinessCardFromNotes(input.notes),
+  };
+}
+
+export function mergeGreetingSelections(
+  forms: Array<{
+    greetingNumber?: string | null;
+    includeSelf?: boolean | null;
+    businessCard?: string | null;
+  }>,
+  notes?: string | null,
+): GreetingSelection {
+  const fromNotes = resolveGreetingSelection({ notes });
+  return forms.reduce<GreetingSelection>(
+    (acc, form) => {
+      const next = resolveGreetingSelection(form);
+      return {
+        hasCatalog: acc.hasCatalog || next.hasCatalog,
+        includeSelf: acc.includeSelf || next.includeSelf,
+        includeCard: acc.includeCard || next.includeCard,
+      };
+    },
+    fromNotes,
+  );
+}
+
+/** 1~4 없이 자체·명함만 있으면 본사 인사장 완료(확인)가 필요 없습니다. */
+export function isSelfOrCardOnlyGreeting(selection: GreetingSelection) {
+  return (
+    !selection.hasCatalog && (selection.includeSelf || selection.includeCard)
+  );
+}
+
 export function parseGreetingSpecialNoteFromNotes(
   notes: string | null | undefined,
 ) {
@@ -165,15 +227,24 @@ export function parseDeliveryRequestDateFromNotes(
 
 /** Map saved greeting kind to 인사장소재 text on the print sheet. */
 export function greetingMaterialFromNotes(notes: string | null | undefined) {
+  const selection = resolveGreetingSelection({ notes });
+  if (selection.hasCatalog) {
+    return "최지원";
+  }
+  if (selection.includeSelf || selection.includeCard) {
+    return "주문처제공";
+  }
   const kind = parseGreetingKindFromNotes(notes);
   if (kind === "자체") {
-    return "자체 인사장";
+    return "주문처제공";
   }
   if (kind === "없음") {
     return "없음";
   }
-  // 본사 (default)
-  return "최지원";
+  if (kind === "본사") {
+    return "최지원";
+  }
+  return "없음";
 }
 
 export function parseShipDateFromNotes(notes: string | null | undefined) {

@@ -19,6 +19,8 @@ import {
   parseOrderTypeFromNotes,
   parseParcelCompanyFromNotes,
   greetingMaterialFromNotes,
+  isSelfOrCardOnlyGreeting,
+  mergeGreetingSelections,
 } from "@/lib/order-notes";
 import type { AdminRegion } from "@/lib/auth";
 
@@ -157,6 +159,9 @@ export function mapShipmentOpsOrder(order: {
   items?: { productName?: string; quantity?: number }[];
   greetingForms?: {
     churchName?: string | null;
+    greetingNumber?: string | null;
+    includeSelf?: boolean | null;
+    businessCard?: string | null;
   }[];
   shipment?: {
     fulfillmentType?: string | null;
@@ -208,11 +213,18 @@ export function mapShipmentOpsOrder(order: {
   const releaseDone = order.releaseDone === true;
   const finalCompleteDone = order.finalCompleteDone === true;
   const greetingCount = order.greetingForms?.length ?? 0;
+  const greetingSelection = mergeGreetingSelections(
+    order.greetingForms ?? [],
+    order.notes,
+  );
   const greetingMaterialRaw = greetingMaterialFromNotes(order.notes);
-  const greetingMaterial =
-    greetingCount > 0 && greetingMaterialRaw === "없음"
-      ? "최지원"
-      : greetingMaterialRaw;
+  const greetingMaterial = greetingSelection.hasCatalog
+    ? "최지원"
+    : isSelfOrCardOnlyGreeting(greetingSelection)
+      ? "주문처제공"
+      : greetingCount > 0 && greetingMaterialRaw === "없음"
+        ? "최지원"
+        : greetingMaterialRaw;
   const greetingLocation =
     greetingMaterial === "없음" ? "—" : "박스외부";
   const slipLabel: "유" | "무" = isParcel ? "유" : "무";

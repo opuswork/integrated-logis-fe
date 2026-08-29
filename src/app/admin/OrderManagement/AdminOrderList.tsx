@@ -33,11 +33,14 @@ import {
   type DeliveryOrderStatus,
 } from "@/lib/order-delivery";
 import {
+  isSelfOrCardOnlyGreeting,
+  mergeGreetingSelections,
   parseBranchStoreFromNotes,
   parseDeliveryRequestDateFromNotes,
   parseOrderDateFromNotes,
   parseOrdererFromNotes,
   parseOrderTypeFromNotes,
+  type GreetingSelection,
 } from "@/lib/order-notes";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +66,7 @@ type AdminOrderRow = {
   paymentAuthor: string | null;
   greetingDone: boolean;
   greetingCount: number;
+  greetingSelection: GreetingSelection;
   slipDone: boolean;
   slipAuthor: string | null;
   readyForShipment: boolean;
@@ -337,7 +341,11 @@ export function AdminOrderList({
       factoryAlert?: string | null;
       finalConfirmDone?: boolean;
       items?: unknown[];
-      greetingForms?: unknown[];
+      greetingForms?: Array<{
+        greetingNumber?: string | null;
+        includeSelf?: boolean | null;
+        businessCard?: string | null;
+      }>;
       shipment?: { fulfillmentType?: string | null } | null;
       user?: { fullname?: string | null } | null;
     }): AdminOrderRow => {
@@ -368,6 +376,10 @@ export function AdminOrderList({
         paymentAuthor: order.paymentAuthor ?? null,
         greetingDone: order.greetingDone === true,
         greetingCount: order.greetingForms?.length ?? 0,
+        greetingSelection: mergeGreetingSelections(
+          order.greetingForms ?? [],
+          order.notes,
+        ),
         slipDone: order.slipDone === true,
         slipAuthor: order.slipAuthor ?? null,
         readyForShipment: order.readyForShipment === true,
@@ -1132,6 +1144,25 @@ export function AdminOrderList({
                           <span className="rounded bg-[#f1f5f9] px-2 py-0.5 text-[11px] font-semibold text-[#64748b]">
                             X
                           </span>
+                        ) : isSelfOrCardOnlyGreeting(row.greetingSelection) ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {row.greetingSelection.includeCard ? (
+                              <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[11px] font-semibold text-[#1d4ed8]">
+                                명함
+                              </span>
+                            ) : null}
+                            {row.greetingSelection.includeCard &&
+                            row.greetingSelection.includeSelf ? (
+                              <span className="text-[10px] text-[#94a3b8]">
+                                or
+                              </span>
+                            ) : null}
+                            {row.greetingSelection.includeSelf ? (
+                              <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[11px] font-semibold text-[#1d4ed8]">
+                                자체
+                              </span>
+                            ) : null}
+                          </div>
                         ) : row.greetingDone ? (
                           <div className="flex flex-col gap-1">
                             <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">

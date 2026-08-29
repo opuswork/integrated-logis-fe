@@ -37,6 +37,7 @@ import {
   parseChurchFromNotes,
   parseDeliveryCompanyFromNotes,
   parseDeliveryDateTimeFromNotes,
+  isGreetingCatalogNumber,
   parseGreetingKindFromNotes,
   parseItemNoteFromNotes,
   parseOrderDateFromNotes,
@@ -535,7 +536,7 @@ function MobileMemberHeader({
 
 type GreetingDraft = {
   id?: number;
-  greetingNumber: (typeof GREETING_NUMBERS)[number];
+  greetingNumber: (typeof GREETING_NUMBERS)[number] | "";
   includeSelf: boolean;
   businessCard: string;
   greetingSize: (typeof GREETING_SIZES)[number];
@@ -556,7 +557,7 @@ const BUSINESS_CARD_EXCLUDED = "미동봉";
 
 function formatGreetingDraftNotes(draft: GreetingDraft) {
   return [
-    `인사장번호:${draft.greetingNumber}`,
+    draft.greetingNumber ? `인사장번호:${draft.greetingNumber}` : null,
     draft.includeSelf ? "인사장자체:Y" : null,
     draft.businessCard === BUSINESS_CARD_INCLUDED ? "명함동봉:Y" : null,
     `인사장크기:${draft.greetingSize}`,
@@ -659,13 +660,16 @@ function greetingDraftFromApi(form: {
   productName?: string | null;
   receivePlace?: string | null;
 }): GreetingDraft | null {
-  const greetingNumber = GREETING_NUMBERS.find(
+  const catalogNumber = GREETING_NUMBERS.find(
     (value) => value === String(form.greetingNumber).trim(),
   );
+  const greetingNumber = catalogNumber ?? "";
   const greetingSize = GREETING_SIZES.find(
     (value) => value === String(form.size ?? "").trim(),
   );
-  if (!greetingNumber || !greetingSize) {
+  const includeSelf = Boolean(form.includeSelf);
+  const includeCard = form.businessCard === BUSINESS_CARD_INCLUDED;
+  if ((!greetingNumber && !includeSelf && !includeCard) || !greetingSize) {
     return null;
   }
 
@@ -678,7 +682,7 @@ function greetingDraftFromApi(form: {
   return {
     id: form.id,
     greetingNumber,
-    includeSelf: Boolean(form.includeSelf),
+    includeSelf,
     businessCard,
     greetingSize,
     greetingContent: form.content?.trim() ?? "",
@@ -686,33 +690,34 @@ function greetingDraftFromApi(form: {
     productName: form.productName?.trim() ?? "",
     receivePlace: form.receivePlace?.trim() || GREETING_RECEIVE_PLACE_PLACEHOLDER,
     specialNote: form.specialNote?.trim() ?? "",
-    imageNumbers: [greetingNumber],
+    imageNumbers: greetingNumber ? [greetingNumber] : [],
     imageUrl: form.imageUrl?.trim() || undefined,
   };
 }
 
 function validateGreetingForm({
+  greetingNumber,
+  includeSelf,
   greetingContent,
   quantity,
   greetingSize,
   receivePlace,
   businessCard,
 }: {
+  greetingNumber: string;
+  includeSelf: boolean;
   greetingContent: string;
   quantity: string;
   greetingSize: string;
   receivePlace: string;
   businessCard: string;
 }) {
-  if (
-    !businessCard ||
-    businessCard === BUSINESS_CARD_DEFAULT ||
-    (businessCard !== BUSINESS_CARD_INCLUDED &&
-      businessCard !== BUSINESS_CARD_EXCLUDED)
-  ) {
-    return "명함 동봉 여부를 선택해 주세요.";
+  const hasCatalog = isGreetingCatalogNumber(greetingNumber);
+  const includeCard = businessCard === BUSINESS_CARD_INCLUDED;
+  if (!hasCatalog && !includeSelf && !includeCard) {
+    return "인사장번호, 자체, 명함 중 하나 이상을 선택해 주세요.";
   }
-  if (!greetingContent.trim()) {
+  if (hasCatalog && !greetingContent.trim()) {
     return "인사장내용을 입력해 주세요.";
   }
   if (!quantity.trim()) {
@@ -752,7 +757,7 @@ function GreetingForm({
 }) {
   const isLinkedOrder = true; // product-order-linked greeting only on 주문 작성
   const [greetingNumber, setGreetingNumber] = useState<
-    (typeof GREETING_NUMBERS)[number]
+    (typeof GREETING_NUMBERS)[number] | ""
   >(initialDraft?.greetingNumber ?? "1");
   const [includeSelfGreeting, setIncludeSelfGreeting] = useState(
     initialDraft?.includeSelf ?? false,
@@ -857,11 +862,11 @@ function GreetingForm({
           specialNote?: string | null;
         };
 
-        const number = (GREETING_NUMBERS.includes(
+        const number = GREETING_NUMBERS.includes(
           data.greetingNumber as (typeof GREETING_NUMBERS)[number],
         )
-          ? data.greetingNumber
-          : "1") as (typeof GREETING_NUMBERS)[number];
+          ? (data.greetingNumber as (typeof GREETING_NUMBERS)[number])
+          : "";
 
         setSavedGreetingId(data.id);
         setGreetingNumber(number);
@@ -895,7 +900,9 @@ function GreetingForm({
     };
   }, [initialDraft?.id]);
 
-  const catalogImageUrl = GREETING_PREVIEW_IMAGE[greetingNumber];
+  const catalogImageUrl = greetingNumber
+    ? GREETING_PREVIEW_IMAGE[greetingNumber]
+    : undefined;
 
   const buildDraft = (id?: number, imageUrl?: string): GreetingDraft => ({
     id,
@@ -908,12 +915,14 @@ function GreetingForm({
     productName,
     receivePlace,
     specialNote,
-    imageNumbers: [greetingNumber],
+    imageNumbers: greetingNumber ? [greetingNumber] : [],
     imageUrl: imageUrl || savedImageUrl || catalogImageUrl || initialDraft?.imageUrl,
   });
 
   const runRequiredValidation = () => {
     const error = validateGreetingForm({
+      greetingNumber,
+      includeSelf: includeSelfGreeting,
       greetingContent,
       quantity,
       greetingSize,
@@ -1080,9 +1089,9 @@ function GreetingForm({
       </div>
 
       <GreetingNumberChipPicker
-        value={greetingNumber}
+        value={greetingNumber || null}
         onChange={(value) => {
-          setGreetingNumber(value);
+          setGreetingNumber(value ?? "");
           markDirty();
         }}
         includeSelf={includeSelfGreeting}
@@ -1101,14 +1110,22 @@ function GreetingForm({
 
       <div className="mt-2.5 grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2">
         <Input
-          label="인사장내용 *"
+          label={
+            isGreetingCatalogNumber(greetingNumber)
+              ? "인사장내용 *"
+              : "인사장내용"
+          }
           value={greetingContent}
           onChange={(event) => {
             setGreetingContent(event.target.value);
             markDirty();
           }}
-          placeholder="인사장 문구"
-          required
+          placeholder={
+            isGreetingCatalogNumber(greetingNumber)
+              ? "인사장 문구"
+              : "자체·명함만 선택하면 생략할 수 있습니다"
+          }
+          required={isGreetingCatalogNumber(greetingNumber)}
         />
         <Input
           label="수량 *"
@@ -3173,6 +3190,23 @@ function ProductOrderPanel({
         .map((draft) => draft?.id)
         .filter((id): id is number => typeof id === "number");
       const greetingCountForNotes = greetingIdsForSubmit.length;
+      const greetingDraftsForNotes = Object.values(greetingsForSubmit).filter(
+        (draft): draft is GreetingDraft => Boolean(draft),
+      );
+      const hasCatalogGreeting = greetingDraftsForNotes.some((draft) =>
+        isGreetingCatalogNumber(draft.greetingNumber),
+      );
+      const hasSelfOrCardGreeting = greetingDraftsForNotes.some(
+        (draft) =>
+          draft.includeSelf || draft.businessCard === BUSINESS_CARD_INCLUDED,
+      );
+      const greetingKindNote = hasCatalogGreeting
+        ? "본사"
+        : hasSelfOrCardGreeting
+          ? "자체"
+          : greetingCountForNotes > 0
+            ? "본사"
+            : "없음";
 
       const selectedBranch =
         BRANCH_STORES.find((store) => store.id === branchStore)?.name ?? "";
@@ -3216,7 +3250,7 @@ function ProductOrderPanel({
           : null,
         `주문작업지역:${selectedBranch}`,
         `지부매장:${selectedBranch}`,
-        `인사장종류:${greetingCountForNotes > 0 ? "본사" : "없음"}`,
+        `인사장종류:${greetingKindNote}`,
         attachedGreetingNotes,
         ...productItems.map(
           (item) =>

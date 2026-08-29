@@ -223,8 +223,9 @@ export function StandaloneGreetingForm({
   const [churchId, setChurchId] = useState<number | null>(null);
   const [churches, setChurches] = useState<ChurchOption[]>([]);
   const [isChurchesLoading, setIsChurchesLoading] = useState(true);
-  const [greetingNumber, setGreetingNumber] =
-    useState<(typeof GREETING_CATALOG_NUMBERS)[number]>("1");
+  const [greetingNumber, setGreetingNumber] = useState<
+    (typeof GREETING_CATALOG_NUMBERS)[number] | ""
+  >("1");
   const [includeSelf, setIncludeSelf] = useState(false);
   const [businessCardIncluded, setBusinessCardIncluded] = useState(false);
   const [greetingSize, setGreetingSize] = useState("");
@@ -277,7 +278,13 @@ export function StandaloneGreetingForm({
     if (!churchId) {
       return "중앙을 검색한 뒤 목록에서 선택해 주세요.";
     }
-    if (!content.trim()) {
+    const hasCatalog = GREETING_CATALOG_NUMBERS.includes(
+      greetingNumber as (typeof GREETING_CATALOG_NUMBERS)[number],
+    );
+    if (!hasCatalog && !includeSelf && !businessCardIncluded) {
+      return "인사장번호, 자체, 명함 중 하나 이상을 선택해 주세요.";
+    }
+    if (hasCatalog && !content.trim()) {
       return "인사장내용을 입력해 주세요.";
     }
     if (!quantity.trim()) {
@@ -406,8 +413,8 @@ export function StandaloneGreetingForm({
 
       <GreetingNumberChipPicker
         name="standalone-greeting-number"
-        value={greetingNumber}
-        onChange={setGreetingNumber}
+        value={greetingNumber || null}
+        onChange={(value) => setGreetingNumber(value ?? "")}
         includeSelf={includeSelf}
         onIncludeSelfChange={setIncludeSelf}
         businessCardIncluded={businessCardIncluded}
@@ -416,10 +423,18 @@ export function StandaloneGreetingForm({
 
       <div className="mt-2.5 grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2">
         <Input
-          label="인사장내용 *"
+          label={
+            GREETING_CATALOG_NUMBERS.includes(
+              greetingNumber as (typeof GREETING_CATALOG_NUMBERS)[number],
+            )
+              ? "인사장내용 *"
+              : "인사장내용"
+          }
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          required
+          required={GREETING_CATALOG_NUMBERS.includes(
+            greetingNumber as (typeof GREETING_CATALOG_NUMBERS)[number],
+          )}
         />
         <Input
           label="수량 *"
