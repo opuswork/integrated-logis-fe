@@ -27,37 +27,58 @@ type Position = { x: number; y: number };
 
 const POLL_MS = 3000;
 const PANEL_WIDTH = 330;
-const PANEL_HEIGHT = 440;
+const DEFAULT_HEIGHT = 440;
+const MIN_HEIGHT = 280;
 const EDGE_GAP = 16;
 const UI_STORAGE_KEY = "sanc-chat-ui";
 const DRAG_MIN_WIDTH = 640;
 
-function clampPosition(position: Position): Position {
+function maxHeightForViewport() {
+  return Math.max(MIN_HEIGHT, window.innerHeight - EDGE_GAP * 2);
+}
+
+function clampHeight(height: number, top?: number) {
+  const maxByViewport = maxHeightForViewport();
+  const maxFromTop =
+    top != null
+      ? Math.max(MIN_HEIGHT, window.innerHeight - top - EDGE_GAP)
+      : maxByViewport;
+  return Math.min(Math.max(height, MIN_HEIGHT), Math.min(maxByViewport, maxFromTop));
+}
+
+function clampPosition(position: Position, height: number): Position {
   const maxX = Math.max(EDGE_GAP, window.innerWidth - PANEL_WIDTH - EDGE_GAP);
-  const maxY = Math.max(EDGE_GAP, window.innerHeight - PANEL_HEIGHT - EDGE_GAP);
+  const maxY = Math.max(EDGE_GAP, window.innerHeight - height - EDGE_GAP);
   return {
     x: Math.min(Math.max(position.x, EDGE_GAP), maxX),
     y: Math.min(Math.max(position.y, EDGE_GAP), maxY),
   };
 }
 
-function defaultPosition(): Position {
-  return clampPosition({
-    x: window.innerWidth - PANEL_WIDTH - EDGE_GAP,
-    y: window.innerHeight - PANEL_HEIGHT - EDGE_GAP,
-  });
+function defaultPosition(height: number): Position {
+  return clampPosition(
+    {
+      x: window.innerWidth - PANEL_WIDTH - EDGE_GAP,
+      y: window.innerHeight - height - EDGE_GAP,
+    },
+    height,
+  );
 }
 
 function readStoredUi() {
   try {
     const raw = window.localStorage.getItem(UI_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Position> & { open?: boolean };
+    const parsed = JSON.parse(raw) as Partial<Position> & {
+      open?: boolean;
+      height?: number;
+    };
     return {
       position:
         typeof parsed.x === "number" && typeof parsed.y === "number"
           ? { x: parsed.x, y: parsed.y }
           : null,
+      height: typeof parsed.height === "number" ? parsed.height : null,
       open: parsed.open === true,
     };
   } catch {
@@ -65,11 +86,15 @@ function readStoredUi() {
   }
 }
 
-function storeUi(position: Position | null, open: boolean) {
+function storeUi(
+  position: Position | null,
+  open: boolean,
+  height: number,
+) {
   try {
     window.localStorage.setItem(
       UI_STORAGE_KEY,
-      JSON.stringify({ ...(position ?? {}), open }),
+      JSON.stringify({ ...(position ?? {}), open, height }),
     );
   } catch {
     // 저장 실패는 무시 (시크릿 모드 등)
@@ -99,12 +124,23 @@ export function LiveChatWidget() {
   const [isOpen, setIsOpen] = useState(
     () => typeof window !== "undefined" && readStoredUi()?.open === true,
   );
+  const [height, setHeight] = useState(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_HEIGHT;
+    }
+    const stored = readStoredUi()?.height;
+    return stored != null ? clampHeight(stored) : DEFAULT_HEIGHT;
+  });
   const [position, setPosition] = useState<Position | null>(() => {
     if (typeof window === "undefined") {
       return null;
     }
-    const stored = readStoredUi()?.position;
-    return stored ? clampPosition(stored) : defaultPosition();
+    const stored = readStoredUi();
+    const nextHeight =
+      stored?.height != null ? clampHeight(stored.height) : DEFAULT_HEIGHT;
+    return stored?.position
+      ? clampPosition(stored.position, nextHeight)
+      : defaultPosition(nextHeight);
   });
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -117,16 +153,31 @@ export function LiveChatWidget() {
   const lastIdRef = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef<Position | null>(null);
+  const resizeStartRef = useRef<{ y: number; height: number } | null>(null);
   const isOpenRef = useRef(false);
+  const heightRef = useRef(height);
+  const positionRef = useRef(position);
 
   useEffect(() => {
     isOpenRef.current = isOpen;
   }, [isOpen]);
 
   useEffect(() => {
+    heightRef.current = height;
+  }, [height]);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  useEffect(() => {
     const handleResize = () => {
       setCanDrag(window.innerWidth >= DRAG_MIN_WIDTH);
-      setPosition((current) => (current ? clampPosition(current) : current));
+      setHeight((current) => {
+        const next = clampHeight(current);
+        setPosition((pos) => (pos ? clampPosition(pos, next) : pos));
+        return next;
+      });
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -203,15 +254,19 @@ export function LiveChatWidget() {
     }
   }, [isOpen, messages]);
 
+  const persistUi = (nextOpen: boolean, nextPosition = position, nextHeight = height) => {
+    storeUi(nextPosition, nextOpen, nextHeight);
+  };
+
   const openPanel = () => {
     setIsOpen(true);
     setUnread(0);
-    storeUi(position, true);
+    persistUi(true);
   };
 
   const minimizePanel = () => {
     setIsOpen(false);
-    storeUi(position, false);
+    persistUi(false);
   };
 
   const handleDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -229,10 +284,13 @@ export function LiveChatWidget() {
     const offset = dragOffsetRef.current;
     if (!offset) return;
     setPosition(
-      clampPosition({
-        x: event.clientX - offset.x,
-        y: event.clientY - offset.y,
-      }),
+      clampPosition(
+        {
+          x: event.clientX - offset.x,
+          y: event.clientY - offset.y,
+        },
+        height,
+      ),
     );
   };
 
@@ -240,7 +298,46 @@ export function LiveChatWidget() {
     if (!dragOffsetRef.current) return;
     dragOffsetRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
-    storeUi(position, true);
+    persistUi(true, positionRef.current, heightRef.current);
+  };
+
+  const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    resizeStartRef.current = { y: event.clientY, height: heightRef.current };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current;
+    if (!start) return;
+
+    const raw = start.height + (event.clientY - start.y);
+    const maxHeight = maxHeightForViewport();
+    const nextHeight = Math.min(Math.max(raw, MIN_HEIGHT), maxHeight);
+    const currentPos = positionRef.current;
+
+    if (currentPos) {
+      const overflow =
+        currentPos.y + nextHeight + EDGE_GAP - window.innerHeight;
+      const nextPos =
+        overflow > 0
+          ? clampPosition(
+              { x: currentPos.x, y: currentPos.y - overflow },
+              nextHeight,
+            )
+          : clampPosition(currentPos, nextHeight);
+      setPosition(nextPos);
+    }
+
+    setHeight(nextHeight);
+  };
+
+  const handleResizeEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!resizeStartRef.current) return;
+    resizeStartRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    persistUi(true, positionRef.current, heightRef.current);
   };
 
   const sendMessage = async () => {
@@ -296,15 +393,19 @@ export function LiveChatWidget() {
     );
   }
 
-  const panelStyle =
-    canDrag && position
-      ? {
-          left: position.x,
-          top: position.y,
-          width: PANEL_WIDTH,
-          height: PANEL_HEIGHT,
-        }
-      : undefined;
+  const panelStyle = canDrag && position
+    ? {
+        left: position.x,
+        top: position.y,
+        width: PANEL_WIDTH,
+        height,
+      }
+    : {
+        height:
+          typeof window === "undefined"
+            ? height
+            : Math.min(height, Math.round(window.innerHeight * 0.85)),
+      };
 
   return (
     <section
@@ -312,7 +413,7 @@ export function LiveChatWidget() {
       style={panelStyle}
       className={cn(
         "fixed z-[60] flex flex-col overflow-hidden rounded-xl border border-[#CBD5E0] bg-white shadow-[0_18px_44px_rgba(18,38,63,0.22)]",
-        canDrag ? "" : "inset-x-3 bottom-3 h-[60vh]",
+        canDrag ? "" : "inset-x-3 bottom-3",
       )}
     >
       <div
@@ -443,6 +544,19 @@ export function LiveChatWidget() {
         >
           <Send className="size-4" />
         </button>
+      </div>
+
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="채팅창 길이 조절"
+        onPointerDown={handleResizeStart}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        className="flex h-3 shrink-0 cursor-ns-resize items-center justify-center bg-[#F7FAFC] hover:bg-[#E2E8F0]"
+      >
+        <span className="block h-1 w-10 rounded-full bg-[#CBD5E0]" />
       </div>
     </section>
   );
