@@ -1903,6 +1903,139 @@ function DeliveryCompanyField({
   );
 }
 
+type MemberSuggest = {
+  id: number;
+  fullname: string;
+  phone: string;
+  churchId: number | null;
+  churchName: string;
+};
+
+/** 관리자 대리작성 전용: 이름 일부로 기존 회원을 찾아 연락처·중앙까지 채웁니다. */
+function OrdererNameField({
+  value,
+  onChange,
+  onSelectMember,
+  inputClassName,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSelectMember: (member: MemberSuggest) => void;
+  inputClassName: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<MemberSuggest[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const q = value.trim();
+    if (q.length < 1) {
+      setSuggestions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      void apiFetch(`/api/members/search?q=${encodeURIComponent(q)}`)
+        .then(async (res) => {
+          const data = (await res.json()) as
+            | MemberSuggest[]
+            | { message?: string };
+          if (cancelled) return;
+          if (!res.ok || !Array.isArray(data)) {
+            setSuggestions([]);
+            return;
+          }
+          setSuggestions(data);
+        })
+        .catch(() => {
+          if (!cancelled) setSuggestions([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [value]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <input
+        type="text"
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-controls="orderer-member-suggestions"
+        aria-autocomplete="list"
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setIsOpen(true);
+        }}
+        onFocus={() => setIsOpen(true)}
+        placeholder="고객 성명 (등록 회원 자동완성)"
+        autoComplete="off"
+        required
+        className={inputClassName}
+      />
+      {isOpen && value.trim() ? (
+        <ul
+          id="orderer-member-suggestions"
+          role="listbox"
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[7px] border border-line bg-white shadow-lg"
+        >
+          {loading ? (
+            <li className="px-3 py-2.5 text-sm text-[#64748b]">검색 중...</li>
+          ) : suggestions.length === 0 ? (
+            <li className="px-3 py-2.5 text-sm text-[#64748b]">
+              일치하는 회원이 없습니다. 입력한 정보로 새 주문자 계정이
+              생성됩니다.
+            </li>
+          ) : (
+            suggestions.map((member) => (
+              <li key={member.id} role="option">
+                <button
+                  type="button"
+                  className="flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onSelectMember(member);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="text-sm font-semibold text-ink">
+                    {member.fullname}
+                  </span>
+                  <span className="text-xs text-[#64748b]">
+                    {[member.churchName, member.phone]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function RequiredLabel({ children }: { children: ReactNode }) {
   return (
     <span>
@@ -2332,6 +2465,8 @@ function ProductOrderPanel({
   const [branchStore, setBranchStore] = useState<BranchStoreId | null>(null);
   const [extraNote, setExtraNote] = useState("");
   const [isDirector, setIsDirector] = useState<boolean>(false);
+  /** 관리자 대리작성에서 자동완성으로 고른 기존 회원. null이면 신규 주문자 */
+  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [viewingGreetingProduct, setViewingGreetingProduct] = useState<
     string | null
   >(null);
@@ -2354,6 +2489,8 @@ function ProductOrderPanel({
   const isWideProductList = useMinWidth(500);
   const isDelivery = orderType === "delivery";
   const memberFieldsReadOnly = !blankCustomerFields;
+  /** 관리자 신규작성에서만 주문자 자동완성 (수정 모드는 소유자 변경 방지) */
+  const ordererAutocomplete = blankCustomerFields && !isEditMode;
   const displayOrdererName =
     isDirector === true
       ? `${ordererName.trim()}${ordererName.trim().endsWith("관") ? "" : "관"}`
@@ -3128,8 +3265,20 @@ function ProductOrderPanel({
             method: "POST",
             body: JSON.stringify({
               orderNumber,
-              userId: auth.id,
+              userId: selectedMemberId ?? auth.id,
               status: "PLACED",
+              // 자동완성으로 회원을 고르지 않았으면 주문자 정보를 넘겨
+              // 기존 회원 연결 또는 신규 계정 생성을 서버가 처리합니다.
+              ...(ordererAutocomplete && !selectedMemberId
+                ? {
+                    ordererProfile: {
+                      // 계정 이름에는 '관장님' 표기를 붙이지 않습니다.
+                      fullname: ordererName.trim() || displayOrdererName,
+                      phone: ordererPhone.trim(),
+                      ...(churchId != null ? { churchId } : {}),
+                    },
+                  }
+                : {}),
               ...payload,
             }),
           });
@@ -3444,6 +3593,26 @@ function ProductOrderPanel({
     }
   };
 
+  const handleOrdererNameInput = (next: string) => {
+    if (memberFieldsReadOnly) return;
+    if (isDirector === true && next.endsWith("관")) {
+      setOrdererName(next.slice(0, -1));
+    } else {
+      setOrdererName(next);
+    }
+  };
+
+  const handleSelectOrdererMember = (member: MemberSuggest) => {
+    const trimmed = member.fullname.trim();
+    const directorName = trimmed.endsWith("관");
+    setIsDirector(directorName);
+    setOrdererName(directorName ? trimmed.slice(0, -1) : trimmed);
+    setOrdererPhone(formatPhoneInput(member.phone));
+    setChurchQuery(member.churchName);
+    setChurchId(member.churchId);
+    setSelectedMemberId(member.id);
+  };
+
   const omInputClass =
     "mb-3 w-full rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C] disabled:bg-[#EDF2F7] disabled:text-[#A0AEC0]";
   const omDatePickerClass =
@@ -3484,29 +3653,33 @@ function ProductOrderPanel({
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <label className={omLabelClass}>주문자 성명</label>
-            <input
-              type="text"
-              value={
-                memberFieldsReadOnly
-                  ? displayOrdererName
-                  : isDirector === true
+            {ordererAutocomplete ? (
+              <OrdererNameField
+                value={isDirector === true ? displayOrdererName : ordererName}
+                onChange={(next) => {
+                  setSelectedMemberId(null);
+                  handleOrdererNameInput(next);
+                }}
+                onSelectMember={handleSelectOrdererMember}
+                inputClassName={cn(omInputClass, "mb-0")}
+              />
+            ) : (
+              <input
+                type="text"
+                value={
+                  memberFieldsReadOnly
                     ? displayOrdererName
-                    : ordererName
-              }
-              onChange={(event) => {
-                if (memberFieldsReadOnly) return;
-                const next = event.target.value;
-                if (isDirector === true && next.endsWith("관")) {
-                  setOrdererName(next.slice(0, -1));
-                } else {
-                  setOrdererName(next);
+                    : isDirector === true
+                      ? displayOrdererName
+                      : ordererName
                 }
-              }}
-              readOnly={memberFieldsReadOnly}
-              required
-              placeholder={blankCustomerFields ? "고객 성명" : "주문자 성명"}
-              className={cn(omInputClass, "mb-0", memberFieldsReadOnly && "bg-[#EDF2F7]")}
-            />
+                onChange={(event) => handleOrdererNameInput(event.target.value)}
+                readOnly={memberFieldsReadOnly}
+                required
+                placeholder={blankCustomerFields ? "고객 성명" : "주문자 성명"}
+                className={cn(omInputClass, "mb-0", memberFieldsReadOnly && "bg-[#EDF2F7]")}
+              />
+            )}
           </div>
           <div className="flex items-center gap-1.5 pt-6 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
             <label className="inline-flex cursor-pointer items-center gap-1.5">
@@ -3520,6 +3693,19 @@ function ProductOrderPanel({
             </label>
           </div>
         </div>
+
+        {ordererAutocomplete ? (
+          <p
+            className={cn(
+              "mb-3 -mt-1 text-[11px]",
+              selectedMemberId ? "text-[#2F855A]" : "text-[#64748B]",
+            )}
+          >
+            {selectedMemberId
+              ? "등록된 회원과 연결되었습니다. 주문이 해당 회원의 '내 주문현황'에 표시됩니다."
+              : "목록에 없는 이름이면 입력한 연락처로 주문자 계정이 자동 생성됩니다. 연락처를 정확히 입력해 주세요."}
+          </p>
+        ) : null}
 
         <label className={omLabelClass}>주문자 연락처</label>
         <input
