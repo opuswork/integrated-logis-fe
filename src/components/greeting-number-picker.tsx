@@ -29,8 +29,8 @@ export function GreetingNumberChipPicker({
   onBusinessCardIncludedChange,
   name = "greeting-number",
 }: {
-  value: GreetingCatalogNumber;
-  onChange: (value: GreetingCatalogNumber) => void;
+  value: GreetingCatalogNumber | null;
+  onChange: (value: GreetingCatalogNumber | null) => void;
   includeSelf?: boolean;
   onIncludeSelfChange?: (value: boolean) => void;
   /** true = 동봉, false = 미동봉 */
@@ -100,11 +100,11 @@ export function GreetingNumberChipPicker({
               onBlur={hideCatalogPreview}
             >
               <input
-                type="radio"
-                name={name}
+                type="checkbox"
+                name={`${name}-${number}`}
                 value={number}
                 checked={selected}
-                onChange={() => onChange(number)}
+                onChange={() => onChange(selected ? null : number)}
                 className="sr-only"
               />
               {number}

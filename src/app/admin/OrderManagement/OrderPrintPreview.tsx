@@ -13,6 +13,8 @@ import {
   parseChurchFromNotes,
   parseDeliveryCompanyFromNotes,
   greetingMaterialFromNotes,
+  isSelfOrCardOnlyGreeting,
+  mergeGreetingSelections,
   parseGreetingSpecialNoteFromNotes,
   parseItemNoteFromNotes,
   parseOrderDateFromNotes,
@@ -73,7 +75,12 @@ type ApiOrder = {
     shippedAt?: string | null;
     deliveredAt?: string | null;
   } | null;
-  greetingForms?: Array<{ specialNote?: string | null }>;
+  greetingForms?: Array<{
+    specialNote?: string | null;
+    greetingNumber?: string | null;
+    includeSelf?: boolean | null;
+    businessCard?: string | null;
+  }>;
   user?: {
     fullname?: string | null;
     phone?: string | null;
@@ -249,11 +256,18 @@ function mapOrderToPrintPages(
     order.shipment?.carrier ||
     "";
   const hasGreetingForms = (order.greetingForms?.length ?? 0) > 0;
+  const greetingSelection = mergeGreetingSelections(
+    order.greetingForms ?? [],
+    notes,
+  );
   const greetingMaterialRaw = greetingMaterialFromNotes(notes);
-  const greetingMaterial =
-    hasGreetingForms && greetingMaterialRaw === "없음"
-      ? "최지원"
-      : greetingMaterialRaw;
+  const greetingMaterial = greetingSelection.hasCatalog
+    ? "최지원"
+    : isSelfOrCardOnlyGreeting(greetingSelection)
+      ? "주문처제공"
+      : hasGreetingForms && greetingMaterialRaw === "없음"
+        ? "최지원"
+        : greetingMaterialRaw;
   const greetingLocation =
     greetingMaterial === "없음" ? "-" : "박스외부";
   const greetingSpecialNote =
