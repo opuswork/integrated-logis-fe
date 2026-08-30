@@ -48,6 +48,17 @@ type PackagingWorker = "STORE" | "FACTORY" | null;
 
 const PAGE_SIZE = 15;
 
+/** 공장 작업 + 공장포장/양말부포장 지정 후에는 작업자·주문매장 변경 불가 */
+function isFactoryAssignmentLocked(row: {
+  packagingWorker: PackagingWorker;
+  packDept: "FACTORY_PACK" | "SOCK_PACK" | null;
+}) {
+  return (
+    row.packagingWorker === "FACTORY" &&
+    (row.packDept === "FACTORY_PACK" || row.packDept === "SOCK_PACK")
+  );
+}
+
 type AdminOrderRow = {
   id: number;
   orderNumber: string;
@@ -411,6 +422,24 @@ export function AdminOrderList({
           .filter((order) => order.status !== "CANCELLED")
           .map(mapApiOrder);
         setOrders(rows);
+        setWorkerEditing((prev) => {
+          const next = { ...prev };
+          for (const row of rows) {
+            if (isFactoryAssignmentLocked(row)) {
+              delete next[row.id];
+            }
+          }
+          return next;
+        });
+        setRegionEditing((prev) => {
+          const next = { ...prev };
+          for (const row of rows) {
+            if (isFactoryAssignmentLocked(row)) {
+              delete next[row.id];
+            }
+          }
+          return next;
+        });
         setDrafts((prev) => {
           const next = { ...prev };
           for (const row of rows) {
@@ -506,6 +535,18 @@ export function AdminOrderList({
     body: Record<string, unknown>,
     key: string,
   ) => {
+    const assignmentAction =
+      body.action === "worker" ||
+      body.action === "workerClear" ||
+      body.action === "assignmentReset" ||
+      body.action === "setStoreRegion";
+    const target = orders.find((row) => row.id === orderId);
+    if (assignmentAction && target && isFactoryAssignmentLocked(target)) {
+      setActionError(
+        "공장 작업 주문은 공장포장/양말부포장 지정 후 작업자·주문매장을 변경할 수 없습니다.",
+      );
+      return;
+    }
     setSavingId(key);
     setActionError("");
     try {
@@ -570,6 +611,12 @@ export function AdminOrderList({
     key: string,
     kind: "worker" | "storeRegion",
   ) => {
+    if (isFactoryAssignmentLocked(row)) {
+      setActionError(
+        "공장 작업 주문은 공장포장/양말부포장 지정 후 작업자·주문매장을 변경할 수 없습니다.",
+      );
+      return;
+    }
     setSavingId(key);
     setActionError("");
     try {
@@ -604,6 +651,12 @@ export function AdminOrderList({
 
   /** 작업자 초기화 → ○수정 + 현재 값이 채워진 선택 UI */
   const beginWorkerEdit = (row: AdminOrderRow) => {
+    if (isFactoryAssignmentLocked(row)) {
+      setActionError(
+        "공장 작업 주문은 공장포장/양말부포장 지정 후 작업자·주문매장을 변경할 수 없습니다.",
+      );
+      return;
+    }
     setWorkerEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
       ...prev,
@@ -617,6 +670,12 @@ export function AdminOrderList({
 
   /** 주문매장 초기화 → ○수정 + 현재 값이 채워진 선택 UI */
   const beginRegionEdit = (row: AdminOrderRow) => {
+    if (isFactoryAssignmentLocked(row)) {
+      setActionError(
+        "공장 작업 주문은 공장포장/양말부포장 지정 후 작업자·주문매장을 변경할 수 없습니다.",
+      );
+      return;
+    }
     setRegionEditing((prev) => ({ ...prev, [row.id]: true }));
     setDrafts((prev) => ({
       ...prev,
@@ -806,6 +865,7 @@ export function AdminOrderList({
                   const locked = !mutable;
                   const assignmentEditable =
                     mutable &&
+                    !isFactoryAssignmentLocked(row) &&
                     !row.packDept &&
                     (row.status === "PLACED" ||
                       row.status === "WAITING_FOR_SHIPMENT" ||
