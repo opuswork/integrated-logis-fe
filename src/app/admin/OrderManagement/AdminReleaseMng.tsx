@@ -278,7 +278,12 @@ export function AdminReleaseMng() {
                         <EditAlertBadge factoryAlert={row.factoryAlert} />
                       </td>
                       <td className="px-2 py-2">{row.clientLabel}</td>
-                      <td className="px-2 py-2">{row.productSummary}</td>
+                      <td className="px-2 py-2">
+                        <div>{row.productSummary}</div>
+                        <div className="mt-0.5 text-[11px] text-[#64748B]">
+                          주문번호: {row.orderNumber}
+                        </div>
+                      </td>
                       <td className="px-2 py-2">{row.quantity}</td>
                       <td className="px-2 py-2">
                         {formatMonthDay(row.requestedShipDate)}
