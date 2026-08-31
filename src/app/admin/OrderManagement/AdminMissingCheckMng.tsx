@@ -124,7 +124,7 @@ export function AdminMissingCheckMng() {
         </div>
         <section className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white p-4">
           <Skeleton className="mb-3 h-4 w-48" />
-          <TableSkeleton rows={6} columns={5} className="border-0" />
+          <TableSkeleton rows={6} columns={6} className="border-0" />
         </section>
       </div>
     );
@@ -193,7 +193,7 @@ export function AdminMissingCheckMng() {
           <span className="text-[#E53E3E]">({warnings.length}건)</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[780px] border-collapse text-left text-[12.5px]">
+          <table className="w-full min-w-[920px] border-collapse text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11.5px] font-bold text-[#64748B]">
                 <th className="px-4 py-2.5">주문일자</th>
@@ -202,13 +202,14 @@ export function AdminMissingCheckMng() {
                 <th className="px-4 py-2.5">거래처</th>
                 <th className="px-4 py-2.5">수량</th>
                 <th className="px-4 py-2.5">누락된 확인내용</th>
+                <th className="px-4 py-2.5">상품명</th>
               </tr>
             </thead>
             <tbody>
               {warnings.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-8 text-center text-[#64748B]"
                   >
                     누락된 공정이 없습니다.
@@ -243,6 +244,13 @@ export function AdminMissingCheckMng() {
                           </span>
                         ))}
                       </div>
+                      <div className="mt-1 text-[11px] text-[#64748B]">
+                        주문번호: {row.orderNumber} 작업장:{" "}
+                        {row.workerLabel === "—" ? "—" : row.workerLabel}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-[#1A202C]">
+                      {row.productSummary}
                     </td>
                   </tr>
                 ))
