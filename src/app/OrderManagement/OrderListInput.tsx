@@ -1337,6 +1337,9 @@ function ProductAddDialog({
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const qtyRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
   useEffect(() => {
     if (!open) {
@@ -1428,6 +1431,19 @@ function ProductAddDialog({
     });
   }, [catalog, keyword, categoryFilter, defaultOrderKind, mode]);
 
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [keyword, categoryFilter]);
+
+  useEffect(() => {
+    if (filteredCatalog.length === 0) {
+      return;
+    }
+    setActiveIndex((current) =>
+      Math.min(Math.max(current, 0), filteredCatalog.length - 1),
+    );
+  }, [filteredCatalog.length]);
+
   const selectedItems = useMemo(() => {
     return catalog
       .filter((item) => (quantities[item.id] ?? 0) > 0)
@@ -1474,6 +1490,36 @@ function ProductAddDialog({
     setQuantities({});
     onClose();
   };
+
+  const focusList = () => {
+    listRef.current?.focus();
+  };
+
+  const focusActiveQty = () => {
+    const item = filteredCatalog[activeIndex];
+    if (!item) {
+      return;
+    }
+    const input = qtyRefs.current.get(item.id);
+    input?.focus();
+    input?.select();
+  };
+
+  const moveActive = (delta: 1 | -1) => {
+    if (filteredCatalog.length === 0) {
+      return;
+    }
+    setActiveIndex((current) =>
+      nextSuggestIndex(current, delta, filteredCatalog.length),
+    );
+  };
+
+  useEffect(() => {
+    const row = listRef.current?.querySelector(
+      `[data-product-index="${activeIndex}"]`,
+    );
+    row?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
 
   const dialogTitle =
     mode === "box"
@@ -1524,6 +1570,17 @@ function ProductAddDialog({
             type="search"
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Tab" || event.shiftKey) {
+                return;
+              }
+              if (filteredCatalog.length === 0) {
+                return;
+              }
+              event.preventDefault();
+              setActiveIndex(0);
+              window.setTimeout(() => focusList(), 0);
+            }}
             placeholder="품명 / 코드 / 규격 검색"
             className="min-h-9 w-full rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-2 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
           />
@@ -1542,13 +1599,48 @@ function ProductAddDialog({
             검색 결과가 없습니다.
           </p>
         ) : (
-          <div className="max-h-[50vh] divide-y divide-[#e5eaf0] overflow-y-auto rounded-lg border border-line">
-            {filteredCatalog.map((item) => {
+          <div
+            ref={listRef}
+            tabIndex={0}
+            role="listbox"
+            aria-label="상품 목록"
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                moveActive(1);
+                return;
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                moveActive(-1);
+                return;
+              }
+              if (event.key === "Tab" && !event.shiftKey) {
+                event.preventDefault();
+                focusActiveQty();
+                return;
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                handleAdd();
+              }
+            }}
+            className="max-h-[50vh] divide-y divide-[#e5eaf0] overflow-y-auto rounded-lg border border-line focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+          >
+            {filteredCatalog.map((item, index) => {
               const qty = quantities[item.id] ?? 0;
+              const active = index === activeIndex;
               return (
                 <div
                   key={item.id}
-                  className="flex items-center gap-3 px-3 py-2.5"
+                  role="option"
+                  aria-selected={active}
+                  data-product-index={index}
+                  onClick={() => setActiveIndex(index)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5",
+                    active ? "bg-[#eff6ff]" : "bg-white",
+                  )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -1571,9 +1663,17 @@ function ProductAddDialog({
                     </p>
                   </div>
                   <input
+                    ref={(node) => {
+                      if (node) {
+                        qtyRefs.current.set(item.id, node);
+                      } else {
+                        qtyRefs.current.delete(item.id);
+                      }
+                    }}
                     type="number"
                     min={0}
                     inputMode="numeric"
+                    tabIndex={-1}
                     aria-label={`${item.productName} 수량`}
                     placeholder="0"
                     value={qty === 0 ? "" : qty}
@@ -1586,6 +1686,30 @@ function ProductAddDialog({
                       const nextQty = Number(raw);
                       if (!Number.isNaN(nextQty)) {
                         setQty(item.id, nextQty);
+                      }
+                    }}
+                    onFocus={() => setActiveIndex(index)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Tab") {
+                        event.preventDefault();
+                        focusList();
+                        return;
+                      }
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleAdd();
+                        return;
+                      }
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        moveActive(1);
+                        focusList();
+                        return;
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        moveActive(-1);
+                        focusList();
                       }
                     }}
                     className="h-9 w-20 shrink-0 rounded-md border border-[#cbd5e1] bg-white px-2 text-center text-sm font-semibold text-ink placeholder:text-[#94a3b8] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
