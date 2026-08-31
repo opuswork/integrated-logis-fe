@@ -1339,6 +1339,7 @@ function ProductAddDialog({
   const [loadError, setLoadError] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const qtyRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
   useEffect(() => {
@@ -1394,6 +1395,16 @@ function ProductAddDialog({
       cancelled = true;
     };
   }, [open, openStockOnly]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
 
   const filteredCatalog = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
@@ -1567,7 +1578,9 @@ function ProductAddDialog({
             </select>
           ) : null}
           <input
+            ref={searchInputRef}
             type="search"
+            autoFocus
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             onKeyDown={(event) => {
