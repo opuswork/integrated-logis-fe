@@ -64,6 +64,28 @@ function CellBtn({
   );
 }
 
+const PACKAGING_PRINT_CLASS = "packaging-landscape-print";
+const PACKAGING_PRINT_STYLE_ID = "packaging-landscape-print-style";
+
+function printPackagingLandscape() {
+  document.documentElement.classList.add(PACKAGING_PRINT_CLASS);
+  let style = document.getElementById(PACKAGING_PRINT_STYLE_ID);
+  if (!style) {
+    style = document.createElement("style");
+    style.id = PACKAGING_PRINT_STYLE_ID;
+    style.textContent =
+      "@page { size: A4 landscape; margin: 8mm; }";
+    document.head.appendChild(style);
+  }
+  const cleanup = () => {
+    document.documentElement.classList.remove(PACKAGING_PRINT_CLASS);
+    document.getElementById(PACKAGING_PRINT_STYLE_ID)?.remove();
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  window.print();
+}
+
 export function AdminPackagingMng() {
   const auth = getAuthUser();
   const canOperate = canWriteShipmentOps(auth);
@@ -261,7 +283,7 @@ export function AdminPackagingMng() {
     list: ShipmentOpsOrder[],
     emptyText: string,
   ) => (
-    <div className="overflow-x-auto">
+    <div className="packaging-print-table overflow-x-auto">
       <table className="w-full min-w-[1100px] border-collapse text-left text-[12px]">
         <thead className="bg-[#EDF2F7] text-[11px] font-bold text-[#64748B]">
           <tr>
@@ -506,7 +528,7 @@ export function AdminPackagingMng() {
       ) : null}
 
       {tab === "factory" && !loading ? (
-        <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white">
+        <div className="packaging-print-sheet overflow-hidden rounded-xl border border-[#E2E8F0] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2E8F0] px-3 py-2.5">
             <div className="text-[13px] font-bold">
               공장포장 현황{" "}
@@ -514,11 +536,11 @@ export function AdminPackagingMng() {
                 · 출고요청일 빠른순 정렬
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="packaging-print-actions flex gap-2">
               <button
                 type="button"
                 className="rounded-[7px] border border-[#E2E8F0] px-3 py-1.5 text-[12.5px] font-bold"
-                onClick={() => window.print()}
+                onClick={() => printPackagingLandscape()}
               >
                 인쇄
               </button>
@@ -543,7 +565,7 @@ export function AdminPackagingMng() {
       ) : null}
 
       {tab === "sock" && !loading ? (
-        <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white">
+        <div className="packaging-print-sheet overflow-hidden rounded-xl border border-[#E2E8F0] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2E8F0] px-3 py-2.5">
             <div className="text-[13px] font-bold">
               양말부포장 현황{" "}
@@ -551,11 +573,11 @@ export function AdminPackagingMng() {
                 · 출고요청일 빠른순 정렬
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="packaging-print-actions flex gap-2">
               <button
                 type="button"
                 className="rounded-[7px] border border-[#E2E8F0] px-3 py-1.5 text-[12.5px] font-bold"
-                onClick={() => window.print()}
+                onClick={() => printPackagingLandscape()}
               >
                 인쇄
               </button>
