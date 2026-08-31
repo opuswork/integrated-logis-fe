@@ -380,6 +380,7 @@ export function LiveChatWidget() {
         type="button"
         onClick={openPanel}
         aria-label="관리자 채팅 열기"
+        data-live-chat
         className="fixed right-5 bottom-5 z-[60] flex items-center gap-2 rounded-full border border-[#1A365D] bg-[#1A365D] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_28px_rgba(18,38,63,0.28)] hover:bg-[#22456f]"
       >
         <MessageSquare className="size-4" />
@@ -409,6 +410,7 @@ export function LiveChatWidget() {
 
   return (
     <section
+      data-live-chat
       aria-label="관리자 라이브 채팅"
       style={panelStyle}
       className={cn(

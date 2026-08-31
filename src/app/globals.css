@@ -187,4 +187,50 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
+  html.packaging-landscape-print,
+  html.packaging-landscape-print body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  html.packaging-landscape-print .admin-app-shell {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  html.packaging-landscape-print .admin-print-chrome,
+  html.packaging-landscape-print .packaging-print-actions,
+  html.packaging-landscape-print [data-live-chat] {
+    display: none !important;
+  }
+
+  html.packaging-landscape-print .admin-app-main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  html.packaging-landscape-print .packaging-print-sheet {
+    overflow: visible !important;
+    break-inside: avoid;
+  }
+
+  html.packaging-landscape-print .packaging-print-table {
+    overflow: visible !important;
+  }
+
+  html.packaging-landscape-print .packaging-print-table table {
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: auto;
+  }
+
+  html.packaging-landscape-print .packaging-print-sheet,
+  html.packaging-landscape-print .packaging-print-sheet * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }

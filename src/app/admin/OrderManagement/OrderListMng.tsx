@@ -480,8 +480,9 @@ export function OrderListMng() {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#F5F7FA] font-[family-name:var(--font-noto-sans-kr,sans-serif)] text-[14px] text-[#1A202C]">
+    <div className="admin-app-shell flex h-[100dvh] flex-col overflow-hidden bg-[#F5F7FA] font-[family-name:var(--font-noto-sans-kr,sans-serif)] text-[14px] text-[#1A202C]">
       <AdminTopBar
+        className="admin-print-chrome"
         onOpenProfile={handleOpenProfile}
         onToggleMobileNav={() => setMobileNavOpen((v) => !v)}
         mobileNavOpen={mobileNavOpen}
@@ -490,7 +491,7 @@ export function OrderListMng() {
       <div className="relative flex min-h-0 flex-1">
         {/* Desktop sidebar */}
         <AdminSidebar
-          className="hidden min-[1040px]:flex"
+          className="admin-print-chrome hidden min-[1040px]:flex"
           nav={nav}
           activeMenu={activeMenu}
           activePrimary={activePrimary}
@@ -505,7 +506,7 @@ export function OrderListMng() {
             type="button"
             title="메뉴바 펼치기"
             onClick={() => setSidebarCollapsed(false)}
-            className="absolute top-3.5 left-2.5 z-30 hidden size-[30px] items-center justify-center rounded-full bg-[#1A365D] text-white shadow-[0_3px_10px_rgba(0,0,0,0.28)] hover:bg-[#24487C] min-[1040px]:flex"
+            className="admin-print-chrome absolute top-3.5 left-2.5 z-30 hidden size-[30px] items-center justify-center rounded-full bg-[#1A365D] text-white shadow-[0_3px_10px_rgba(0,0,0,0.28)] hover:bg-[#24487C] min-[1040px]:flex"
           >
             <ChevronRight className="size-[15px]" strokeWidth={2} />
           </button>
@@ -521,7 +522,7 @@ export function OrderListMng() {
               onClick={() => setMobileNavOpen(false)}
             />
             <AdminSidebar
-              className="fixed top-14 bottom-0 left-0 z-50 flex h-auto shadow-xl min-[1040px]:hidden"
+              className="admin-print-chrome fixed top-14 bottom-0 left-0 z-50 flex h-auto shadow-xl min-[1040px]:hidden"
               nav={nav}
               activeMenu={activeMenu}
               activePrimary={activePrimary}
@@ -533,7 +534,7 @@ export function OrderListMng() {
           </>
         ) : null}
 
-        <section className="min-w-0 flex-1 overflow-y-auto px-4 py-5 min-[1040px]:px-[30px] min-[1040px]:pt-[26px] min-[1040px]:pb-[60px]">
+        <section className="admin-app-main min-w-0 flex-1 overflow-y-auto px-4 py-5 min-[1040px]:px-[30px] min-[1040px]:pt-[26px] min-[1040px]:pb-[60px]">
           {renderContent()}
         </section>
       </div>
