@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useCallback,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 
@@ -1618,6 +1619,56 @@ function ProductAddDialog({
   );
 }
 
+function nextSuggestIndex(current: number, delta: 1 | -1, count: number) {
+  if (count <= 0) {
+    return -1;
+  }
+  if (current < 0) {
+    return delta === 1 ? 0 : count - 1;
+  }
+  return (current + delta + count) % count;
+}
+
+function handleSuggestListKeyDown<T>(
+  event: KeyboardEvent<HTMLInputElement>,
+  options: {
+    isOpen: boolean;
+    items: T[];
+    highlightIndex: number;
+    setHighlightIndex: (index: number) => void;
+    onSelect: (item: T) => void;
+    onClose: () => void;
+  },
+) {
+  const { isOpen, items, highlightIndex, setHighlightIndex, onSelect, onClose } =
+    options;
+  if (!isOpen || items.length === 0) {
+    if (event.key === "Escape") {
+      onClose();
+    }
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    setHighlightIndex(nextSuggestIndex(highlightIndex, 1, items.length));
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    setHighlightIndex(nextSuggestIndex(highlightIndex, -1, items.length));
+    return;
+  }
+  if (event.key === "Enter" && highlightIndex >= 0 && items[highlightIndex]) {
+    event.preventDefault();
+    onSelect(items[highlightIndex]);
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    onClose();
+  }
+}
+
 function ChurchSearchField({
   churches,
   isLoading,
@@ -1640,6 +1691,7 @@ function ChurchSearchField({
   readOnly?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
@@ -1683,6 +1735,25 @@ function ChurchSearchField({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
+  useEffect(() => {
+    setHighlightIndex(-1);
+  }, [query, isOpen]);
+
+  useEffect(() => {
+    if (highlightIndex < 0) {
+      return;
+    }
+    const row = containerRef.current?.querySelector(
+      `[data-suggest-index="${highlightIndex}"]`,
+    );
+    row?.scrollIntoView({ block: "nearest" });
+  }, [highlightIndex]);
+
+  const selectChurch = (church: ChurchOption) => {
+    onSelect(church);
+    setIsOpen(false);
+  };
+
   return (
     <div ref={containerRef} className="relative w-full">
       <label
@@ -1698,6 +1769,11 @@ function ChurchSearchField({
         aria-expanded={isOpen}
         aria-controls="order-church-suggestions"
         aria-autocomplete="list"
+        aria-activedescendant={
+          highlightIndex >= 0
+            ? `order-church-option-${highlightIndex}`
+            : undefined
+        }
         value={query}
         readOnly={readOnly}
         onChange={(event) => {
@@ -1706,6 +1782,19 @@ function ChurchSearchField({
           }
           onQueryChange(event.target.value);
           setIsOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (readOnly) {
+            return;
+          }
+          handleSuggestListKeyDown(event, {
+            isOpen,
+            items: filtered,
+            highlightIndex,
+            setHighlightIndex,
+            onSelect: selectChurch,
+            onClose: () => setIsOpen(false),
+          });
         }}
         onFocus={() => {
           if (readOnly) {
@@ -1750,21 +1839,26 @@ function ChurchSearchField({
           ) : filtered.length === 0 ? (
             <li className="px-3 py-2.5 text-sm text-[#64748b]">검색 결과가 없습니다.</li>
           ) : (
-            filtered.map((church) => {
+            filtered.map((church, index) => {
               const selected = selectedId === church.id;
+              const highlighted = highlightIndex === index;
               return (
-                <li key={church.id} role="option" aria-selected={selected}>
+                <li
+                  key={church.id}
+                  id={`order-church-option-${index}`}
+                  role="option"
+                  aria-selected={selected || highlighted}
+                  data-suggest-index={index}
+                >
                   <button
                     type="button"
+                    tabIndex={-1}
                     className={cn(
                       "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]",
-                      selected ? "bg-[#eff6ff]" : "bg-white",
+                      selected || highlighted ? "bg-[#eff6ff]" : "bg-white",
                     )}
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      onSelect(church);
-                      setIsOpen(false);
-                    }}
+                    onClick={() => selectChurch(church)}
                   >
                     <span className="text-sm font-semibold text-ink">{church.name}</span>
                     <span className="text-xs text-[#64748b]">
@@ -1804,14 +1898,17 @@ function DeliveryCompanyField({
   onChange,
   onSelectPartner,
   inputClassName,
+  listId = "delivery-partner-suggestions",
 }: {
   value: string;
   onChange: (value: string) => void;
   onSelectPartner: (partner: PartnerSuggest) => void;
   inputClassName: string;
+  listId?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
   const [suggestions, setSuggestions] = useState<PartnerSuggest[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -1861,19 +1958,51 @@ function DeliveryCompanyField({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
+  useEffect(() => {
+    setHighlightIndex(-1);
+  }, [value, isOpen]);
+
+  useEffect(() => {
+    if (highlightIndex < 0) {
+      return;
+    }
+    const row = containerRef.current?.querySelector(
+      `[data-suggest-index="${highlightIndex}"]`,
+    );
+    row?.scrollIntoView({ block: "nearest" });
+  }, [highlightIndex]);
+
+  const selectPartner = (partner: PartnerSuggest) => {
+    onSelectPartner(partner);
+    setIsOpen(false);
+  };
+
   return (
     <div ref={containerRef} className="relative w-full">
       <input
         type="text"
         role="combobox"
         aria-expanded={isOpen}
-        aria-controls="delivery-partner-suggestions"
+        aria-controls={listId}
         aria-autocomplete="list"
+        aria-activedescendant={
+          highlightIndex >= 0 ? `${listId}-option-${highlightIndex}` : undefined
+        }
         value={value}
         onChange={(event) => {
           onChange(event.target.value);
           setIsOpen(true);
         }}
+        onKeyDown={(event) =>
+          handleSuggestListKeyDown(event, {
+            isOpen: isOpen && value.trim().length > 0,
+            items: suggestions,
+            highlightIndex,
+            setHighlightIndex,
+            onSelect: selectPartner,
+            onClose: () => setIsOpen(false),
+          })
+        }
         onFocus={() => setIsOpen(true)}
         placeholder="업체명 (등록 거래처 자동완성)"
         autoComplete="off"
@@ -1882,7 +2011,7 @@ function DeliveryCompanyField({
       />
       {isOpen && value.trim() ? (
         <ul
-          id="delivery-partner-suggestions"
+          id={listId}
           role="listbox"
           className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[7px] border border-line bg-white shadow-lg"
         >
@@ -1893,16 +2022,23 @@ function DeliveryCompanyField({
               일치하는 거래처가 없습니다.
             </li>
           ) : (
-            suggestions.map((partner) => (
-              <li key={partner.id} role="option">
+            suggestions.map((partner, index) => (
+              <li
+                key={partner.id}
+                id={`${listId}-option-${index}`}
+                role="option"
+                aria-selected={highlightIndex === index}
+                data-suggest-index={index}
+              >
                 <button
                   type="button"
-                  className="flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]"
+                  tabIndex={-1}
+                  className={cn(
+                    "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]",
+                    highlightIndex === index ? "bg-[#eff6ff]" : "bg-white",
+                  )}
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    onSelectPartner(partner);
-                    setIsOpen(false);
-                  }}
+                  onClick={() => selectPartner(partner)}
                 >
                   <span className="text-sm font-semibold text-ink">
                     {partner.name}
@@ -1942,6 +2078,7 @@ function OrdererNameField({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
   const [suggestions, setSuggestions] = useState<MemberSuggest[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -1991,6 +2128,25 @@ function OrdererNameField({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
+  useEffect(() => {
+    setHighlightIndex(-1);
+  }, [value, isOpen]);
+
+  useEffect(() => {
+    if (highlightIndex < 0) {
+      return;
+    }
+    const row = containerRef.current?.querySelector(
+      `[data-suggest-index="${highlightIndex}"]`,
+    );
+    row?.scrollIntoView({ block: "nearest" });
+  }, [highlightIndex]);
+
+  const selectMember = (member: MemberSuggest) => {
+    onSelectMember(member);
+    setIsOpen(false);
+  };
+
   return (
     <div ref={containerRef} className="relative w-full">
       <input
@@ -1999,11 +2155,26 @@ function OrdererNameField({
         aria-expanded={isOpen}
         aria-controls="orderer-member-suggestions"
         aria-autocomplete="list"
+        aria-activedescendant={
+          highlightIndex >= 0
+            ? `orderer-member-option-${highlightIndex}`
+            : undefined
+        }
         value={value}
         onChange={(event) => {
           onChange(event.target.value);
           setIsOpen(true);
         }}
+        onKeyDown={(event) =>
+          handleSuggestListKeyDown(event, {
+            isOpen: isOpen && value.trim().length > 0,
+            items: suggestions,
+            highlightIndex,
+            setHighlightIndex,
+            onSelect: selectMember,
+            onClose: () => setIsOpen(false),
+          })
+        }
         onFocus={() => setIsOpen(true)}
         placeholder="고객 성명 (등록 회원 자동완성)"
         autoComplete="off"
@@ -2024,16 +2195,23 @@ function OrdererNameField({
               생성됩니다.
             </li>
           ) : (
-            suggestions.map((member) => (
-              <li key={member.id} role="option">
+            suggestions.map((member, index) => (
+              <li
+                key={member.id}
+                id={`orderer-member-option-${index}`}
+                role="option"
+                aria-selected={highlightIndex === index}
+                data-suggest-index={index}
+              >
                 <button
                   type="button"
-                  className="flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]"
+                  tabIndex={-1}
+                  className={cn(
+                    "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]",
+                    highlightIndex === index ? "bg-[#eff6ff]" : "bg-white",
+                  )}
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    onSelectMember(member);
-                    setIsOpen(false);
-                  }}
+                  onClick={() => selectMember(member)}
                 >
                   <span className="text-sm font-semibold text-ink">
                     {member.fullname}
@@ -3930,13 +4108,22 @@ function ProductOrderPanel({
             }}
           />
           <label className={omLabelClass}>업체명 *</label>
-          <input
-            type="text"
-            value={parcelCompanyName}
-            onChange={(event) => setParcelCompanyName(event.target.value)}
-            required
-            className={omInputClass}
-          />
+          <div className="mb-3">
+            <DeliveryCompanyField
+              value={parcelCompanyName}
+              onChange={setParcelCompanyName}
+              listId="parcel-partner-suggestions"
+              inputClassName={cn(omInputClass, "mb-0")}
+              onSelectPartner={(partner) => {
+                setParcelCompanyName(partner.name);
+                setSenderName(partner.contactName);
+                setSenderPhone(formatPhoneInput(partner.phone));
+                const split = splitAddressAndDetail(partner.address);
+                setSenderAddress(split.address);
+                setSenderAddressDetail(split.detail);
+              }}
+            />
+          </div>
           <label className={omLabelClass}>보내는 사람 (택배기표지) *</label>
           <input
             type="text"
