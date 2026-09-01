@@ -48,7 +48,11 @@ const labelClass = "mb-[5px] block text-[12px] font-bold text-[#64748B]";
 const inputClass =
   "mb-3 w-full rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C] disabled:bg-[#EDF2F7]";
 
-export function MemberPartnerMng() {
+export function MemberPartnerMng({
+  sharedCatalog = false,
+}: {
+  sharedCatalog?: boolean;
+} = {}) {
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -56,6 +60,7 @@ export function MemberPartnerMng() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<PartnerForm>(EMPTY_FORM);
   const [searchingAddress, setSearchingAddress] = useState(false);
+  const [listFilter, setListFilter] = useState("");
 
   const loadPartners = useCallback(async () => {
     setLoading(true);
@@ -172,6 +177,12 @@ export function MemberPartnerMng() {
     }
   };
 
+  const filterQuery = listFilter.trim().toLowerCase();
+  const visiblePartners =
+    sharedCatalog && filterQuery
+      ? partners.filter((row) => row.name.toLowerCase().includes(filterQuery))
+      : partners;
+
   const handleAddressSearch = async () => {
     setSearchingAddress(true);
     try {
@@ -283,13 +294,25 @@ export function MemberPartnerMng() {
         <h4 className="mb-3 text-[15px] font-semibold text-[#1A202C]">
           등록된 거래처
         </h4>
+        {sharedCatalog ? (
+          <input
+            className={inputClass}
+            value={listFilter}
+            onChange={(e) => setListFilter(e.target.value)}
+            placeholder="거래처명으로 검색"
+          />
+        ) : null}
         {loading ? (
           <p className="text-[13px] text-[#64748B]">불러오는 중...</p>
         ) : partners.length === 0 ? (
           <p className="text-[13px] text-[#64748B]">등록된 거래처가 없습니다.</p>
+        ) : visiblePartners.length === 0 ? (
+          <p className="text-[13px] text-[#64748B]">
+            검색어가 포함된 거래처가 없습니다.
+          </p>
         ) : (
           <ul className="divide-y divide-[#E2E8F0]">
-            {partners.map((row) => (
+            {visiblePartners.map((row) => (
               <li
                 key={row.id}
                 className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between"
