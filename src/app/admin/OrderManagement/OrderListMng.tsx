@@ -31,6 +31,7 @@ import { AdminShipmentMng } from "@/app/admin/OrderManagement/AdminShipmentMng";
 import { AdminReleaseMng } from "@/app/admin/OrderManagement/AdminReleaseMng";
 import { AdminPackagingMng } from "@/app/admin/OrderManagement/AdminPackagingMng";
 import { AdminMissingCheckMng } from "@/app/admin/OrderManagement/AdminMissingCheckMng";
+import { MemberPartnerMng } from "@/app/OrderManagement/MemberPartnerMng";
 import { OrderListInput } from "@/app/OrderManagement/OrderListInput";
 import { LogoutButton } from "@/components/auth-guard";
 import { AdminTopBar } from "@/components/admin-top-bar";
@@ -45,6 +46,7 @@ type AdminView =
   | "주문작성"
   | "출력관리"
   | "인사장관리"
+  | "거래처관리"
   | "엑셀"
   | "우체국택배"
   | "배송관리"
@@ -97,6 +99,7 @@ const FULL_NAV: NavPrimaryItem[] = [
     view: "주문목록",
     children: [
       { id: "order-greeting", label: "인사장관리", view: "인사장관리" },
+      { id: "order-partners", label: "거래처관리", view: "거래처관리" },
       { id: "order-post", label: "우체국택배 업로드용", view: "우체국택배" },
     ],
   },
@@ -432,6 +435,22 @@ export function OrderListMng() {
 
     if (activeMenu === "인사장관리") {
       return <GreetingFormMng />;
+    }
+
+    if (activeMenu === "거래처관리") {
+      return (
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-lg font-semibold text-ink min-[1040px]:text-[22px]">
+              거래처관리
+            </h3>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              자주 쓰는 거래처를 등록하면 제품주문서에 자동 입력됩니다.
+            </p>
+          </div>
+          <MemberPartnerMng sharedCatalog />
+        </div>
+      );
     }
 
     if (activeMenu === "엑셀") {
