@@ -2021,178 +2021,6 @@ function ChurchSearchField({
   );
 }
 
-type PartnerSuggest = {
-  id: number;
-  name: string;
-  contactName: string;
-  phone: string;
-  address: string;
-  email: string | null;
-};
-
-function DeliveryCompanyField({
-  value,
-  onChange,
-  onSelectPartner,
-  inputClassName,
-  listId = "delivery-partner-suggestions",
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  onSelectPartner: (partner: PartnerSuggest) => void;
-  inputClassName: string;
-  listId?: string;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [highlightIndex, setHighlightIndex] = useState(-1);
-  const [suggestions, setSuggestions] = useState<PartnerSuggest[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const q = value.trim();
-    if (q.length < 1) {
-      setSuggestions([]);
-      return;
-    }
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      setLoading(true);
-      void apiFetch(`/api/partners?q=${encodeURIComponent(q)}`)
-        .then(async (res) => {
-          const data = (await res.json()) as
-            | PartnerSuggest[]
-            | { message?: string };
-          if (cancelled) return;
-          if (!res.ok || !Array.isArray(data)) {
-            setSuggestions([]);
-            return;
-          }
-          setSuggestions(data);
-        })
-        .catch(() => {
-          if (!cancelled) setSuggestions([]);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [value]);
-
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, []);
-
-  useEffect(() => {
-    setHighlightIndex(-1);
-  }, [value, isOpen]);
-
-  useEffect(() => {
-    if (highlightIndex < 0) {
-      return;
-    }
-    const row = containerRef.current?.querySelector(
-      `[data-suggest-index="${highlightIndex}"]`,
-    );
-    row?.scrollIntoView({ block: "nearest" });
-  }, [highlightIndex]);
-
-  const selectPartner = (partner: PartnerSuggest) => {
-    onSelectPartner(partner);
-    setIsOpen(false);
-  };
-
-  return (
-    <div ref={containerRef} className="relative w-full">
-      <input
-        type="text"
-        role="combobox"
-        aria-expanded={isOpen}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={
-          highlightIndex >= 0 ? `${listId}-option-${highlightIndex}` : undefined
-        }
-        value={value}
-        onChange={(event) => {
-          onChange(event.target.value);
-          setIsOpen(true);
-        }}
-        onKeyDown={(event) =>
-          handleSuggestListKeyDown(event, {
-            isOpen: isOpen && value.trim().length > 0,
-            items: suggestions,
-            highlightIndex,
-            setHighlightIndex,
-            onSelect: selectPartner,
-            onClose: () => setIsOpen(false),
-          })
-        }
-        onFocus={() => setIsOpen(true)}
-        placeholder="업체명 (등록 거래처 자동완성)"
-        autoComplete="off"
-        required
-        className={inputClassName}
-      />
-      {isOpen && value.trim() ? (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[7px] border border-line bg-white shadow-lg"
-        >
-          {loading ? (
-            <li className="px-3 py-2.5 text-sm text-[#64748b]">검색 중...</li>
-          ) : suggestions.length === 0 ? (
-            <li className="px-3 py-2.5 text-sm text-[#64748b]">
-              일치하는 거래처가 없습니다.
-            </li>
-          ) : (
-            suggestions.map((partner, index) => (
-              <li
-                key={partner.id}
-                id={`${listId}-option-${index}`}
-                role="option"
-                aria-selected={highlightIndex === index}
-                data-suggest-index={index}
-              >
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className={cn(
-                    "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]",
-                    highlightIndex === index ? "bg-[#eff6ff]" : "bg-white",
-                  )}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => selectPartner(partner)}
-                >
-                  <span className="text-sm font-semibold text-ink">
-                    {partner.name}
-                  </span>
-                  <span className="text-xs text-[#64748b]">
-                    {partner.contactName} · {partner.phone}
-                  </span>
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
 type MemberSuggest = {
   id: number;
   fullname: string;
@@ -4186,21 +4014,14 @@ function ProductOrderPanel({
             />
           </div>
           <label className={omLabelClass}>업체명 *</label>
-          <div className="mb-3">
-            <DeliveryCompanyField
-              value={deliveryCompanyName}
-              onChange={setDeliveryCompanyName}
-              inputClassName={cn(omInputClass, "mb-0")}
-              onSelectPartner={(partner) => {
-                setDeliveryCompanyName(partner.name);
-                setRecipientName(partner.contactName);
-                setRecipientPhone(formatPhoneInput(partner.phone));
-                const split = splitAddressAndDetail(partner.address);
-                setRecipientAddress(split.address);
-                setRecipientAddressDetail(split.detail);
-              }}
-            />
-          </div>
+          <input
+            type="text"
+            value={deliveryCompanyName}
+            onChange={(event) => setDeliveryCompanyName(event.target.value)}
+            placeholder="업체명"
+            required
+            className={omInputClass}
+          />
           <label className={omLabelClass}>받는 분 성함 *</label>
           <input
             type="text"
@@ -4245,22 +4066,14 @@ function ProductOrderPanel({
             }}
           />
           <label className={omLabelClass}>업체명 *</label>
-          <div className="mb-3">
-            <DeliveryCompanyField
-              value={parcelCompanyName}
-              onChange={setParcelCompanyName}
-              listId="parcel-partner-suggestions"
-              inputClassName={cn(omInputClass, "mb-0")}
-              onSelectPartner={(partner) => {
-                setParcelCompanyName(partner.name);
-                setSenderName(partner.contactName);
-                setSenderPhone(formatPhoneInput(partner.phone));
-                const split = splitAddressAndDetail(partner.address);
-                setSenderAddress(split.address);
-                setSenderAddressDetail(split.detail);
-              }}
-            />
-          </div>
+          <input
+            type="text"
+            value={parcelCompanyName}
+            onChange={(event) => setParcelCompanyName(event.target.value)}
+            placeholder="업체명"
+            required
+            className={omInputClass}
+          />
           <label className={omLabelClass}>보내는 사람 (택배기표지) *</label>
           <input
             type="text"
