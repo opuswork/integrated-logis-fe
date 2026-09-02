@@ -296,10 +296,8 @@ function mapOrderToPrintPages(
     workRegion,
     recipientName: recipient.name,
     recipientPhone: recipient.phone,
-    recipientAddress:
-      type === "택배" ? parcelContact.value : recipient.address,
-    recipientContactLabel:
-      type === "택배" ? parcelContact.label : "주소",
+    recipientAddress: parcelContact.value,
+    recipientContactLabel: parcelContact.label,
   };
 
   const items = order.items ?? [];
@@ -461,7 +459,10 @@ function GiftSetPreviewCard({ page }: { page: GiftSetPrintPage }) {
           <>
             <PreviewCardRow label="받는 분 성함" value={page.recipientName} />
             <PreviewCardRow label="연락처" value={page.recipientPhone} />
-            <PreviewCardRow label="주소" value={page.recipientAddress} />
+            <PreviewCardRow
+              label={page.recipientContactLabel}
+              value={page.recipientAddress}
+            />
           </>
         )}
       </dl>
@@ -569,7 +570,7 @@ function GiftSetPrintSheet({ page }: { page: GiftSetPrintPage }) {
           <SheetCell label="받는 분 성함" value={page.recipientName} />
           <SheetCell label="연락처" value={page.recipientPhone} />
           <SheetCell
-            label="주소"
+            label={page.recipientContactLabel}
             value={page.recipientAddress}
             className="border-b-0"
           />

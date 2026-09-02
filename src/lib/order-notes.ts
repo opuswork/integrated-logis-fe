@@ -163,7 +163,7 @@ export function parseRecipientPartsFromNotes(notes: string | null | undefined): 
     return { name: "", phone: "", address: "" };
   }
   const match =
-    /받는분:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:택배발송일|보내는사람|주문작업지역|지부매장|인사장종류|\[)|$)/.exec(
+    /받는분:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:수취연락|받는분이메일|받는분팩스|택배발송일|보내는사람|주문작업지역|지부매장|인사장종류|\[)|$)/.exec(
       notes,
     );
   if (!match) {
@@ -173,10 +173,11 @@ export function parseRecipientPartsFromNotes(notes: string | null | undefined): 
       address: parseOrderNoteField(notes, "받는분주소"),
     };
   }
+  const address = match[3].trim();
   return {
     name: match[1].trim(),
     phone: match[2].trim(),
-    address: match[3].trim(),
+    address: address === "-" ? "" : address,
   };
 }
 
@@ -191,7 +192,7 @@ export const PARCEL_CONTACT_MODE_LABEL: Record<
   fax: "팩스",
 };
 
-/** 택배 수취 연락 방식 (구주문은 주소). */
+/** 택배·배달 수취 연락 방식 (구주문은 주소). */
 export function parseParcelRecipientContactMode(
   notes: string | null | undefined,
 ): ParcelRecipientContactMode {
