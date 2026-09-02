@@ -2350,6 +2350,163 @@ function AddressField({
   );
 }
 
+function RecipientContactChoice({
+  mode,
+  onModeChange,
+  radioName,
+  addressId,
+  address,
+  onAddressChange,
+  addressDetail,
+  onAddressDetailChange,
+  addressLocked = false,
+  addressLabelExtra,
+  fax,
+  onFaxChange,
+  emailLocal,
+  onEmailLocalChange,
+  emailDomain,
+  onEmailDomainChange,
+  emailDomainCustom,
+  onEmailDomainCustomChange,
+  inputClassName,
+  labelClassName,
+}: {
+  mode: ParcelRecipientContactMode;
+  onModeChange: (mode: ParcelRecipientContactMode) => void;
+  radioName: string;
+  addressId: string;
+  address: string;
+  onAddressChange: (value: string) => void;
+  addressDetail: string;
+  onAddressDetailChange: (value: string) => void;
+  addressLocked?: boolean;
+  addressLabelExtra?: ReactNode;
+  fax: string;
+  onFaxChange: (value: string) => void;
+  emailLocal: string;
+  onEmailLocalChange: (value: string) => void;
+  emailDomain: string;
+  onEmailDomainChange: (value: string) => void;
+  emailDomainCustom: string;
+  onEmailDomainCustomChange: (value: string) => void;
+  inputClassName: string;
+  labelClassName: string;
+}) {
+  return (
+    <>
+      <div className="mb-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {(
+            [
+              { value: "address", label: "받는 사람 주소" },
+              { value: "email", label: "이메일" },
+              { value: "fax", label: "팩스" },
+            ] as const
+          ).map((option) => (
+            <label
+              key={option.value}
+              className="inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#1A202C]"
+            >
+              <input
+                type="radio"
+                name={radioName}
+                checked={mode === option.value}
+                onChange={() => onModeChange(option.value)}
+                className="size-4 accent-[#3182CE]"
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[12px] text-red-600">
+          받는 사람의 주소, 이메일, 팩스 중 하나를 선택하실 수 있습니다.
+        </p>
+      </div>
+      {mode === "address" ? (
+        <AddressField
+          id={addressId}
+          label="받는 사람 주소"
+          value={address}
+          onChange={onAddressChange}
+          detailValue={addressDetail}
+          onDetailChange={onAddressDetailChange}
+          locked={addressLocked}
+          labelExtra={addressLabelExtra}
+        />
+      ) : null}
+      {mode === "fax" ? (
+        <div>
+          <label className={labelClassName} htmlFor={`${radioName}-fax`}>
+            팩스(FAX)
+          </label>
+          <input
+            id={`${radioName}-fax`}
+            type="text"
+            inputMode="numeric"
+            value={fax}
+            onChange={(event) => onFaxChange(formatFaxInput(event.target.value))}
+            placeholder="(   )  _ _ - _ _ _ _"
+            className={inputClassName}
+          />
+        </div>
+      ) : null}
+      {mode === "email" ? (
+        <div>
+          <label className={labelClassName} htmlFor={`${radioName}-email`}>
+            받는 사람 이메일
+          </label>
+          <div className="mb-3 flex min-w-0 items-center gap-1.5">
+            <input
+              id={`${radioName}-email`}
+              type="text"
+              value={emailLocal}
+              onChange={(event) =>
+                onEmailLocalChange(event.target.value.replace(/@/g, ""))
+              }
+              placeholder="아이디"
+              className={cn(inputClassName, "mb-0 min-w-0 flex-1")}
+            />
+            <span className="shrink-0 text-[13px] font-semibold text-[#1A202C]">
+              @
+            </span>
+            <select
+              aria-label="이메일 도메인"
+              value={emailDomain}
+              onChange={(event) => onEmailDomainChange(event.target.value)}
+              className={cn(
+                inputClassName,
+                "mb-0 min-w-0 flex-1 appearance-none bg-[length:1rem] bg-[position:right_0.5rem_center] bg-no-repeat pr-8",
+                'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23334155\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'m6 9 6 6 6-6\'/%3E%3C/svg%3E")]',
+              )}
+            >
+              {EMAIL_DOMAIN_PRESETS.map((domain) => (
+                <option key={domain} value={domain}>
+                  {domain}
+                </option>
+              ))}
+              <option value={EMAIL_DOMAIN_CUSTOM}>직접입력</option>
+            </select>
+          </div>
+          {emailDomain === EMAIL_DOMAIN_CUSTOM ? (
+            <input
+              type="text"
+              value={emailDomainCustom}
+              onChange={(event) =>
+                onEmailDomainCustomChange(
+                  event.target.value.replace(/@/g, "").replace(/\s/g, ""),
+                )
+              }
+              placeholder="도메인 직접입력 (예: company.co.kr)"
+              className={inputClassName}
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function resolveGreetingImageUrl(url: string) {
   if (!url) {
     return "";
@@ -2996,10 +3153,13 @@ function ProductOrderPanel({
         setRecipientFax(formatFaxInput(parseParcelRecipientFax(notes)));
 
         const recipient = parseRecipientPartsFromNotes(notes);
-        const recipientFull = isDeliveryOrder
-          ? recipient.address || order.shipment?.deliveryAddress || ""
-          : parcelMode === "address"
-            ? recipient.address
+        const recipientAddressValue =
+          recipient.address === "-" ? "" : recipient.address;
+        const recipientFull =
+          parcelMode === "address"
+            ? isDeliveryOrder
+              ? recipientAddressValue || order.shipment?.deliveryAddress || ""
+              : recipientAddressValue
             : "";
         const recipientSplit = splitAddressAndDetail(recipientFull);
         setRecipientName(recipient.name);
@@ -3322,10 +3482,23 @@ function ProductOrderPanel({
         !deliveryAmPm ||
         !deliveryTime ||
         !recipientName.trim() ||
-        !recipientPhone.trim() ||
-        !recipientAddress.trim()
+        !recipientPhone.trim()
       ) {
         return "배달 정보를 모두 입력해 주세요.";
+      }
+      if (parcelContactMode === "email") {
+        if (
+          !fullRecipientEmail ||
+          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fullRecipientEmail)
+        ) {
+          return "받는 사람 이메일을 입력해 주세요.";
+        }
+      } else if (parcelContactMode === "fax") {
+        if (faxDigitCount(recipientFax) < 9) {
+          return "받는 사람 팩스 번호를 입력해 주세요.";
+        }
+      } else if (!recipientAddress.trim()) {
+        return "받는 사람 주소를 입력해 주세요.";
       }
       if (!isDateOnOrAfterToday(deliveryDate)) {
         return "배달일은 오늘 이후 날짜만 선택할 수 있습니다.";
@@ -3506,26 +3679,24 @@ function ProductOrderPanel({
           ? `배달일:${deliveryDate} ${deliveryAmPm} ${deliveryTime}`
           : null,
         hasDeliveryItems
-          ? `받는분:${recipientName.trim()} / ${recipientPhone.trim()} / ${fullRecipientAddress}`
+          ? `받는분:${recipientName.trim()} / ${recipientPhone.trim()} / ${
+              parcelContactMode === "address" && fullRecipientAddress
+                ? fullRecipientAddress
+                : "-"
+            }`
           : null,
         hasParcelItems ? `택배발송일:${parcelShipDate}` : null,
         hasParcelItems
           ? `보내는사람:${senderName.trim()} / ${senderPhone.trim()} / ${fullSenderAddress}`
           : null,
-        hasParcelItems
-          ? `수취연락:${PARCEL_CONTACT_MODE_LABEL[parcelContactMode]}`
-          : null,
-        hasParcelItems &&
-        parcelContactMode === "address" &&
-        fullRecipientAddress
+        `수취연락:${PARCEL_CONTACT_MODE_LABEL[parcelContactMode]}`,
+        parcelContactMode === "address" && fullRecipientAddress
           ? `받는분주소:${fullRecipientAddress}`
           : null,
-        hasParcelItems && parcelContactMode === "email" && fullRecipientEmail
+        parcelContactMode === "email" && fullRecipientEmail
           ? `받는분이메일:${fullRecipientEmail}`
           : null,
-        hasParcelItems &&
-        parcelContactMode === "fax" &&
-        recipientFax.trim()
+        parcelContactMode === "fax" && recipientFax.trim()
           ? `받는분팩스:${recipientFax.trim()}`
           : null,
         `주문작업지역:${selectedBranch}`,
@@ -3561,7 +3732,11 @@ function ProductOrderPanel({
               : parcelCompanyName.trim(),
           deliveryAddress:
             primaryKind === "delivery"
-              ? fullRecipientAddress
+              ? parcelContactMode === "address"
+                ? fullRecipientAddress
+                : parcelContactMode === "email"
+                  ? fullRecipientEmail
+                  : recipientFax.trim()
               : fullSenderAddress,
           estimatedWindow:
             primaryKind === "delivery"
@@ -4161,13 +4336,25 @@ function ProductOrderPanel({
             required
             className={omInputClass}
           />
-          <AddressField
-            id="recipient-address"
-            label="받는 분 주소"
-            value={recipientAddress}
-            onChange={setRecipientAddress}
-            detailValue={recipientAddressDetail}
-            onDetailChange={setRecipientAddressDetail}
+          <RecipientContactChoice
+            mode={parcelContactMode}
+            onModeChange={setParcelContactMode}
+            radioName="delivery-recipient-contact"
+            addressId="recipient-address"
+            address={recipientAddress}
+            onAddressChange={setRecipientAddress}
+            addressDetail={recipientAddressDetail}
+            onAddressDetailChange={setRecipientAddressDetail}
+            fax={recipientFax}
+            onFaxChange={setRecipientFax}
+            emailLocal={recipientEmailLocal}
+            onEmailLocalChange={setRecipientEmailLocal}
+            emailDomain={recipientEmailDomain}
+            onEmailDomainChange={setRecipientEmailDomain}
+            emailDomainCustom={recipientEmailDomainCustom}
+            onEmailDomainCustomChange={setRecipientEmailDomainCustom}
+            inputClassName={omInputClass}
+            labelClassName={omLabelClass}
           />
         </div>
       ) : (
@@ -4223,137 +4410,45 @@ function ProductOrderPanel({
             detailValue={senderAddressDetail}
             onDetailChange={setSenderAddressDetail}
           />
-          <div className="mb-3">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-              {(
-                [
-                  { value: "address", label: "받는 사람 주소" },
-                  { value: "email", label: "이메일" },
-                  { value: "fax", label: "팩스" },
-                ] as const
-              ).map((option) => (
-                <label
-                  key={option.value}
-                  className="inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#1A202C]"
-                >
-                  <input
-                    type="radio"
-                    name="parcel-recipient-contact"
-                    checked={parcelContactMode === option.value}
-                    onChange={() => setParcelContactMode(option.value)}
-                    className="size-4 accent-[#3182CE]"
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </div>
-            <p className="mt-1.5 text-[12px] text-red-600">
-              받는 사람의 주소, 이메일, 팩스 중 하나를 선택하실 수 있습니다.
-            </p>
-          </div>
-          {parcelContactMode === "address" ? (
-            <AddressField
-              id="parcel-recipient-address"
-              label="받는 사람 주소"
-              value={recipientAddress}
-              onChange={setRecipientAddress}
-              detailValue={recipientAddressDetail}
-              onDetailChange={setRecipientAddressDetail}
-              locked={sameAsSenderAddress}
-              labelExtra={
-                <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
-                  <input
-                    type="checkbox"
-                    checked={sameAsSenderAddress}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setSameAsSenderAddress(checked);
-                      if (checked) {
-                        setRecipientAddress(senderAddress);
-                        setRecipientAddressDetail(senderAddressDetail);
-                      }
-                    }}
-                    className="size-4 accent-[#6B46C1]"
-                  />
-                  보내는 사람 주소와 같음
-                </label>
-              }
-            />
-          ) : null}
-          {parcelContactMode === "fax" ? (
-            <div>
-              <label className={omLabelClass} htmlFor="parcel-recipient-fax">
-                팩스(FAX)
-              </label>
-              <input
-                id="parcel-recipient-fax"
-                type="text"
-                inputMode="numeric"
-                value={recipientFax}
-                onChange={(event) =>
-                  setRecipientFax(formatFaxInput(event.target.value))
-                }
-                placeholder="(   )  _ _ - _ _ _ _"
-                className={omInputClass}
-              />
-            </div>
-          ) : null}
-          {parcelContactMode === "email" ? (
-            <div>
-              <label className={omLabelClass} htmlFor="parcel-recipient-email">
-                받는 사람 이메일
-              </label>
-              <div className="mb-3 flex min-w-0 items-center gap-1.5">
+          <RecipientContactChoice
+            mode={parcelContactMode}
+            onModeChange={setParcelContactMode}
+            radioName="parcel-recipient-contact"
+            addressId="parcel-recipient-address"
+            address={recipientAddress}
+            onAddressChange={setRecipientAddress}
+            addressDetail={recipientAddressDetail}
+            onAddressDetailChange={setRecipientAddressDetail}
+            addressLocked={sameAsSenderAddress}
+            addressLabelExtra={
+              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
                 <input
-                  id="parcel-recipient-email"
-                  type="text"
-                  value={recipientEmailLocal}
-                  onChange={(event) =>
-                    setRecipientEmailLocal(
-                      event.target.value.replace(/@/g, ""),
-                    )
-                  }
-                  placeholder="아이디"
-                  className={cn(omInputClass, "mb-0 min-w-0 flex-1")}
+                  type="checkbox"
+                  checked={sameAsSenderAddress}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSameAsSenderAddress(checked);
+                    if (checked) {
+                      setRecipientAddress(senderAddress);
+                      setRecipientAddressDetail(senderAddressDetail);
+                    }
+                  }}
+                  className="size-4 accent-[#6B46C1]"
                 />
-                <span className="shrink-0 text-[13px] font-semibold text-[#1A202C]">
-                  @
-                </span>
-                <select
-                  aria-label="이메일 도메인"
-                  value={recipientEmailDomain}
-                  onChange={(event) =>
-                    setRecipientEmailDomain(event.target.value)
-                  }
-                  className={cn(
-                    omInputClass,
-                    "mb-0 min-w-0 flex-1 appearance-none bg-[length:1rem] bg-[position:right_0.5rem_center] bg-no-repeat pr-8",
-                    'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23334155\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'m6 9 6 6 6-6\'/%3E%3C/svg%3E")]',
-                  )}
-                >
-                  {EMAIL_DOMAIN_PRESETS.map((domain) => (
-                    <option key={domain} value={domain}>
-                      {domain}
-                    </option>
-                  ))}
-                  <option value={EMAIL_DOMAIN_CUSTOM}>직접입력</option>
-                </select>
-              </div>
-              {recipientEmailDomain === EMAIL_DOMAIN_CUSTOM ? (
-                <input
-                  type="text"
-                  value={recipientEmailDomainCustom}
-                  onChange={(event) =>
-                    setRecipientEmailDomainCustom(
-                      event.target.value.replace(/@/g, "").replace(/\s/g, ""),
-                    )
-                  }
-                  placeholder="도메인 직접입력 (예: company.co.kr)"
-                  className={omInputClass}
-                />
-              ) : null}
-            </div>
-          ) : null}
+                보내는 사람 주소와 같음
+              </label>
+            }
+            fax={recipientFax}
+            onFaxChange={setRecipientFax}
+            emailLocal={recipientEmailLocal}
+            onEmailLocalChange={setRecipientEmailLocal}
+            emailDomain={recipientEmailDomain}
+            onEmailDomainChange={setRecipientEmailDomain}
+            emailDomainCustom={recipientEmailDomainCustom}
+            onEmailDomainCustomChange={setRecipientEmailDomainCustom}
+            inputClassName={omInputClass}
+            labelClassName={omLabelClass}
+          />
         </div>
       )}
 
