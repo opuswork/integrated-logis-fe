@@ -22,6 +22,7 @@ import {
   parseOrderTypeFromNotes,
   parseParcelCompanyFromNotes,
   parseRecipientPartsFromNotes,
+  parcelRecipientContactDisplay,
   parseShipDateFromNotes,
 } from "@/lib/order-notes";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,7 @@ export interface GiftSetPrintPage {
   recipientName: string;
   recipientPhone: string;
   recipientAddress: string;
+  recipientContactLabel: string;
 }
 
 type ApiOrder = {
@@ -276,6 +278,7 @@ function mapOrderToPrintPages(
     parseGreetingSpecialNoteFromNotes(notes);
   const workRegion = parseBranchStoreFromNotes(notes);
   const recipient = parseRecipientPartsFromNotes(notes);
+  const parcelContact = parcelRecipientContactDisplay(notes);
 
   const basePageFields = {
     orderNumber: order.orderNumber,
@@ -293,7 +296,10 @@ function mapOrderToPrintPages(
     workRegion,
     recipientName: recipient.name,
     recipientPhone: recipient.phone,
-    recipientAddress: recipient.address,
+    recipientAddress:
+      type === "택배" ? parcelContact.value : recipient.address,
+    recipientContactLabel:
+      type === "택배" ? parcelContact.label : "주소",
   };
 
   const items = order.items ?? [];
@@ -447,7 +453,10 @@ function GiftSetPreviewCard({ page }: { page: GiftSetPrintPage }) {
         <PreviewCardRow label="특이사항" value={page.specialNote} />
         <PreviewCardRow label="주문 작업 지역" value={page.workRegion} />
         {page.type === "택배" ? (
-          <PreviewCardRow label="받는 분 주소" value={page.recipientAddress} />
+          <PreviewCardRow
+            label={page.recipientContactLabel}
+            value={page.recipientAddress}
+          />
         ) : (
           <>
             <PreviewCardRow label="받는 분 성함" value={page.recipientName} />
@@ -551,7 +560,7 @@ function GiftSetPrintSheet({ page }: { page: GiftSetPrintPage }) {
       <SheetCell label="주문 작업 지역" value={page.workRegion} />
       {page.type === "택배" ? (
         <SheetCell
-          label="받는 분 주소"
+          label={page.recipientContactLabel}
           value={page.recipientAddress}
           className="border-b-0"
         />
