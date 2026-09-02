@@ -136,7 +136,7 @@ export function parseSenderPartsFromNotes(notes: string | null | undefined): {
     return { name: "", phone: "", address: "" };
   }
   const match =
-    /보내는사람:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:받는분주소|주문작업지역|지부매장|인사장종류|인사장번호|\[)|$)/.exec(
+    /보내는사람:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:수취연락|받는분이메일|받는분팩스|받는분주소|주문작업지역|지부매장|인사장종류|인사장번호|\[)|$)/.exec(
       notes,
     );
   if (!match) {
@@ -177,6 +177,62 @@ export function parseRecipientPartsFromNotes(notes: string | null | undefined): 
     name: match[1].trim(),
     phone: match[2].trim(),
     address: match[3].trim(),
+  };
+}
+
+export type ParcelRecipientContactMode = "address" | "email" | "fax";
+
+export const PARCEL_CONTACT_MODE_LABEL: Record<
+  ParcelRecipientContactMode,
+  string
+> = {
+  address: "주소",
+  email: "이메일",
+  fax: "팩스",
+};
+
+/** 택배 수취 연락 방식 (구주문은 주소). */
+export function parseParcelRecipientContactMode(
+  notes: string | null | undefined,
+): ParcelRecipientContactMode {
+  const tagged = parseOrderNoteField(notes, "수취연락");
+  if (tagged === "이메일") return "email";
+  if (tagged === "팩스") return "fax";
+  if (tagged === "주소") return "address";
+  if (parseOrderNoteField(notes, "받는분이메일")) return "email";
+  if (parseOrderNoteField(notes, "받는분팩스")) return "fax";
+  return "address";
+}
+
+export function parseParcelRecipientEmail(notes: string | null | undefined) {
+  return parseOrderNoteField(notes, "받는분이메일");
+}
+
+export function parseParcelRecipientFax(notes: string | null | undefined) {
+  return parseOrderNoteField(notes, "받는분팩스");
+}
+
+export function parcelRecipientContactDisplay(
+  notes: string | null | undefined,
+): { label: string; value: string } {
+  const mode = parseParcelRecipientContactMode(notes);
+  if (mode === "email") {
+    return {
+      label: "받는 분 이메일",
+      value: parseParcelRecipientEmail(notes),
+    };
+  }
+  if (mode === "fax") {
+    return {
+      label: "받는 분 팩스",
+      value: parseParcelRecipientFax(notes),
+    };
+  }
+  return {
+    label: "받는 분 주소",
+    value:
+      parseRecipientPartsFromNotes(notes).address ||
+      parseOrderNoteField(notes, "받는분주소"),
   };
 }
 
