@@ -8,6 +8,7 @@ import {
   getDeferredInstallPrompt,
   isIosDevice,
   isStandaloneDisplay,
+  markPwaInstalled,
   subscribePwaInstall,
 } from "@/lib/pwa-install";
 
@@ -42,6 +43,7 @@ export function MemberHomeInstallMng() {
       const choice = await promptEvent.userChoice;
       if (choice.outcome === "accepted") {
         clearDeferredInstallPrompt();
+        markPwaInstalled();
         setMessage("홈 화면에 물류관리시스템 앱이 추가되었습니다.");
       } else {
         setMessage("설치가 취소되었습니다. 다시 시도할 수 있습니다.");

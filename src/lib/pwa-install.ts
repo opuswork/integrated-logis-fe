@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 export type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -22,7 +26,7 @@ export function capturePwaInstallPrompt() {
   });
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
-    notify();
+    markPwaInstalled();
   });
 }
 
@@ -42,6 +46,28 @@ export function subscribePwaInstall(listener: () => void) {
   };
 }
 
+const PWA_INSTALLED_KEY = "sanc-logistics-pwa-installed";
+
+export function markPwaInstalled() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PWA_INSTALLED_KEY, "1");
+  } catch {
+    /* ignore quota / private mode */
+  }
+  notify();
+}
+
+export function isPwaInstalled() {
+  if (isStandaloneDisplay()) return true;
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(PWA_INSTALLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function isStandaloneDisplay() {
   if (typeof window === "undefined") return false;
   const nav = window.navigator as Navigator & { standalone?: boolean };
@@ -57,4 +83,19 @@ export function isIosDevice() {
     window.navigator.platform === "MacIntel" &&
     window.navigator.maxTouchPoints > 1;
   return iOS || iPadOs;
+}
+
+export function usePwaInstalled() {
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    if (isStandaloneDisplay()) {
+      markPwaInstalled();
+    }
+    const update = () => setInstalled(isPwaInstalled());
+    update();
+    return subscribePwaInstall(update);
+  }, []);
+
+  return installed;
 }
