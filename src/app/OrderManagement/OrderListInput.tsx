@@ -57,9 +57,8 @@ import {
   PARCEL_CONTACT_MODE_LABEL,
   type ParcelRecipientContactMode,
 } from "@/lib/order-notes";
-import {
-  canEditOrderStatus,
-} from "@/lib/order-delivery";
+import { canEditOrderStatus } from "@/lib/order-delivery";
+import { usePwaInstalled } from "@/lib/pwa-install";
 import { cn } from "@/lib/utils";
 
 const MEMBER_NAV = [
@@ -479,9 +478,14 @@ function MemberNavList({
   activeMenu: MemberNav;
   onMenuChange: (menu: MemberNav) => void;
 }) {
+  const pwaInstalled = usePwaInstalled();
+  const items = MEMBER_NAV.filter(
+    (item) => !(pwaInstalled && item === "홈버튼생성"),
+  );
+
   return (
     <nav className="space-y-1.5">
-      {MEMBER_NAV.map((item) => (
+      {items.map((item) => (
         <button
           key={item}
           type="button"
@@ -5523,6 +5527,7 @@ export function OrderListInput({
   onEditComplete?: () => void;
 } = {}) {
   const [activeMenu, setActiveMenu] = useState<MemberNav>("새 주문서 작성");
+  const pwaInstalled = usePwaInstalled();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [linkedProductNames, setLinkedProductNames] = useState<string[]>([]);
   const [greetingCustomer, setGreetingCustomer] = useState<{
@@ -5553,6 +5558,12 @@ export function OrderListInput({
     name: string;
     churchName: string;
   }>({ name: "", churchName: "" });
+
+  useEffect(() => {
+    if (pwaInstalled && activeMenu === "홈버튼생성") {
+      setActiveMenu("새 주문서 작성");
+    }
+  }, [pwaInstalled, activeMenu]);
 
   useEffect(() => {
     setEditingOrderNumber(editOrderNumber);
