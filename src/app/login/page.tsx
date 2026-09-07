@@ -76,12 +76,12 @@ function LoginForm() {
   };
 
   return (
-    <main className="relative min-h-screen bg-[#e9edf3] px-6 pb-12 pt-[86px] md:pt-[96px] lg:pt-[120px]">
+    <main className="relative min-h-[100dvh] bg-[#e9edf3] px-6 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(86px,calc(env(safe-area-inset-top)+4.5rem))] md:pt-[96px] lg:pt-[120px]">
       <div className="mx-auto flex w-full max-w-md flex-col items-center gap-6 rounded-[10px] border border-[#cbd3df] bg-white px-6 py-8 shadow-[0_14px_34px_rgba(18,38,63,0.08)]">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold text-ink">물류부 주문 관리 시스템</h1>
+          <h1 className="text-2xl font-semibold text-ink">물류관리시스템</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            관리자, 공장, 또는 개인회원 계정으로 로그인하세요.
+            개인회원 모바일 앱 · 관리자·공장 계정으로도 로그인할 수 있습니다.
           </p>
         </div>
 

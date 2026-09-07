@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
+import { MemberHomeInstallMng } from "@/app/OrderManagement/MemberHomeInstallMng";
 import { MemberGreetingMng } from "@/app/OrderManagement/MemberGreetingMng";
 import { MemberPartnerMng } from "@/app/OrderManagement/MemberPartnerMng";
 import { LogoutButton } from "@/components/auth-guard";
@@ -66,6 +67,7 @@ const MEMBER_NAV = [
   "인사장관리",
   "내 주문 현황",
   "거래처관리",
+  "홈버튼생성",
 ] as const;
 const GREETING_NUMBERS = ["1", "2", "3", "4"] as const;
 const GREETING_SIZES = ["8칸", "6칸", "4칸", "자체"] as const;
@@ -311,6 +313,11 @@ const PAGE_META: Record<
   거래처관리: {
     title: "거래처관리",
     description: "자주 쓰는 거래처를 등록하면 제품주문서에 자동 입력됩니다.",
+  },
+  홈버튼생성: {
+    title: "홈버튼생성",
+    description:
+      "홈 화면에 아이콘을 추가하면 브라우저가 아닌 물류관리시스템 앱으로 열립니다.",
   },
 };
 
@@ -5729,6 +5736,8 @@ export function OrderListInput({
         return null;
       case "거래처관리":
         return null;
+      case "홈버튼생성":
+        return null;
     }
   };
 
@@ -5872,6 +5881,8 @@ export function OrderListInput({
         );
       case "거래처관리":
         return <MemberPartnerMng />;
+      case "홈버튼생성":
+        return <MemberHomeInstallMng />;
     }
   };
 
@@ -5901,7 +5912,7 @@ export function OrderListInput({
   }
 
   return (
-    <div className="grid min-h-[730px] grid-cols-1 overflow-hidden rounded-[10px] border border-[#cbd3df] bg-white min-[1040px]:grid-cols-[200px_1fr]">
+    <div className="grid min-h-[calc(100dvh-2rem)] grid-cols-1 overflow-hidden rounded-[10px] border border-[#cbd3df] bg-white min-[1040px]:min-h-[730px] min-[1040px]:grid-cols-[200px_1fr]">
       <MemberSidebar
         activeMenu={activeMenu}
         onMenuChange={handleMenuChange}
