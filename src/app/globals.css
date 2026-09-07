@@ -234,3 +234,11 @@
     print-color-adjust: exact !important;
   }
 }
+
+@media (display-mode: standalone) {
+  html,
+  body {
+    min-height: 100dvh;
+    background: #1f2937;
+  }
+}

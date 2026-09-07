@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
+import { PwaRegister } from "@/components/pwa-register";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,8 +20,32 @@ const notoSansKr = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "물류 관리 시스템 - 시온식품(주)",
-  description: "시온식품주식회사 물류 관리 시스템",
+  title: "물류관리시스템 - 시온식품(주)",
+  description: "시온식품주식회사 개인회원 물류 관리 앱",
+  applicationName: "물류관리시스템",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "물류관리시스템",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#1f2937",
 };
 
 export default function RootLayout({
@@ -38,6 +63,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         {children}
+        <PwaRegister />
       </body>
     </html>
   );
