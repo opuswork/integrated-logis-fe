@@ -16,12 +16,16 @@ function notify() {
 
 let captureStarted = false;
 
+const PWA_INSTALLED_KEY = "sanc-logistics-pwa-installed";
+
 export function capturePwaInstallPrompt() {
   if (typeof window === "undefined" || captureStarted) return;
   captureStarted = true;
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredPrompt = event as BeforeInstallPromptEvent;
+    // 앱을 지우면 이 이벤트가 다시 옴 → 바로가기추가 메뉴 복원
+    clearPwaInstalledFlag();
     notify();
   });
   window.addEventListener("appinstalled", () => {
@@ -46,11 +50,10 @@ export function subscribePwaInstall(listener: () => void) {
   };
 }
 
-const PWA_INSTALLED_KEY = "sanc-logistics-pwa-installed";
-
 export function markPwaInstalled() {
   if (typeof window === "undefined") return;
   try {
+    if (window.localStorage.getItem(PWA_INSTALLED_KEY) === "1") return;
     window.localStorage.setItem(PWA_INSTALLED_KEY, "1");
   } catch {
     /* ignore quota / private mode */
@@ -58,14 +61,15 @@ export function markPwaInstalled() {
   notify();
 }
 
-export function isPwaInstalled() {
-  if (isStandaloneDisplay()) return true;
-  if (typeof window === "undefined") return false;
+function clearPwaInstalledFlag() {
+  if (typeof window === "undefined") return;
   try {
-    return window.localStorage.getItem(PWA_INSTALLED_KEY) === "1";
+    if (window.localStorage.getItem(PWA_INSTALLED_KEY) == null) return;
+    window.localStorage.removeItem(PWA_INSTALLED_KEY);
   } catch {
-    return false;
+    /* ignore */
   }
+  notify();
 }
 
 export function isStandaloneDisplay() {
@@ -85,16 +89,48 @@ export function isIosDevice() {
   return iOS || iPadOs;
 }
 
+/** 홈 화면에 물류관리 앱이 있으면 true. 지우면 false. */
+export function isPwaInstalled() {
+  if (isStandaloneDisplay()) return true;
+  // iPhone: 아이콘으로 연 앱에서만 숨김. Safari(아이콘 삭제 후 포함)에서는 메뉴 복원
+  if (isIosDevice()) return false;
+  // Chrome: 설치 가능 창이 다시 뜨면 앱이 없는 상태
+  if (getDeferredInstallPrompt()) return false;
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(PWA_INSTALLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function usePwaInstalled() {
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    if (isStandaloneDisplay()) {
-      markPwaInstalled();
-    }
-    const update = () => setInstalled(isPwaInstalled());
+    const update = () => {
+      if (isStandaloneDisplay()) {
+        markPwaInstalled();
+      } else if (isIosDevice()) {
+        clearPwaInstalledFlag();
+      }
+      setInstalled(isPwaInstalled());
+    };
+
     update();
-    return subscribePwaInstall(update);
+    const unsubscribe = subscribePwaInstall(update);
+    const media = window.matchMedia("(display-mode: standalone)");
+    const onDisplayMode = () => update();
+    media.addEventListener("change", onDisplayMode);
+    window.addEventListener("visibilitychange", update);
+    window.addEventListener("pageshow", update);
+
+    return () => {
+      unsubscribe();
+      media.removeEventListener("change", onDisplayMode);
+      window.removeEventListener("visibilitychange", update);
+      window.removeEventListener("pageshow", update);
+    };
   }, []);
 
   return installed;

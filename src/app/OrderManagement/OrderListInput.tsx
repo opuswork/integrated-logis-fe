@@ -66,7 +66,7 @@ const MEMBER_NAV = [
   "인사장관리",
   "내 주문 현황",
   "거래처관리",
-  "홈버튼생성",
+  "바로가기추가",
 ] as const;
 const GREETING_NUMBERS = ["1", "2", "3", "4"] as const;
 const GREETING_SIZES = ["8칸", "6칸", "4칸", "자체"] as const;
@@ -313,10 +313,10 @@ const PAGE_META: Record<
     title: "거래처관리",
     description: "자주 쓰는 거래처를 등록하면 제품주문서에 자동 입력됩니다.",
   },
-  홈버튼생성: {
-    title: "홈버튼생성",
+  바로가기추가: {
+    title: "바로가기추가",
     description:
-      "홈 화면에 아이콘을 추가하면 브라우저가 아닌 물류관리시스템 앱으로 열립니다.",
+      "홈 화면에 물류관리 앱을 추가하면 브라우저가 아닌 앱으로 열립니다.",
   },
 };
 
@@ -480,7 +480,7 @@ function MemberNavList({
 }) {
   const pwaInstalled = usePwaInstalled();
   const items = MEMBER_NAV.filter(
-    (item) => !(pwaInstalled && item === "홈버튼생성"),
+    (item) => !(pwaInstalled && item === "바로가기추가"),
   );
 
   return (
@@ -5560,7 +5560,7 @@ export function OrderListInput({
   }>({ name: "", churchName: "" });
 
   useEffect(() => {
-    if (pwaInstalled && activeMenu === "홈버튼생성") {
+    if (pwaInstalled && activeMenu === "바로가기추가") {
       setActiveMenu("새 주문서 작성");
     }
   }, [pwaInstalled, activeMenu]);
@@ -5747,7 +5747,7 @@ export function OrderListInput({
         return null;
       case "거래처관리":
         return null;
-      case "홈버튼생성":
+      case "바로가기추가":
         return null;
     }
   };
@@ -5892,7 +5892,7 @@ export function OrderListInput({
         );
       case "거래처관리":
         return <MemberPartnerMng />;
-      case "홈버튼생성":
+      case "바로가기추가":
         return <MemberHomeInstallMng />;
     }
   };
