@@ -44,7 +44,7 @@ export function MemberHomeInstallMng() {
       if (choice.outcome === "accepted") {
         clearDeferredInstallPrompt();
         markPwaInstalled();
-        setMessage("홈 화면에 물류관리시스템 앱이 추가되었습니다.");
+        setMessage("홈 화면에 물류관리 앱이 추가되었습니다.");
       } else {
         setMessage("설치가 취소되었습니다. 다시 시도할 수 있습니다.");
       }
@@ -68,14 +68,15 @@ export function MemberHomeInstallMng() {
           />
           <div>
             <p className="text-[15px] font-semibold text-[#1A202C]">
-              물류관리시스템
+              물류관리
             </p>
             <p className="text-[12px] text-[#64748B]">개인회원 모바일 앱</p>
           </div>
         </div>
         <p className="text-[13px] leading-6 text-[#475569]">
-          홈 화면에 아이콘을 추가하면, 아이콘을 눌렀을 때 브라우저 주소창 없이
-          물류관리시스템 앱으로 열립니다.
+          홈 화면에 물류관리 앱을 추가하면, 아이콘을 눌렀을 때 브라우저 주소창
+          없이 앱으로 열립니다. 홈 화면에서 아이콘을 지우면 이 메뉴가 다시
+          나타납니다.
         </p>
       </div>
 
@@ -92,7 +93,7 @@ export function MemberHomeInstallMng() {
               <li>
                 <strong>홈 화면에 추가</strong>를 선택합니다.
               </li>
-              <li>추가를 누르면 홈에 물류관리시스템 아이콘이 생깁니다.</li>
+              <li>추가를 누르면 홈에 물류관리 아이콘이 생깁니다.</li>
             </ol>
           </div>
         ) : (
