@@ -7,12 +7,14 @@ import { cn } from '@/lib/utils';
 export interface DialogProps {
   open: boolean;
   title: string;
+  /** 제목 바로 위에 표시하는 작은 안내 문구 */
+  eyebrow?: string;
   children: ReactNode;
   onClose?: () => void;
   className?: string;
 }
 
-export function Dialog({ open, title, children, onClose, className }: DialogProps) {
+export function Dialog({ open, title, eyebrow, children, onClose, className }: DialogProps) {
   if (!open) {
     return null;
   }
@@ -29,9 +31,16 @@ export function Dialog({ open, title, children, onClose, className }: DialogProp
         )}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <h2 id="dialog-title" className="text-lg font-semibold text-ink">
-            {title}
-          </h2>
+          <div className="min-w-0">
+            {eyebrow ? (
+              <p className="mb-1 text-[12px] font-bold tracking-wide text-[#C05621]">
+                {eyebrow}
+              </p>
+            ) : null}
+            <h2 id="dialog-title" className="text-lg font-semibold text-ink">
+              {title}
+            </h2>
+          </div>
           {onClose ? (
             <button
               type="button"
