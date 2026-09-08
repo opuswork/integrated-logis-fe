@@ -162,7 +162,7 @@ export function saveAuthUser(user: AuthUser, accessToken?: string) {
 
   const role = normalizeUserRole(user.role);
   const adminRegion = normalizeAdminRegion(user.adminRegion);
-  window.sessionStorage.setItem(
+  window.localStorage.setItem(
     AUTH_STORAGE_KEY,
     JSON.stringify({
       ...user,
@@ -175,7 +175,7 @@ export function saveAuthUser(user: AuthUser, accessToken?: string) {
   );
 
   if (accessToken) {
-    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
   }
 }
 
@@ -184,7 +184,7 @@ export function getAuthUser(): AuthUser | null {
     return null;
   }
 
-  const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+  const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
   if (!raw) {
     return null;
   }
@@ -211,7 +211,7 @@ export function getAccessToken(): string | null {
     return null;
   }
 
-  return window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
 export function clearAuthUser() {
@@ -219,6 +219,6 @@ export function clearAuthUser() {
     return;
   }
 
-  window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
-  window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
