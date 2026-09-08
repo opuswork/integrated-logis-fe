@@ -560,6 +560,7 @@ export function OrderListMng() {
 
       <Dialog
         open={orderFormOpen}
+        eyebrow={editOrderNumber ? undefined : "Beta 테스트중"}
         title={
           editOrderNumber
             ? `제품주문서 (수정) — ${editOrderNumber}`

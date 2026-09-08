@@ -5902,6 +5902,11 @@ export function OrderListInput({
       {!embedded ? (
         <div className="mb-3.5 flex flex-col gap-3 min-[1100px]:flex-row min-[1100px]:items-start min-[1100px]:justify-between">
           <div>
+            {pageMeta.title === "제품주문서 (신규작성)" ? (
+              <p className="mb-1 text-[12px] font-bold tracking-wide text-[#C05621]">
+                Beta 테스트중
+              </p>
+            ) : null}
             <h3 className="text-[22px] font-semibold text-ink">{pageMeta.title}</h3>
             <p className="mt-1 text-[13px] text-muted-foreground">
               {pageMeta.description}
