@@ -1,0 +1,106 @@
+.member-order-calendar.react-calendar {
+  width: 100%;
+  max-width: none;
+  background: #fff;
+  border: none;
+  font-family: inherit;
+}
+
+.member-order-calendar .react-calendar__navigation {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  height: 40px;
+}
+
+.member-order-calendar .react-calendar__navigation button {
+  min-width: 36px;
+  background: none;
+  font-size: 22px;
+  font-weight: 600;
+  color: #7c3aed;
+  line-height: 1;
+}
+
+.member-order-calendar .react-calendar__navigation button:enabled:hover,
+.member-order-calendar .react-calendar__navigation button:enabled:focus {
+  background: #f5f3ff;
+  border-radius: 999px;
+}
+
+.member-order-calendar .react-calendar__navigation__label {
+  pointer-events: none;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.member-order-calendar .react-calendar__month-view__weekdays {
+  text-align: center;
+  text-transform: none;
+  font-weight: 600;
+  font-size: 13px;
+  color: #334155;
+}
+
+.member-order-calendar .react-calendar__month-view__weekdays__weekday abbr {
+  text-decoration: none;
+}
+
+.member-order-calendar .react-calendar__month-view__weekdays__weekday:first-child {
+  color: #f43f5e;
+}
+
+.member-order-calendar .react-calendar__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 64px;
+  padding: 6px 2px 8px;
+  background: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.member-order-calendar .react-calendar__tile:enabled:hover,
+.member-order-calendar .react-calendar__tile:enabled:focus {
+  background: #f5f3ff;
+}
+
+.member-order-calendar .react-calendar__tile--active {
+  background: #fff !important;
+  color: #1a202c;
+}
+
+.member-order-calendar .react-calendar__tile--active abbr,
+.member-order-calendar .member-order-calendar-today abbr {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #7c3aed;
+  border-radius: 999px;
+}
+
+.member-order-calendar .react-calendar__tile--now {
+  background: transparent;
+}
+
+.member-order-calendar .react-calendar__month-view__days__day--neighboringMonth {
+  color: #cbd5e1;
+}
+
+.member-order-calendar-badge {
+  display: flex;
+  min-height: 22px;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.15;
+}
