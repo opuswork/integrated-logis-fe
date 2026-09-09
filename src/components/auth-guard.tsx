@@ -5,7 +5,6 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { LiveChatWidget } from "@/components/chat/live-chat-widget";
 import { useIdleLogout } from "@/hooks/use-idle-logout";
-import { apiFetch } from "@/lib/api";
 import {
   clearAuthUser,
   getAuthUser,
@@ -14,34 +13,29 @@ import {
   type UserRole,
 } from "@/lib/auth";
 
-const SESSION_POLL_MS = 25_000;
-
 function IdleLogoutEffect({ timeoutMs }: { timeoutMs: number }) {
   useIdleLogout(timeoutMs);
   return null;
 }
 
-function SessionPollEffect() {
-  useEffect(() => {
-    let cancelled = false;
-
-    const check = () => {
-      if (cancelled || !getAuthUser()) return;
-      void apiFetch("/api/auth/me").catch(() => {
-        /* network errors ignored; 401 handled in apiFetch */
-      });
-    };
-
-    check();
-    const id = window.setInterval(check, SESSION_POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
-
-  return null;
-}
+// 중복로그인 방지 (비활성): 25초마다 /api/auth/me 로 세션 유효성 확인
+// const SESSION_POLL_MS = 25_000;
+// function SessionPollEffect() {
+//   useEffect(() => {
+//     let cancelled = false;
+//     const check = () => {
+//       if (cancelled || !getAuthUser()) return;
+//       void apiFetch("/api/auth/me").catch(() => {});
+//     };
+//     check();
+//     const id = window.setInterval(check, SESSION_POLL_MS);
+//     return () => {
+//       cancelled = true;
+//       window.clearInterval(id);
+//     };
+//   }, []);
+//   return null;
+// }
 
 export function AuthGuard({
   children,
@@ -86,7 +80,7 @@ export function AuthGuard({
 
   return (
     <>
-      <SessionPollEffect />
+      {/* 중복로그인 방지 (비활성): <SessionPollEffect /> */}
       {idleTimeoutMs != null && idleTimeoutMs > 0 ? (
         <IdleLogoutEffect timeoutMs={idleTimeoutMs} />
       ) : null}
