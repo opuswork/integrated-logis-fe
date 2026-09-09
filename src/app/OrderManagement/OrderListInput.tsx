@@ -13,6 +13,7 @@ import {
 
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { MemberHomeInstallMng } from "@/app/OrderManagement/MemberHomeInstallMng";
+import { MemberOrderCalendar } from "@/app/OrderManagement/MemberOrderCalendar";
 import { MemberGreetingMng } from "@/app/OrderManagement/MemberGreetingMng";
 import { MemberPartnerMng } from "@/app/OrderManagement/MemberPartnerMng";
 import { LogoutButton } from "@/components/auth-guard";
@@ -5273,6 +5274,29 @@ function OrderStatusPanel({
     null,
   );
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [statusView, setStatusView] = useState<"list" | "calendar">("list");
+  const [calendarDateIso, setCalendarDateIso] = useState<string | null>(null);
+
+  const deliveryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const order of orders) {
+      const key = order.deliveryDate.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+        continue;
+      }
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [orders]);
+
+  const calendarOrders = useMemo(() => {
+    if (!calendarDateIso) {
+      return [];
+    }
+    return orders.filter(
+      (order) => order.deliveryDate.slice(0, 10) === calendarDateIso,
+    );
+  }, [orders, calendarDateIso]);
 
   const mapOrders = (
     data: Array<{
@@ -5536,49 +5560,107 @@ function OrderStatusPanel({
         </Panel>
       ) : (
         <>
-          <Panel title="내 주문 현황">
+          <Panel>
+            <div className="mb-2.5 flex items-baseline justify-between gap-3">
+              <h4 className="text-base font-semibold text-ink">내 주문 현황</h4>
+              <button
+                type="button"
+                className="shrink-0 text-sm font-semibold text-brand underline underline-offset-2"
+                onClick={() =>
+                  setStatusView((view) =>
+                    view === "list" ? "calendar" : "list",
+                  )
+                }
+              >
+                {statusView === "list" ? "달력으로 보기" : "목록으로 보기"}
+              </button>
+            </div>
             <p className="text-sm text-[#64748b] min-[1040px]:text-lg">
               총 {orders.length}건
             </p>
           </Panel>
 
-          <div className="max-h-[28rem] space-y-2.5 overflow-y-auto min-[1040px]:hidden">
-            {orders.length === 0 ? (
-              <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-lg text-muted-foreground">
-                접수한 주문이 없습니다.
-              </p>
-            ) : (
-              orders.map((order) => (
-                <MemberMobileOrderCard
-                  key={order.id}
-                  order={order}
-                  isConfirming={confirmingId === order.id}
-                  onConfirmReceive={() => {
-                    void handleConfirmReceive(order.id);
-                  }}
-                  onView={() => setViewingOrderNumber(order.orderNumber)}
-                  onEdit={
-                    onEditOrder
-                      ? () => onEditOrder(order.orderNumber)
-                      : undefined
-                  }
+          {statusView === "calendar" ? (
+            <>
+              <Panel>
+                <MemberOrderCalendar
+                  counts={deliveryCounts}
+                  selectedIso={calendarDateIso}
+                  onSelectIso={setCalendarDateIso}
                 />
-              ))
-            )}
-          </div>
+              </Panel>
+              {calendarDateIso ? (
+                calendarOrders.length === 0 ? (
+                  <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-lg text-muted-foreground">
+                    선택한 날짜에 납품 주문이 없습니다.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {calendarOrders.map((order) => (
+                      <MemberMobileOrderCard
+                        key={order.id}
+                        order={order}
+                        isConfirming={confirmingId === order.id}
+                        onConfirmReceive={() => {
+                          void handleConfirmReceive(order.id);
+                        }}
+                        onView={() => setViewingOrderNumber(order.orderNumber)}
+                        onEdit={
+                          onEditOrder
+                            ? () => onEditOrder(order.orderNumber)
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </div>
+                )
+              ) : (
+                <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-lg text-muted-foreground">
+                  날짜를 선택하면 해당 날의 주문이 표시됩니다.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="max-h-[28rem] space-y-2.5 overflow-y-auto min-[1040px]:hidden">
+                {orders.length === 0 ? (
+                  <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-lg text-muted-foreground">
+                    접수한 주문이 없습니다.
+                  </p>
+                ) : (
+                  orders.map((order) => (
+                    <MemberMobileOrderCard
+                      key={order.id}
+                      order={order}
+                      isConfirming={confirmingId === order.id}
+                      onConfirmReceive={() => {
+                        void handleConfirmReceive(order.id);
+                      }}
+                      onView={() => setViewingOrderNumber(order.orderNumber)}
+                      onEdit={
+                        onEditOrder
+                          ? () => onEditOrder(order.orderNumber)
+                          : undefined
+                      }
+                    />
+                  ))
+                )}
+              </div>
 
-          <Panel className="hidden min-[1040px]:block">
-            <Table
-              caption="내 주문 현황"
-              columns={orderColumns}
-              data={orders}
-              emptyMessage="접수한 주문이 없습니다."
-              scrollable
-              visibleRows={10}
-              rowHeightRem={3.5}
-              className="text-lg"
-            />
-          </Panel>
+              <Panel className="hidden min-[1040px]:block">
+                <Table
+                  caption="내 주문 현황"
+                  columns={orderColumns}
+                  data={orders}
+                  emptyMessage="접수한 주문이 없습니다."
+                  scrollable
+                  visibleRows={10}
+                  rowHeightRem={3.5}
+                  className="text-lg"
+                />
+              </Panel>
+            </>
+          )}
         </>
       )}
       <OrderPrintPreviewModal
