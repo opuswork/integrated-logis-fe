@@ -5221,13 +5221,16 @@ function MemberMobileOrderCard({
             {order.name} · {order.type}{" "}
             <span className="font-semibold text-[#64748b]">{order.status}</span>
           </p>
-          <p className="mt-0.5 text-base text-[#64748b]">{order.productName}</p>
-          <p className="mt-1 text-base text-[#64748b]">
-            주문일:{order.orderDate} 납품일(배달일): {order.deliveryDate || "-"}
+          <p className="mt-0.5 break-words text-base text-[#64748b]">
+            {order.productName}
           </p>
-          <p className="mt-0.5 text-base text-[#64748b]">
-            납품처: {order.deliveryPlace || "-"}
-          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-base text-[#64748b]">
+            <li className="break-words">주문일:{order.orderDate}</li>
+            <li className="break-words">
+              납품일(배달일): {order.deliveryDate || "-"}
+            </li>
+            <li className="break-words">납품처: {order.deliveryPlace || "-"}</li>
+          </ul>
         </div>
         <div className="flex shrink-0 flex-col gap-1.5">
           {order.canConfirmReceive ? (
