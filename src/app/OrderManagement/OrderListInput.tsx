@@ -5274,7 +5274,7 @@ function OrderStatusPanel({
     null,
   );
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
-  const [statusView, setStatusView] = useState<"list" | "calendar">("list");
+  const [statusView, setStatusView] = useState<"list" | "calendar">("calendar");
   const [calendarDateIso, setCalendarDateIso] = useState<string | null>(null);
 
   const deliveryCounts = useMemo(() => {
@@ -5691,7 +5691,9 @@ export function OrderListInput({
   /** After edit save/cancel (admin returns to list). */
   onEditComplete?: () => void;
 } = {}) {
-  const [activeMenu, setActiveMenu] = useState<MemberNav>("새 주문서 작성");
+  const [activeMenu, setActiveMenu] = useState<MemberNav>(
+    embedded ? "새 주문서 작성" : "내 주문 현황",
+  );
   const pwaInstalled = usePwaInstalled();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [linkedProductNames, setLinkedProductNames] = useState<string[]>([]);
@@ -5726,7 +5728,7 @@ export function OrderListInput({
 
   useEffect(() => {
     if (pwaInstalled && activeMenu === "바로가기추가") {
-      setActiveMenu("새 주문서 작성");
+      setActiveMenu("내 주문 현황");
     }
   }, [pwaInstalled, activeMenu]);
 
