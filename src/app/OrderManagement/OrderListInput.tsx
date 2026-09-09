@@ -39,6 +39,12 @@ import {
   parseChurchFromNotes,
   parseDeliveryCompanyFromNotes,
   parseDeliveryDateTimeFromNotes,
+  parseClockParts,
+  formatClock,
+  isValidTwelveHourClock,
+  fromTwentyFourHour,
+  toTwentyFourHour,
+  normalizeDeliveryClock,
   isGreetingCatalogNumber,
   parseGreetingKindFromNotes,
   parseItemNoteFromNotes,
@@ -3137,17 +3143,21 @@ function ProductOrderPanel({
           const parts = deliveryDt.split(/\s+/).filter(Boolean);
           setDeliveryDate(parts[0]?.slice(0, 10) ?? "");
           if (parts[1] === "오전" || parts[1] === "오후") {
-            setDeliveryAmPm(parts[1]);
-            setDeliveryTime(parts[2]?.slice(0, 5) ?? "");
+            const clock = normalizeDeliveryClock(parts[1], parts[2]?.slice(0, 5) ?? "");
+            setDeliveryAmPm(clock.ampm);
+            setDeliveryTime(clock.time);
           } else {
-            setDeliveryAmPm("");
-            setDeliveryTime(parts[1]?.slice(0, 5) ?? "");
+            const clock = fromTwentyFourHour(parts[1]?.slice(0, 5) ?? "")
+              ?? normalizeDeliveryClock("", parts[1]?.slice(0, 5) ?? "");
+            setDeliveryAmPm(clock.ampm);
+            setDeliveryTime(clock.time);
           }
         } else if (order.shipment?.estimatedWindow && isDeliveryOrder) {
           const iso = order.shipment.estimatedWindow;
           setDeliveryDate(iso.slice(0, 10));
-          setDeliveryAmPm("");
-          setDeliveryTime(iso.slice(11, 16));
+          const clock = fromTwentyFourHour(iso.slice(11, 16));
+          setDeliveryAmPm(clock?.ampm ?? "");
+          setDeliveryTime(clock?.time ?? "");
         }
 
         const shipDate = parseShipDateFromNotes(notes);
@@ -3491,7 +3501,7 @@ function ProductOrderPanel({
       if (
         !deliveryDate ||
         !deliveryAmPm ||
-        !deliveryTime ||
+        !isValidTwelveHourClock(deliveryTime) ||
         !recipientName.trim() ||
         !recipientPhone.trim()
       ) {
@@ -3723,6 +3733,16 @@ function ProductOrderPanel({
         .join(" / ");
 
       const primaryKind = hasDeliveryItems ? "delivery" : "parcel";
+      const deliveryWindowTime =
+        hasDeliveryItems && deliveryAmPm
+          ? toTwentyFourHour(deliveryAmPm, deliveryTime)
+          : null;
+      if (hasDeliveryItems && !deliveryWindowTime) {
+        setFormError("배달 시간은 1~12시로 입력해 주세요.");
+        setResultDialog({ open: true, success: false, kind: "fail" });
+        return;
+      }
+
       const payload = {
         totalAmount: productItems.reduce(
           (sum, item) => sum + item.qty * (item.unitPrice || 0),
@@ -3751,7 +3771,7 @@ function ProductOrderPanel({
               : fullSenderAddress,
           estimatedWindow:
             primaryKind === "delivery"
-              ? `${deliveryDate}T${deliveryTime}:00.000Z`
+              ? `${deliveryDate}T${deliveryWindowTime}:00.000Z`
               : `${parcelShipDate}T09:00:00.000Z`,
         },
       };
@@ -4119,6 +4139,9 @@ function ProductOrderPanel({
     "mb-3 flex w-full [&>button]:h-auto [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg [&>button]:border-[#E2E8F0] [&>button]:px-[11px] [&>button]:py-[9px] [&>button]:text-[13px]";
   const omLabelClass =
     "mb-[5px] block text-[12px] font-bold text-[#64748B]";
+  const deliveryClock = parseClockParts(deliveryTime);
+  const deliveryHour = deliveryClock?.hour ?? "";
+  const deliveryMinute = deliveryClock ? deliveryClock.minute : "";
 
   return (
     <div className="mx-auto w-full max-w-[420px] space-y-0 rounded-2xl bg-[#F5F7FA] sm:max-w-none">
@@ -4310,13 +4333,47 @@ function ProductOrderPanel({
               <option value="오전">오전</option>
               <option value="오후">오후</option>
             </select>
-            <input
-              type="time"
-              value={deliveryTime}
-              onChange={(event) => setDeliveryTime(event.target.value)}
+            <select
+              value={deliveryHour === "" ? "" : String(deliveryHour)}
+              onChange={(event) => {
+                const hour = Number(event.target.value);
+                const minute =
+                  deliveryMinute === "" ? 0 : Number(deliveryMinute);
+                setDeliveryTime(
+                  event.target.value ? formatClock(hour, minute) : "",
+                );
+              }}
               required
               className={cn(omInputClass, "mb-0 min-w-0 flex-1")}
-            />
+            >
+              <option value="">시</option>
+              {Array.from({ length: 12 }, (_, index) => index + 1).map(
+                (hour) => (
+                  <option key={hour} value={hour}>
+                    {hour}
+                  </option>
+                ),
+              )}
+            </select>
+            <select
+              value={deliveryMinute === "" ? "" : String(deliveryMinute)}
+              onChange={(event) => {
+                const minute = Number(event.target.value);
+                const hour = deliveryHour === "" ? 12 : Number(deliveryHour);
+                setDeliveryTime(
+                  event.target.value ? formatClock(hour, minute) : "",
+                );
+              }}
+              required
+              className={cn(omInputClass, "mb-0 min-w-0 flex-1")}
+            >
+              <option value="">분</option>
+              {Array.from({ length: 60 }, (_, minute) => (
+                <option key={minute} value={minute}>
+                  {String(minute).padStart(2, "0")}
+                </option>
+              ))}
+            </select>
           </div>
           <label className={omLabelClass}>업체명 *</label>
           <input
