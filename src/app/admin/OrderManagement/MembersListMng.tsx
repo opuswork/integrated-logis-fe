@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -22,7 +28,16 @@ type MemberRow = {
   role: string;
   adminRegion: string;
   accountSource: string;
+  churchId: number;
   churchName: string;
+};
+
+type ChurchOption = {
+  id: number;
+  name: string;
+  region: string;
+  branchCode: string | null;
+  assigner: string;
 };
 
 /** 직접 가입이 아닌 계정만 표기 (본인확인 전 계정) */
@@ -109,6 +124,137 @@ function privilegeToApi(code: PrivilegeCode): {
   return { role: "MEMBER", adminRegion: null };
 }
 
+function ChurchSearchField({
+  churches,
+  isLoading,
+  query,
+  selectedId,
+  onQueryChange,
+  onSelect,
+}: {
+  churches: ChurchOption[];
+  isLoading: boolean;
+  query: string;
+  selectedId: number | null;
+  onQueryChange: (value: string) => void;
+  onSelect: (church: ChurchOption) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) {
+      return churches.slice(0, 20);
+    }
+    return churches
+      .filter((church) => {
+        const haystack = [
+          church.name,
+          church.region,
+          church.branchCode ?? "",
+          church.assigner,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(keyword);
+      })
+      .slice(0, 30);
+  }, [churches, query]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full min-[640px]:col-span-2">
+      <label
+        htmlFor="member-edit-church"
+        className="mb-1.5 block text-sm font-bold text-ink"
+      >
+        중앙
+      </label>
+      <input
+        id="member-edit-church"
+        type="text"
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-controls="member-edit-church-suggestions"
+        aria-autocomplete="list"
+        value={query}
+        onChange={(event) => {
+          onQueryChange(event.target.value);
+          setIsOpen(true);
+        }}
+        onFocus={() => setIsOpen(true)}
+        placeholder="예: 덕소남, 서울5"
+        autoComplete="off"
+        className={cn(
+          "min-h-9 w-full rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-2 text-sm text-ink",
+          "placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
+        )}
+      />
+      {isOpen ? (
+        <ul
+          id="member-edit-church-suggestions"
+          role="listbox"
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[7px] border border-line bg-white shadow-lg"
+        >
+          {isLoading ? (
+            <li className="px-3 py-2.5 text-sm text-[#64748b]">
+              중앙 목록 불러오는 중...
+            </li>
+          ) : filtered.length === 0 ? (
+            <li className="px-3 py-2.5 text-sm text-[#64748b]">
+              검색 결과가 없습니다.
+            </li>
+          ) : (
+            filtered.map((church) => {
+              const selected = selectedId === church.id;
+              return (
+                <li key={church.id} role="option" aria-selected={selected}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[#eff6ff]",
+                      selected ? "bg-[#eff6ff]" : "bg-white",
+                    )}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      onSelect(church);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="text-sm font-semibold text-ink">
+                      {church.name}
+                    </span>
+                    <span className="text-xs text-[#64748b]">
+                      {church.region}
+                      {church.branchCode ? ` · ${church.branchCode}` : ""}
+                      {church.assigner ? ` · ${church.assigner}` : ""}
+                    </span>
+                  </button>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      ) : null}
+      <p className="mt-1 text-[11px] text-[#64748b]">
+        {selectedId
+          ? "목록에서 선택한 중앙이 저장됩니다."
+          : "키워드를 입력한 뒤 목록에서 중앙을 선택해 주세요."}
+      </p>
+    </div>
+  );
+}
+
 function formatPrivilege(role: string, adminRegion?: string | null) {
   if (role === "FACTORY" || role === "factory") {
     return "공장";
@@ -148,6 +294,12 @@ function MemberEditPanel({
   const [fullname, setFullname] = useState(member.fullname);
   const [phone, setPhone] = useState(member.phone);
   const [email, setEmail] = useState(member.email || "");
+  const [churchQuery, setChurchQuery] = useState(member.churchName);
+  const [churchId, setChurchId] = useState<number | null>(
+    member.churchId || null,
+  );
+  const [churches, setChurches] = useState<ChurchOption[]>([]);
+  const [isChurchesLoading, setIsChurchesLoading] = useState(true);
   const [privilege, setPrivilege] = useState<PrivilegeCode>(
     toPrivilegeCode(member.role, member.adminRegion),
   );
@@ -166,12 +318,41 @@ function MemberEditPanel({
     setFullname(member.fullname);
     setPhone(member.phone);
     setEmail(member.email || "");
+    setChurchQuery(member.churchName);
+    setChurchId(member.churchId || null);
     setPrivilege(toPrivilegeCode(member.role, member.adminRegion));
     setPassword("");
     setPasswordConfirm("");
     setError("");
     setSuccess("");
   }, [member]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsChurchesLoading(true);
+
+    void apiFetch("/api/churches")
+      .then(async (response) => {
+        const data = (await response.json()) as ChurchOption[] | { churches?: ChurchOption[] };
+        if (cancelled) return;
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data.churches)
+            ? data.churches
+            : [];
+        setChurches(list);
+      })
+      .catch(() => {
+        if (!cancelled) setChurches([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsChurchesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (member.role !== "MEMBER") {
@@ -233,6 +414,23 @@ function MemberEditPanel({
       }
     }
 
+    const trimmedChurch = churchQuery.trim();
+    let nextChurchId = churchId;
+    if (trimmedChurch && !nextChurchId) {
+      const matched = churches.find(
+        (church) =>
+          church.name.trim().toLowerCase() === trimmedChurch.toLowerCase(),
+      );
+      nextChurchId = matched?.id ?? null;
+    }
+    if (trimmedChurch && !nextChurchId) {
+      setError("중앙은 목록에서 선택해 주세요.");
+      return;
+    }
+    if (!trimmedChurch) {
+      nextChurchId = member.churchId || null;
+    }
+
     setIsSaving(true);
 
     try {
@@ -244,12 +442,14 @@ function MemberEditPanel({
         password?: string;
         role: "MEMBER" | "ADMIN" | "FACTORY";
         adminRegion: "JUNGBU" | "NAMBU" | "SEOBU" | null;
+        churchId?: number | null;
       } = {
         fullname: fullname.trim(),
         phone: formatPhoneInput(phone),
         email: email.trim() || null,
         role,
         adminRegion,
+        ...(nextChurchId ? { churchId: nextChurchId } : {}),
       };
 
       if (password) {
@@ -271,7 +471,8 @@ function MemberEditPanel({
           email: string | null;
           role: string;
           adminRegion?: string | null;
-          church?: { name?: string | null } | null;
+          churchId?: number | null;
+          church?: { id?: number | null; name?: string | null } | null;
         };
       };
 
@@ -289,7 +490,8 @@ function MemberEditPanel({
         role: data.user.role,
         adminRegion: data.user.adminRegion ?? "",
         accountSource: member.accountSource,
-        churchName: data.user.church?.name?.trim() || member.churchName,
+        churchId: data.user.church?.id ?? data.user.churchId ?? 0,
+        churchName: data.user.church?.name?.trim() || "",
       };
 
       if (password) {
@@ -395,6 +597,20 @@ function MemberEditPanel({
             onChange={(event) => setPhone(formatPhoneInput(event.target.value))}
             placeholder="010-1234-5678"
             required
+          />
+          <ChurchSearchField
+            churches={churches}
+            isLoading={isChurchesLoading}
+            query={churchQuery}
+            selectedId={churchId}
+            onQueryChange={(value) => {
+              setChurchQuery(value);
+              setChurchId(null);
+            }}
+            onSelect={(church) => {
+              setChurchQuery(church.name);
+              setChurchId(church.id);
+            }}
           />
           <div className="min-[640px]:col-span-2">
             <Input
@@ -538,7 +754,8 @@ export function MembersListMng() {
           role: string;
           adminRegion?: string | null;
           accountSource?: string | null;
-          church?: { name?: string | null } | null;
+          churchId?: number | null;
+          church?: { id?: number | null; name?: string | null } | null;
         }>;
       };
 
@@ -563,6 +780,7 @@ export function MembersListMng() {
             role: member.role,
             adminRegion: member.adminRegion ?? "",
             accountSource: member.accountSource ?? "SELF_SIGNUP",
+            churchId: member.church?.id ?? member.churchId ?? 0,
             churchName: member.church?.name?.trim() || "",
           })),
       );
