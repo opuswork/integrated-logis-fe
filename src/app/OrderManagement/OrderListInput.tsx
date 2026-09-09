@@ -39,6 +39,7 @@ import {
   parseChurchFromNotes,
   parseDeliveryCompanyFromNotes,
   parseDeliveryDateTimeFromNotes,
+  parseDeliveryRequestDateFromNotes,
   parseClockParts,
   formatClock,
   isValidTwelveHourClock,
@@ -270,6 +271,8 @@ interface OrderRow {
   productName: string;
   total: number;
   orderDate: string;
+  deliveryDate: string;
+  deliveryPlace: string;
   canConfirmReceive: boolean;
 }
 
@@ -5215,11 +5218,15 @@ function MemberMobileOrderCard({
             )}
           </p>
           <p className="mt-0.5 text-lg font-bold text-ink">
-            {order.name} · {order.type}
+            {order.name} · {order.type}{" "}
+            <span className="font-semibold text-[#64748b]">{order.status}</span>
           </p>
           <p className="mt-0.5 text-base text-[#64748b]">{order.productName}</p>
           <p className="mt-1 text-base text-[#64748b]">
-            {order.orderDate} · {order.status}
+            주문일:{order.orderDate} 납품일(배달일): {order.deliveryDate || "-"}
+          </p>
+          <p className="mt-0.5 text-base text-[#64748b]">
+            납품처: {order.deliveryPlace || "-"}
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-1.5">
@@ -5272,7 +5279,7 @@ function OrderStatusPanel({
       createdAt: string;
       notes?: string | null;
       items?: Array<{ productName: string; quantity: number }>;
-      shipment?: { fulfillmentType?: string | null } | null;
+      shipment?: { fulfillmentType?: string | null; carrier?: string | null } | null;
       greetingForms?: Array<{ id: number; linkedToOrder: boolean }>;
       user?: { fullname?: string | null } | null;
     }>,
@@ -5314,6 +5321,12 @@ function OrderStatusPanel({
         ),
         orderDate:
           orderDateFromNotes || formatMemberOrderDate(order.createdAt),
+        deliveryDate: parseDeliveryRequestDateFromNotes(order.notes),
+        deliveryPlace:
+          parseDeliveryCompanyFromNotes(order.notes) ||
+          parseParcelCompanyFromNotes(order.notes) ||
+          order.shipment?.carrier?.trim() ||
+          "",
         canConfirmReceive: false,
       };
     });
@@ -5336,7 +5349,7 @@ function OrderStatusPanel({
               createdAt: string;
               notes?: string | null;
               items?: Array<{ productName: string; quantity: number }>;
-              shipment?: { fulfillmentType?: string | null } | null;
+              shipment?: { fulfillmentType?: string | null; carrier?: string | null } | null;
               greetingForms?: Array<{ id: number; linkedToOrder: boolean }>;
               user?: { fullname?: string | null } | null;
             }>
@@ -5469,6 +5482,16 @@ function OrderStatusPanel({
       render: (row) => `${row.total}개`,
     },
     { key: "orderDate", header: "주문일자" },
+    {
+      key: "deliveryDate",
+      header: "납품일(배달일)",
+      render: (row) => row.deliveryDate || "-",
+    },
+    {
+      key: "deliveryPlace",
+      header: "납품처",
+      render: (row) => row.deliveryPlace || "-",
+    },
     {
       key: "action",
       header: "작업",
