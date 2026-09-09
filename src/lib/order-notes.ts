@@ -381,3 +381,83 @@ export function parseItemNoteFromNotes(
 
   return "";
 }
+
+export type DeliveryAmPm = "오전" | "오후";
+
+export function parseClockParts(
+  value: string,
+): { hour: number; minute: number } | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || minute > 59) {
+    return null;
+  }
+  return { hour, minute };
+}
+
+export function formatClock(hour: number, minute: number) {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+export function isValidTwelveHourClock(value: string) {
+  const parts = parseClockParts(value);
+  return Boolean(parts && parts.hour >= 1 && parts.hour <= 12);
+}
+
+/** 24시간 HH:MM → 12시간 + 오전/오후 */
+export function fromTwentyFourHour(hhmm: string): {
+  ampm: DeliveryAmPm;
+  time: string;
+} | null {
+  const parts = parseClockParts(hhmm);
+  if (!parts || parts.hour > 23) {
+    return null;
+  }
+  const ampm: DeliveryAmPm = parts.hour < 12 ? "오전" : "오후";
+  const hour12 = parts.hour % 12 === 0 ? 12 : parts.hour % 12;
+  return { ampm, time: formatClock(hour12, parts.minute) };
+}
+
+/** 12시간 + 오전/오후 → 24시간 HH:MM */
+export function toTwentyFourHour(ampm: DeliveryAmPm, hhmm: string) {
+  const parts = parseClockParts(hhmm);
+  if (!parts || parts.hour < 1 || parts.hour > 12) {
+    return null;
+  }
+  let hour = parts.hour;
+  if (ampm === "오전") {
+    if (hour === 12) hour = 0;
+  } else if (hour !== 12) {
+    hour += 12;
+  }
+  return formatClock(hour, parts.minute);
+}
+
+/** 저장된 배달 시각을 12시간 칸에 맞게 정리 */
+export function normalizeDeliveryClock(
+  ampm: string,
+  time: string,
+): { ampm: DeliveryAmPm | ""; time: string } {
+  const parts = parseClockParts(time);
+  if (!parts) {
+    return {
+      ampm: ampm === "오전" || ampm === "오후" ? ampm : "",
+      time: "",
+    };
+  }
+  if (parts.hour > 12) {
+    const converted = fromTwentyFourHour(time);
+    return converted ?? { ampm: "", time: "" };
+  }
+  if (parts.hour === 0) {
+    return { ampm: "오전", time: formatClock(12, parts.minute) };
+  }
+  return {
+    ampm: ampm === "오전" || ampm === "오후" ? ampm : "",
+    time: formatClock(parts.hour, parts.minute),
+  };
+}
