@@ -96,12 +96,24 @@ function isGwanjangMemberType(value?: string | null) {
   return trimmed === "GWANJANG" || trimmed === "관장";
 }
 
-function formatPrintOrdererName(name: string, memberType?: string | null) {
+function formatPrintOrdererName(
+  name: string,
+  memberType?: string | null,
+  accountName?: string | null,
+) {
   const trimmed = name.trim() || "-";
   if (trimmed === "-") {
     return trimmed;
   }
-  if (isGwanjangMemberType(memberType) && !trimmed.endsWith("관")) {
+  const account = accountName?.trim() ?? "";
+  const nameStem = trimmed.endsWith("관") ? trimmed.slice(0, -1) : trimmed;
+  const accountStem = account.endsWith("관") ? account.slice(0, -1) : account;
+  const isSelfOrder = !account || nameStem === accountStem;
+  if (
+    isSelfOrder &&
+    isGwanjangMemberType(memberType) &&
+    !trimmed.endsWith("관")
+  ) {
     return `${trimmed}관`;
   }
   return trimmed;
@@ -269,6 +281,7 @@ function mapOrderToPrintPages(
   const managerName = formatPrintOrdererName(
     parseOrdererFromNotes(notes) || order.user?.fullname || "-",
     order.user?.memberType,
+    order.user?.fullname,
   );
   const companyName =
     (type === "배달"
