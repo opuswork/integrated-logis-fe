@@ -30,7 +30,25 @@ type MemberRow = {
   accountSource: string;
   churchId: number;
   churchName: string;
+  memberType: string;
 };
+
+const MEMBER_TYPE_LABEL: Record<string, string> = {
+  GWANJANG: "관장",
+  GENERAL: "일반",
+  CHONGMU: "총무",
+  SAJANG: "사장",
+  BUSAJANG: "부사장",
+  SANGMU: "상무",
+};
+
+function formatMemberType(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return MEMBER_TYPE_LABEL[trimmed] ?? trimmed;
+}
 
 type ChurchOption = {
   id: number;
@@ -471,6 +489,7 @@ function MemberEditPanel({
           email: string | null;
           role: string;
           adminRegion?: string | null;
+          memberType?: string | null;
           churchId?: number | null;
           church?: { id?: number | null; name?: string | null } | null;
         };
@@ -492,6 +511,7 @@ function MemberEditPanel({
         accountSource: member.accountSource,
         churchId: data.user.church?.id ?? data.user.churchId ?? 0,
         churchName: data.user.church?.name?.trim() || "",
+        memberType: data.user.memberType ?? member.memberType,
       };
 
       if (password) {
@@ -710,7 +730,11 @@ function MobileMemberCard({
             <AccountSourceBadge accountSource={member.accountSource} />
           </p>
           <p className="mt-0.5 text-xs text-[#64748b]">{member.username}</p>
-          <p className="mt-1 text-xs text-[#64748b]">{member.phone}</p>
+          <p className="mt-1 text-xs text-[#64748b]">
+            {formatMemberType(member.memberType)
+              ? `${formatMemberType(member.memberType)} · ${member.phone}`
+              : member.phone}
+          </p>
           <p className="mt-0.5 text-xs text-[#64748b]">
             {member.email || "이메일 없음"} ·{" "}
             {formatPrivilege(member.role, member.adminRegion)}
@@ -754,6 +778,7 @@ export function MembersListMng() {
           role: string;
           adminRegion?: string | null;
           accountSource?: string | null;
+          memberType?: string | null;
           churchId?: number | null;
           church?: { id?: number | null; name?: string | null } | null;
         }>;
@@ -782,6 +807,7 @@ export function MembersListMng() {
             accountSource: member.accountSource ?? "SELF_SIGNUP",
             churchId: member.church?.id ?? member.churchId ?? 0,
             churchName: member.church?.name?.trim() || "",
+            memberType: member.memberType ?? "",
           })),
       );
     } catch {
@@ -827,6 +853,11 @@ export function MembersListMng() {
           <AccountSourceBadge accountSource={row.accountSource} />
         </>
       ),
+    },
+    {
+      key: "memberType",
+      header: "직분",
+      render: (row) => formatMemberType(row.memberType) || "-",
     },
     { key: "phone", header: "연락처" },
     {
