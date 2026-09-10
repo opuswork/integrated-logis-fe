@@ -275,6 +275,20 @@ interface OrderRow {
   deliveryDate: string;
   deliveryPlace: string;
   canConfirmReceive: boolean;
+  readyForShipment: boolean;
+}
+
+function isCalendarVisibleOrder(order: {
+  statusCode: string;
+  readyForShipment: boolean;
+}) {
+  if (order.statusCode === "CANCELLED") {
+    return false;
+  }
+  if (order.readyForShipment) {
+    return true;
+  }
+  return order.statusCode !== "PLACED";
 }
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
@@ -5377,6 +5391,9 @@ function OrderStatusPanel({
   const deliveryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const order of orders) {
+      if (!isCalendarVisibleOrder(order)) {
+        continue;
+      }
       const key = order.deliveryDate.slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) {
         continue;
@@ -5391,7 +5408,9 @@ function OrderStatusPanel({
       return [];
     }
     return orders.filter(
-      (order) => order.deliveryDate.slice(0, 10) === calendarDateIso,
+      (order) =>
+        isCalendarVisibleOrder(order) &&
+        order.deliveryDate.slice(0, 10) === calendarDateIso,
     );
   }, [orders, calendarDateIso]);
 
@@ -5406,6 +5425,7 @@ function OrderStatusPanel({
       shipment?: { fulfillmentType?: string | null; carrier?: string | null } | null;
       greetingForms?: Array<{ id: number; linkedToOrder: boolean }>;
       user?: { fullname?: string | null } | null;
+      readyForShipment?: boolean;
     }>,
   ): OrderRow[] =>
     data.map((order) => {
@@ -5452,6 +5472,7 @@ function OrderStatusPanel({
           order.shipment?.carrier?.trim() ||
           "",
         canConfirmReceive: false,
+        readyForShipment: order.readyForShipment === true,
       };
     });
 
@@ -5476,6 +5497,7 @@ function OrderStatusPanel({
               shipment?: { fulfillmentType?: string | null; carrier?: string | null } | null;
               greetingForms?: Array<{ id: number; linkedToOrder: boolean }>;
               user?: { fullname?: string | null } | null;
+              readyForShipment?: boolean;
             }>
           | { message?: string };
 
