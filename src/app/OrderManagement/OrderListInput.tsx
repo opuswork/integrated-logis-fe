@@ -65,7 +65,7 @@ import {
   PARCEL_CONTACT_MODE_LABEL,
   type ParcelRecipientContactMode,
 } from "@/lib/order-notes";
-import { canEditOrderStatus } from "@/lib/order-delivery";
+import { canEditOrderStatus, memberFacingStatusLabel } from "@/lib/order-delivery";
 import { usePwaInstalled } from "@/lib/pwa-install";
 import { cn } from "@/lib/utils";
 
@@ -275,20 +275,6 @@ interface OrderRow {
   deliveryDate: string;
   deliveryPlace: string;
   canConfirmReceive: boolean;
-  readyForShipment: boolean;
-}
-
-function isCalendarVisibleOrder(order: {
-  statusCode: string;
-  readyForShipment: boolean;
-}) {
-  if (order.statusCode === "CANCELLED") {
-    return false;
-  }
-  if (order.readyForShipment) {
-    return true;
-  }
-  return order.statusCode !== "PLACED";
 }
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
@@ -5391,9 +5377,6 @@ function OrderStatusPanel({
   const deliveryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const order of orders) {
-      if (!isCalendarVisibleOrder(order)) {
-        continue;
-      }
       const key = order.deliveryDate.slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) {
         continue;
@@ -5408,9 +5391,7 @@ function OrderStatusPanel({
       return [];
     }
     return orders.filter(
-      (order) =>
-        isCalendarVisibleOrder(order) &&
-        order.deliveryDate.slice(0, 10) === calendarDateIso,
+      (order) => order.deliveryDate.slice(0, 10) === calendarDateIso,
     );
   }, [orders, calendarDateIso]);
 
@@ -5426,6 +5407,7 @@ function OrderStatusPanel({
       greetingForms?: Array<{ id: number; linkedToOrder: boolean }>;
       user?: { fullname?: string | null } | null;
       readyForShipment?: boolean;
+      orderConfirmedAt?: string | null;
     }>,
   ): OrderRow[] =>
     data.map((order) => {
@@ -5456,7 +5438,10 @@ function OrderStatusPanel({
           parseOrdererFromNotes(order.notes) || order.user?.fullname || "-",
         type,
         greeting: greetingLabel,
-        status: ORDER_STATUS_LABEL[order.status] ?? order.status,
+        status:
+          order.orderConfirmedAt || order.status !== "PLACED"
+            ? memberFacingStatusLabel(order.status)
+            : "접수",
         statusCode: order.status,
         productName: buildMemberOrderSummary(order.items),
         total: (order.items ?? []).reduce(
@@ -5472,7 +5457,6 @@ function OrderStatusPanel({
           order.shipment?.carrier?.trim() ||
           "",
         canConfirmReceive: false,
-        readyForShipment: order.readyForShipment === true,
       };
     });
 
@@ -5498,6 +5482,7 @@ function OrderStatusPanel({
               greetingForms?: Array<{ id: number; linkedToOrder: boolean }>;
               user?: { fullname?: string | null } | null;
               readyForShipment?: boolean;
+              orderConfirmedAt?: string | null;
             }>
           | { message?: string };
 
