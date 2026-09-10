@@ -2769,6 +2769,7 @@ function ProductOrderPanel({
   onHydratedGreetings,
   onApplyGreetingToAll,
   onRemoveGreeting,
+  presetShipDate = null,
 }: {
   onGreetingClick: (context: {
     productNames: string[];
@@ -2806,8 +2807,11 @@ function ProductOrderPanel({
   ) => void | Promise<void>;
   /** 행 인사장 로컬 제거(서버 DELETE 없음) */
   onRemoveGreeting?: (productName: string) => void;
+  /** 달력에서 고른 납품일. 있으면 배달일/택배발송일에 넣고 수정 불가. */
+  presetShipDate?: string | null;
 }) {
   const isEditMode = Boolean(editOrderNumber);
+  const isMemberNewOrder = !blankCustomerFields && !isEditMode;
   const [editOrderId, setEditOrderId] = useState<number | null>(null);
   const [editOrderStatus, setEditOrderStatus] = useState<string | null>(null);
   const [isHydrating, setIsHydrating] = useState(isEditMode);
@@ -2856,10 +2860,10 @@ function ProductOrderPanel({
   }, []);
   const [deliveryCompanyName, setDeliveryCompanyName] = useState("");
   const [parcelCompanyName, setParcelCompanyName] = useState("");
-  const [deliveryDate, setDeliveryDate] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState(presetShipDate ?? "");
   const [deliveryAmPm, setDeliveryAmPm] = useState<"" | "오전" | "오후">("");
   const [deliveryTime, setDeliveryTime] = useState("");
-  const [parcelShipDate, setParcelShipDate] = useState("");
+  const [parcelShipDate, setParcelShipDate] = useState(presetShipDate ?? "");
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
   const [recipientAddress, setRecipientAddress] = useState("");
@@ -2881,6 +2885,10 @@ function ProductOrderPanel({
   const [branchStore, setBranchStore] = useState<BranchStoreId | null>(null);
   const [extraNote, setExtraNote] = useState("");
   const [isDirector, setIsDirector] = useState<boolean>(false);
+  const [proxyOrder, setProxyOrder] = useState(false);
+  const [loggedInMemberType, setLoggedInMemberType] = useState("");
+  const selfOrdererRef = useRef({ name: "", phone: "" });
+  const proxyOrderRef = useRef(false);
   /** 관리자 대리작성에서 자동완성으로 고른 기존 회원. null이면 신규 주문자 */
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [viewingGreetingProduct, setViewingGreetingProduct] = useState<
@@ -2905,6 +2913,15 @@ function ProductOrderPanel({
   const isWideProductList = useMinWidth(500);
   const isDelivery = orderType === "delivery";
   const memberFieldsReadOnly = !blankCustomerFields;
+  const showDirectorCheckbox = !isMemberNewOrder;
+  const showProxyToggle =
+    isMemberNewOrder && isGwanjangMemberType(loggedInMemberType);
+  const showOrdererNamePhone = !isMemberNewOrder || proxyOrder;
+  const showOrderDateAndChurch = !isMemberNewOrder;
+  const shipDateLocked = Boolean(presetShipDate);
+  const ordererFieldsReadOnly = isMemberNewOrder
+    ? !proxyOrder
+    : memberFieldsReadOnly;
   /** 관리자 신규작성에서만 주문자 자동완성 (수정 모드는 소유자 변경 방지) */
   const ordererAutocomplete = blankCustomerFields && !isEditMode;
   const displayOrdererName =
@@ -2992,10 +3009,13 @@ function ProductOrderPanel({
     // Admin proxy / edit hydrate: don't overwrite customer fields from session.
     if (!isEditMode && auth && !blankCustomerFields) {
       if (auth.name) {
+        selfOrdererRef.current.name = auth.name;
         setOrdererName(auth.name);
       }
       if (auth.phone) {
-        setOrdererPhone(formatPhoneInput(auth.phone));
+        const phone = formatPhoneInput(auth.phone);
+        selfOrdererRef.current.phone = phone;
+        setOrdererPhone(phone);
       }
     }
 
@@ -3027,6 +3047,7 @@ function ProductOrderPanel({
               id?: number;
               name?: string;
             } | null;
+            memberType?: string | null;
           };
         };
 
@@ -3034,11 +3055,19 @@ function ProductOrderPanel({
           return;
         }
 
+        setLoggedInMemberType(data.user.memberType ?? "");
         if (data.user.name) {
-          setOrdererName(data.user.name);
+          selfOrdererRef.current.name = data.user.name;
+          if (!proxyOrderRef.current) {
+            setOrdererName(data.user.name);
+          }
         }
         if (data.user.phone) {
-          setOrdererPhone(formatPhoneInput(data.user.phone));
+          const phone = formatPhoneInput(data.user.phone);
+          selfOrdererRef.current.phone = phone;
+          if (!proxyOrderRef.current) {
+            setOrdererPhone(phone);
+          }
         }
         if (data.user.church?.id) {
           setChurchId(data.user.church.id);
@@ -3055,6 +3084,14 @@ function ProductOrderPanel({
       cancelled = true;
     };
   }, [blankCustomerFields, isEditMode, reloadChurches]);
+
+  useEffect(() => {
+    if (!presetShipDate) {
+      return;
+    }
+    setDeliveryDate(presetShipDate);
+    setParcelShipDate(presetShipDate);
+  }, [presetShipDate]);
 
   useEffect(() => {
     if (!editOrderNumber) {
@@ -4124,7 +4161,7 @@ function ProductOrderPanel({
   };
 
   const handleOrdererNameInput = (next: string) => {
-    if (memberFieldsReadOnly) return;
+    if (ordererFieldsReadOnly) return;
     if (isDirector === true && next.endsWith("관")) {
       setOrdererName(next.slice(0, -1));
     } else {
@@ -4184,114 +4221,163 @@ function ProductOrderPanel({
           </p>
         ) : null}
 
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <label className={omLabelClass}>주문자 성명</label>
-            {ordererAutocomplete ? (
-              <OrdererNameField
-                value={isDirector === true ? displayOrdererName : ordererName}
-                onChange={(next) => {
-                  setSelectedMemberId(null);
-                  handleOrdererNameInput(next);
-                }}
-                onSelectMember={handleSelectOrdererMember}
-                inputClassName={cn(omInputClass, "mb-0")}
-              />
-            ) : (
-              <input
-                type="text"
-                value={
-                  memberFieldsReadOnly
-                    ? displayOrdererName
-                    : isDirector === true
-                      ? displayOrdererName
-                      : ordererName
+        {showProxyToggle ? (
+          <label className="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold text-[#1A202C]">
+            <input
+              type="checkbox"
+              checked={proxyOrder}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                proxyOrderRef.current = checked;
+                setProxyOrder(checked);
+                setIsDirector(false);
+                if (checked) {
+                  selfOrdererRef.current = {
+                    name: ordererName,
+                    phone: ordererPhone,
+                  };
+                  setOrdererName("");
+                  setOrdererPhone("");
+                } else {
+                  setOrdererName(selfOrdererRef.current.name);
+                  setOrdererPhone(selfOrdererRef.current.phone);
                 }
-                onChange={(event) => handleOrdererNameInput(event.target.value)}
-                readOnly={memberFieldsReadOnly}
-                required
-                placeholder={blankCustomerFields ? "고객 성명" : "주문자 성명"}
-                className={cn(omInputClass, "mb-0", memberFieldsReadOnly && "bg-[#EDF2F7]")}
-              />
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 pt-6 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
-            <label className="inline-flex cursor-pointer items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={isDirector === true}
-                onChange={(e) => setIsDirector(e.target.checked)}
-                className="size-4 accent-[#3182CE]"
-              />
-              관장님
-            </label>
-          </div>
-        </div>
-
-        {ordererAutocomplete ? (
-          <p
-            className={cn(
-              "mb-3 -mt-1 text-[11px]",
-              selectedMemberId ? "text-[#2F855A]" : "text-[#64748B]",
-            )}
-          >
-            {selectedMemberId
-              ? "등록된 회원과 연결되었습니다. 주문이 해당 회원의 '내 주문현황'에 표시됩니다."
-              : "목록에 없는 이름이면 주문자 계정이 자동 생성됩니다. 아이디와 초기 비밀번호는 모두 연락처 숫자이므로 연락처를 정확히 입력해 주세요."}
-          </p>
+              }}
+              className="size-4 accent-[#3182CE]"
+            />
+            대신 주문서 넣기
+          </label>
         ) : null}
 
-        <label className={omLabelClass}>주문자 연락처</label>
-        <input
-          type="text"
-          inputMode="numeric"
-          maxLength={13}
-          value={ordererPhone}
-          onChange={(event) => {
-            if (memberFieldsReadOnly) return;
-            setOrdererPhone(formatPhoneInput(event.target.value));
-          }}
-          readOnly={memberFieldsReadOnly}
-          required
-          placeholder="010-1234-5678"
-          className={cn(omInputClass, memberFieldsReadOnly && "bg-[#EDF2F7]")}
-        />
+        {showOrdererNamePhone ? (
+          <>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <label className={omLabelClass}>주문자 성명</label>
+                {ordererAutocomplete ? (
+                  <OrdererNameField
+                    value={isDirector === true ? displayOrdererName : ordererName}
+                    onChange={(next) => {
+                      setSelectedMemberId(null);
+                      handleOrdererNameInput(next);
+                    }}
+                    onSelectMember={handleSelectOrdererMember}
+                    inputClassName={cn(omInputClass, "mb-0")}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={
+                      ordererFieldsReadOnly
+                        ? displayOrdererName
+                        : isDirector === true
+                          ? displayOrdererName
+                          : ordererName
+                    }
+                    onChange={(event) => handleOrdererNameInput(event.target.value)}
+                    readOnly={ordererFieldsReadOnly}
+                    required
+                    placeholder={
+                      proxyOrder
+                        ? "교인 성명"
+                        : blankCustomerFields
+                          ? "고객 성명"
+                          : "주문자 성명"
+                    }
+                    className={cn(
+                      omInputClass,
+                      "mb-0",
+                      ordererFieldsReadOnly && "bg-[#EDF2F7]",
+                    )}
+                  />
+                )}
+              </div>
+              {showDirectorCheckbox ? (
+                <div className="flex items-center gap-1.5 pt-6 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={isDirector === true}
+                      onChange={(e) => setIsDirector(e.target.checked)}
+                      className="size-4 accent-[#3182CE]"
+                    />
+                    관장님
+                  </label>
+                </div>
+              ) : null}
+            </div>
 
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className={omLabelClass}>주문일자</label>
-            <div
+            {ordererAutocomplete ? (
+              <p
+                className={cn(
+                  "mb-3 -mt-1 text-[11px]",
+                  selectedMemberId ? "text-[#2F855A]" : "text-[#64748B]",
+                )}
+              >
+                {selectedMemberId
+                  ? "등록된 회원과 연결되었습니다. 주문이 해당 회원의 '내 주문현황'에 표시됩니다."
+                  : "목록에 없는 이름이면 주문자 계정이 자동 생성됩니다. 아이디와 초기 비밀번호는 모두 연락처 숫자이므로 연락처를 정확히 입력해 주세요."}
+              </p>
+            ) : null}
+
+            <label className={omLabelClass}>주문자 연락처</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={13}
+              value={ordererPhone}
+              onChange={(event) => {
+                if (ordererFieldsReadOnly) return;
+                setOrdererPhone(formatPhoneInput(event.target.value));
+              }}
+              readOnly={ordererFieldsReadOnly}
+              required
+              placeholder="010-1234-5678"
               className={cn(
                 omInputClass,
-                "pointer-events-none flex items-center bg-[#EDF2F7] tabular-nums",
+                ordererFieldsReadOnly && "bg-[#EDF2F7]",
               )}
-              aria-readonly
-            >
-              {formatMonthDay(orderDate)}
+            />
+          </>
+        ) : null}
+
+        {showOrderDateAndChurch ? (
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className={omLabelClass}>주문일자</label>
+              <div
+                className={cn(
+                  omInputClass,
+                  "pointer-events-none flex items-center bg-[#EDF2F7] tabular-nums",
+                )}
+                aria-readonly
+              >
+                {formatMonthDay(orderDate)}
+              </div>
+            </div>
+            <div className="flex-1">
+              <ChurchSearchField
+                churches={churches}
+                isLoading={isChurchesLoading}
+                loadError={churchesLoadError}
+                onRetryLoad={() => {
+                  void reloadChurches();
+                }}
+                query={churchQuery}
+                selectedId={churchId}
+                readOnly={memberFieldsReadOnly}
+                onQueryChange={(value) => {
+                  setChurchQuery(value);
+                  setChurchId(null);
+                }}
+                onSelect={(church) => {
+                  setChurchQuery(church.name);
+                  setChurchId(church.id);
+                }}
+              />
             </div>
           </div>
-          <div className="flex-1">
-            <ChurchSearchField
-              churches={churches}
-              isLoading={isChurchesLoading}
-              loadError={churchesLoadError}
-              onRetryLoad={() => {
-                void reloadChurches();
-              }}
-              query={churchQuery}
-              selectedId={churchId}
-              readOnly={memberFieldsReadOnly}
-              onQueryChange={(value) => {
-                setChurchQuery(value);
-                setChurchId(null);
-              }}
-              onSelect={(church) => {
-                setChurchQuery(church.name);
-                setChurchId(church.id);
-              }}
-            />
-          </div>
-        </div>
+        ) : null}
       </div>
 
       {/* Delivery / parcel */}
@@ -4317,6 +4403,7 @@ function ProductOrderPanel({
             minIso={todayDateValue()}
             placeholder="m/d"
             title="배달일"
+            disabled={shipDateLocked}
             className={omDatePickerClass}
             onChangeIso={(iso) => {
               if (iso < todayDateValue()) return;
@@ -4444,6 +4531,7 @@ function ProductOrderPanel({
             minIso={todayDateValue()}
             placeholder="m/d"
             title="택배발송일"
+            disabled={shipDateLocked}
             className={omDatePickerClass}
             onChangeIso={(iso) => {
               if (iso < todayDateValue()) return;
@@ -5270,9 +5358,11 @@ function MemberMobileOrderCard({
 function OrderStatusPanel({
   reloadToken = 0,
   onEditOrder,
+  onCreateOrderForDate,
 }: {
   reloadToken?: number;
   onEditOrder?: (orderNumber: string) => void;
+  onCreateOrderForDate?: (iso: string) => void;
 }) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -5593,7 +5683,13 @@ function OrderStatusPanel({
                 <MemberOrderCalendar
                   counts={deliveryCounts}
                   selectedIso={calendarDateIso}
-                  onSelectIso={setCalendarDateIso}
+                  onSelectIso={(iso) => {
+                    setCalendarDateIso(iso);
+                    const empty = (deliveryCounts[iso] ?? 0) === 0;
+                    if (empty && iso >= todayDateValue()) {
+                      onCreateOrderForDate?.(iso);
+                    }
+                  }}
                 />
               </Panel>
               {calendarDateIso ? (
@@ -5727,6 +5823,7 @@ export function OrderListInput({
   const [editingOrderNumber, setEditingOrderNumber] = useState<string | null>(
     editOrderNumber,
   );
+  const [presetShipDate, setPresetShipDate] = useState<string | null>(null);
   const preserveGreetingOnOrderNavRef = useRef(false);
   const [memberProfile, setMemberProfile] = useState<{
     name: string;
@@ -5814,6 +5911,7 @@ export function OrderListInput({
     clearLinkedGreeting();
     setOrderFormDirty(false);
     setEditingOrderNumber(null);
+    setPresetShipDate(null);
     setOrderFormKey((key) => key + 1);
     setActiveMenu(menu);
     setIsMobileMenuOpen(false);
@@ -5833,6 +5931,27 @@ export function OrderListInput({
     clearLinkedGreeting();
     setOrderFormDirty(false);
     setEditingOrderNumber(orderNumber);
+    setPresetShipDate(null);
+    setOrderFormKey((key) => key + 1);
+    setActiveMenu("새 주문서 작성");
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleCreateOrderForDate = (iso: string) => {
+    if (
+      (orderFormDirty ||
+        Object.keys(savedGreetingsByProduct).length > 0 ||
+        hasUnsavedGreeting) &&
+      !window.confirm(
+        "작성 중인 내용이 있습니다. 새 주문서로 이동하시겠습니까?",
+      )
+    ) {
+      return;
+    }
+    clearLinkedGreeting();
+    setOrderFormDirty(false);
+    setEditingOrderNumber(null);
+    setPresetShipDate(iso);
     setOrderFormKey((key) => key + 1);
     setActiveMenu("새 주문서 작성");
     setIsMobileMenuOpen(false);
@@ -5843,6 +5962,7 @@ export function OrderListInput({
     setOrderFormDirty(false);
     const wasEditing = Boolean(editingOrderNumber);
     setEditingOrderNumber(null);
+    setPresetShipDate(null);
     setOrderFormKey((key) => key + 1);
     if (embedded) {
       if (wasEditing) {
@@ -5894,6 +6014,7 @@ export function OrderListInput({
       } else if (activeMenu !== "새 주문서 작성") {
         clearLinkedGreeting();
         setEditingOrderNumber(null);
+        setPresetShipDate(null);
         setOrderFormDirty(false);
         setOrderFormKey((key) => key + 1);
       }
@@ -5937,6 +6058,7 @@ export function OrderListInput({
                 key={orderFormKey}
                 blankCustomerFields={embedded}
                 openStockOnly={!embedded}
+                presetShipDate={presetShipDate}
                 hasUnsavedGreeting={hasUnsavedGreeting}
                 savedGreetingsByProduct={savedGreetingsByProduct}
                 editOrderNumber={editingOrderNumber}
@@ -6062,6 +6184,7 @@ export function OrderListInput({
           <OrderStatusPanel
             reloadToken={ordersReloadToken}
             onEditOrder={handleStartEditOrder}
+            onCreateOrderForDate={handleCreateOrderForDate}
           />
         );
       case "거래처관리":
