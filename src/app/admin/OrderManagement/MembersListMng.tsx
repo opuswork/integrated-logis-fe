@@ -42,6 +42,27 @@ const MEMBER_TYPE_LABEL: Record<string, string> = {
   SANGMU: "상무",
 };
 
+const MEMBER_TYPE_OPTIONS = [
+  { value: "GWANJANG", label: "관장" },
+  { value: "GENERAL", label: "일반" },
+  { value: "CHONGMU", label: "총무" },
+  { value: "SAJANG", label: "사장" },
+  { value: "BUSAJANG", label: "부사장" },
+  { value: "SANGMU", label: "상무" },
+] as const;
+
+function toMemberTypeCode(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "GWANJANG";
+  }
+  if (trimmed in MEMBER_TYPE_LABEL) {
+    return trimmed;
+  }
+  const fromLabel = MEMBER_TYPE_OPTIONS.find((option) => option.label === trimmed);
+  return fromLabel?.value ?? "GWANJANG";
+}
+
 function formatMemberType(value: string) {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -321,6 +342,7 @@ function MemberEditPanel({
   const [privilege, setPrivilege] = useState<PrivilegeCode>(
     toPrivilegeCode(member.role, member.adminRegion),
   );
+  const [memberType, setMemberType] = useState(toMemberTypeCode(member.memberType));
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -339,6 +361,7 @@ function MemberEditPanel({
     setChurchQuery(member.churchName);
     setChurchId(member.churchId || null);
     setPrivilege(toPrivilegeCode(member.role, member.adminRegion));
+    setMemberType(toMemberTypeCode(member.memberType));
     setPassword("");
     setPasswordConfirm("");
     setError("");
@@ -461,12 +484,14 @@ function MemberEditPanel({
         role: "MEMBER" | "ADMIN" | "FACTORY";
         adminRegion: "JUNGBU" | "NAMBU" | "SEOBU" | null;
         churchId?: number | null;
+        memberType: string;
       } = {
         fullname: fullname.trim(),
         phone: formatPhoneInput(phone),
         email: email.trim() || null,
         role,
         adminRegion,
+        memberType,
         ...(nextChurchId ? { churchId: nextChurchId } : {}),
       };
 
@@ -511,7 +536,7 @@ function MemberEditPanel({
         accountSource: member.accountSource,
         churchId: data.user.church?.id ?? data.user.churchId ?? 0,
         churchName: data.user.church?.name?.trim() || "",
-        memberType: data.user.memberType ?? member.memberType,
+        memberType: data.user.memberType ?? memberType,
       };
 
       if (password) {
@@ -610,6 +635,12 @@ function MemberEditPanel({
             value={fullname}
             onChange={(event) => setFullname(event.target.value)}
             required
+          />
+          <Dropdown
+            label="직분"
+            value={memberType}
+            options={[...MEMBER_TYPE_OPTIONS]}
+            onChange={setMemberType}
           />
           <Input
             label="연락처"
