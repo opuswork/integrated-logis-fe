@@ -86,9 +86,26 @@ type ApiOrder = {
   user?: {
     fullname?: string | null;
     phone?: string | null;
+    memberType?: string | null;
     church?: { name?: string | null; region?: string | null } | null;
   } | null;
 };
+
+function isGwanjangMemberType(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed === "GWANJANG" || trimmed === "관장";
+}
+
+function formatPrintOrdererName(name: string, memberType?: string | null) {
+  const trimmed = name.trim() || "-";
+  if (trimmed === "-") {
+    return trimmed;
+  }
+  if (isGwanjangMemberType(memberType) && !trimmed.endsWith("관")) {
+    return `${trimmed}관`;
+  }
+  return trimmed;
+}
 
 function DeliveryWorkflowPanel({
   order,
@@ -249,8 +266,10 @@ function mapOrderToPrintPages(
     order.user?.church?.name ||
     order.user?.church?.region ||
     "";
-  const managerName =
-    parseOrdererFromNotes(notes) || order.user?.fullname || "-";
+  const managerName = formatPrintOrdererName(
+    parseOrdererFromNotes(notes) || order.user?.fullname || "-",
+    order.user?.memberType,
+  );
   const companyName =
     (type === "배달"
       ? parseDeliveryCompanyFromNotes(notes)

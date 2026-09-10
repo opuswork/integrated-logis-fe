@@ -2100,9 +2100,15 @@ type MemberSuggest = {
   id: number;
   fullname: string;
   phone: string;
+  memberType?: string | null;
   churchId: number | null;
   churchName: string;
 };
+
+function isGwanjangMemberType(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed === "GWANJANG" || trimmed === "관장";
+}
 
 /** 관리자 대리작성 전용: 이름 일부로 기존 회원을 찾아 연락처·중앙까지 채웁니다. */
 function OrdererNameField({
@@ -4128,9 +4134,10 @@ function ProductOrderPanel({
 
   const handleSelectOrdererMember = (member: MemberSuggest) => {
     const trimmed = member.fullname.trim();
-    const directorName = trimmed.endsWith("관");
+    const directorName =
+      isGwanjangMemberType(member.memberType) || trimmed.endsWith("관");
     setIsDirector(directorName);
-    setOrdererName(directorName ? trimmed.slice(0, -1) : trimmed);
+    setOrdererName(directorName && trimmed.endsWith("관") ? trimmed.slice(0, -1) : trimmed);
     setOrdererPhone(formatPhoneInput(member.phone));
     setChurchQuery(member.churchName);
     setChurchId(member.churchId);
