@@ -70,9 +70,8 @@ import { usePwaInstalled } from "@/lib/pwa-install";
 import { cn } from "@/lib/utils";
 
 const MEMBER_NAV = [
-  "새 주문서 작성",
-  "인사장관리",
   "내 주문 현황",
+  "인사장관리",
   "거래처관리",
   "바로가기추가",
 ] as const;
@@ -207,7 +206,7 @@ function splitSavedEmail(email: string): {
   return { local, domainSelect: EMAIL_DOMAIN_CUSTOM, domainCustom: domain };
 }
 
-type MemberNav = (typeof MEMBER_NAV)[number];
+type MemberNav = (typeof MEMBER_NAV)[number] | "새 주문서 작성";
 
 interface ProductLineItem {
   [key: string]: string | number | boolean;
