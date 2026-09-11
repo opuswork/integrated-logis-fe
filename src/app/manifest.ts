@@ -3,15 +3,15 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "물류관리시스템",
-    short_name: "물류관리",
-    description: "시온식품 개인회원 주문·인사장 앱",
+    name: "B2B통합 물류·주문 관리 시스템",
+    short_name: "B2B물류",
+    description: "B2B통합 물류·주문 관리 시스템",
     start_url: "/login",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#1f2937",
-    theme_color: "#1f2937",
+    background_color: "#1a365d",
+    theme_color: "#492484",
     lang: "ko",
     icons: [
       {

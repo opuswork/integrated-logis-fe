@@ -20,9 +20,9 @@ const notoSansKr = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "물류관리시스템 - 시온식품(주)",
-  description: "시온식품주식회사 개인회원 물류 관리 앱",
-  applicationName: "물류관리시스템",
+  title: "B2B통합 물류·주문 관리 시스템",
+  description: "B2B통합 물류·주문 관리 시스템",
+  applicationName: "B2B통합 물류·주문 관리 시스템",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "물류관리시스템",
+    title: "B2B통합 물류·주문 관리 시스템",
     statusBarStyle: "default",
   },
   formatDetection: {
@@ -45,7 +45,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#1f2937",
+  themeColor: "#492484",
 };
 
 export default function RootLayout({
