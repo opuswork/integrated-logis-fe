@@ -94,6 +94,14 @@
   color: #cbd5e1;
 }
 
+.member-order-calendar-sunday {
+  color: #94a3b8;
+}
+
+.member-order-calendar-sunday abbr {
+  color: #94a3b8;
+}
+
 .member-order-calendar-badge {
   display: flex;
   min-height: 22px;

@@ -60,6 +60,7 @@ export function MemberOrderCalendar({
         if (view !== "month") return null;
         const iso = toIso(date);
         return cn(
+          date.getDay() === 0 && "member-order-calendar-sunday",
           iso === todayIso && "member-order-calendar-today",
           (counts[iso] ?? 0) > 0 && "member-order-calendar-has-delivery",
         );

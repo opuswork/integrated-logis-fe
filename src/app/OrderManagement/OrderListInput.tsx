@@ -136,6 +136,14 @@ function todayDateValue() {
   return `${year}-${month}-${day}`;
 }
 
+function isSundayIso(iso: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return false;
+  }
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day).getDay() === 0;
+}
+
 function isDateOnOrAfterToday(value: string) {
   const trimmed = value.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
@@ -5692,7 +5700,11 @@ function OrderStatusPanel({
                   onSelectIso={(iso) => {
                     setCalendarDateIso(iso);
                     const empty = (deliveryCounts[iso] ?? 0) === 0;
-                    if (empty && iso >= todayDateValue()) {
+                    if (
+                      empty &&
+                      iso >= todayDateValue() &&
+                      !isSundayIso(iso)
+                    ) {
                       onCreateOrderForDate?.(iso);
                     }
                   }}
@@ -5701,7 +5713,9 @@ function OrderStatusPanel({
               {calendarDateIso ? (
                 calendarOrders.length === 0 ? (
                   <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-lg text-muted-foreground">
-                    선택한 날짜에 납품 주문이 없습니다.
+                    {isSundayIso(calendarDateIso)
+                      ? "일요일에는 주문서를 작성할 수 없습니다."
+                      : "선택한 날짜에 납품 주문이 없습니다."}
                   </p>
                 ) : (
                   <div className="space-y-2.5">
@@ -5944,6 +5958,9 @@ export function OrderListInput({
   };
 
   const handleCreateOrderForDate = (iso: string) => {
+    if (isSundayIso(iso)) {
+      return;
+    }
     if (
       (orderFormDirty ||
         Object.keys(savedGreetingsByProduct).length > 0 ||
