@@ -76,7 +76,10 @@ export function isStandaloneDisplay() {
   if (typeof window === "undefined") return false;
   const nav = window.navigator as Navigator & { standalone?: boolean };
   if (nav.standalone) return true;
-  return window.matchMedia("(display-mode: standalone)").matches;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: minimal-ui)").matches
+  );
 }
 
 export function isIosDevice() {
@@ -119,15 +122,18 @@ export function usePwaInstalled() {
 
     update();
     const unsubscribe = subscribePwaInstall(update);
-    const media = window.matchMedia("(display-mode: standalone)");
+    const standaloneMedia = window.matchMedia("(display-mode: standalone)");
+    const minimalUiMedia = window.matchMedia("(display-mode: minimal-ui)");
     const onDisplayMode = () => update();
-    media.addEventListener("change", onDisplayMode);
+    standaloneMedia.addEventListener("change", onDisplayMode);
+    minimalUiMedia.addEventListener("change", onDisplayMode);
     window.addEventListener("visibilitychange", update);
     window.addEventListener("pageshow", update);
 
     return () => {
       unsubscribe();
-      media.removeEventListener("change", onDisplayMode);
+      standaloneMedia.removeEventListener("change", onDisplayMode);
+      minimalUiMedia.removeEventListener("change", onDisplayMode);
       window.removeEventListener("visibilitychange", update);
       window.removeEventListener("pageshow", update);
     };
