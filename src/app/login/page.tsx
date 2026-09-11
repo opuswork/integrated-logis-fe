@@ -1,6 +1,5 @@
 "use client";
 
-import { X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
@@ -15,15 +14,6 @@ import {
   type AuthUser,
 } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/env";
-
-function closeLoginWindow() {
-  window.close();
-  window.setTimeout(() => {
-    if (!window.closed) {
-      window.history.back();
-    }
-  }, 80);
-}
 
 function LoginForm() {
   const router = useRouter();
@@ -85,19 +75,8 @@ function LoginForm() {
   };
 
   return (
-    <div className="relative min-h-[100dvh] bg-[#1a365d]">
-      <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center bg-[#492484] px-2 pt-[env(safe-area-inset-top)]">
-        <button
-          type="button"
-          aria-label="로그인 창 닫기"
-          onClick={closeLoginWindow}
-          className="inline-flex size-10 items-center justify-center rounded-full text-white hover:bg-white/10"
-        >
-          <X className="size-6" strokeWidth={2.25} />
-        </button>
-      </header>
-
-      <main className="px-6 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(4.5rem,calc(env(safe-area-inset-top)+3.25rem))]">
+    <div className="min-h-[100dvh] bg-[#1a365d]">
+      <main className="px-6 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))]">
         <div className="mx-auto flex w-full max-w-md flex-col items-center">
           <div
             className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-[#3182ce] text-[1.35rem] font-bold tracking-tight text-white shadow-[0_8px_20px_rgba(0,0,0,0.25)]"
