@@ -45,6 +45,8 @@ export interface GiftSetPrintPage {
   managerName: string;
   companyName: string;
   productName: string;
+  /** 선물세트면 선물세트 주문서, 아니면 제품주문서 */
+  sheetTitle: string;
   /** Stock catalog image when available (mobile card only). */
   productImageUrl?: string | null;
   quantityLabel: string;
@@ -251,6 +253,19 @@ function formatKoreanDate(value: string | null | undefined) {
   return `${month}/${day}(${WEEKDAY_KO[date.getUTCDay()]})`;
 }
 
+function isGiftSetCategory(category: string) {
+  const normalized = category.replace(/\s+/g, "");
+  return normalized === "선물세트" || normalized === "선물셋트";
+}
+
+function sheetTitleForProduct(
+  productName: string,
+  categoryByName: Record<string, string>,
+) {
+  const category = categoryByName[productName] ?? "";
+  return isGiftSetCategory(category) ? "선물세트 주문서" : "제품주문서";
+}
+
 function packagingForProduct(productName: string, itemNote: string) {
   if (itemNote.includes("개별")) {
     return "개별";
@@ -264,6 +279,7 @@ function packagingForProduct(productName: string, itemNote: string) {
 function mapOrderToPrintPages(
   order: ApiOrder,
   productImageByName: Record<string, string> = {},
+  productCategoryByName: Record<string, string> = {},
 ): GiftSetPrintPage[] {
   const notes = order.notes;
   const type = toPrintShipType(notes, order.shipment?.fulfillmentType);
@@ -339,6 +355,7 @@ function mapOrderToPrintPages(
         ...basePageFields,
         pageNo: `${order.orderNumber}-1`,
         productName: "-",
+        sheetTitle: "제품주문서",
         productImageUrl: null,
         quantityLabel: "0세트",
         specialNote: greetingSpecialNote,
@@ -360,6 +377,7 @@ function mapOrderToPrintPages(
       ...basePageFields,
       pageNo: `${order.orderNumber}-${index + 1}`,
       productName: item.productName,
+      sheetTitle: sheetTitleForProduct(item.productName, productCategoryByName),
       productImageUrl: productImageByName[item.productName] ?? null,
       quantityLabel: `${item.quantity}세트`,
       packaging: packagingForProduct(item.productName, itemNote),
@@ -435,14 +453,14 @@ function GiftSetPreviewCard({ page }: { page: GiftSetPrintPage }) {
 
   return (
     <article className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
-      <header className="flex flex-wrap items-center justify-between gap-2 bg-[#93c5fd] px-3.5 py-3.5">
-        <h2 className="text-[1.5rem] font-bold text-ink">선물세트 주문서</h2>
-        <p className="rounded-md bg-white/90 px-2.5 py-1.5 text-[1.3125rem] font-bold text-ink">
-          NO {page.pageNo}
-        </p>
+      <header className="bg-[#93c5fd] px-3.5 py-3.5">
+        <h2 className="text-center text-[1.5rem] font-bold text-ink">
+          {page.sheetTitle}
+        </h2>
       </header>
 
       <dl className="px-3.5 py-1">
+        <PreviewCardRow label="주문번호" value={page.orderNumber} />
         <PreviewCardRow label="주문일자" value={page.orderDate} />
         <PreviewCardRow label="납품일자" value={page.shipDate} />
         <PreviewCardRow label="지역" value={page.region} />
@@ -505,21 +523,13 @@ function GiftSetPreviewCard({ page }: { page: GiftSetPrintPage }) {
 function GiftSetPrintSheet({ page }: { page: GiftSetPrintPage }) {
   return (
     <div className="gift-set-print-sheet overflow-hidden rounded-md border-2 border-[#1f2937] bg-white [print-color-adjust:exact] [-webkit-print-color-adjust:exact] print:rounded-none">
-      <div className="grid grid-cols-[1fr_auto] border-b-2 border-[#1f2937]">
-        <div className="flex items-center justify-center bg-[#93c5fd] px-4 py-4 [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
-          <h2 className="text-xl font-bold tracking-wide text-ink">
-            선물세트 주문서
-          </h2>
-        </div>
-        <div className="flex min-w-[200px] border-l-2 border-[#1f2937]">
-          <div className="flex w-14 items-center justify-center border-r border-[#334155] bg-[#fde68a] text-sm font-bold text-ink [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
-            NO
-          </div>
-          <div className="flex flex-1 items-center justify-center bg-white px-3 text-sm font-bold text-ink">
-            {page.pageNo}
-          </div>
-        </div>
+      <div className="flex items-center justify-center border-b-2 border-[#1f2937] bg-[#93c5fd] px-4 py-4 [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
+        <h2 className="text-xl font-bold tracking-wide text-ink">
+          {page.sheetTitle}
+        </h2>
       </div>
+
+      <SheetCell label="주문번호" value={page.orderNumber} />
 
       <div className="grid grid-cols-2 border-b border-[#334155]">
         <SheetCell
@@ -636,6 +646,11 @@ export function OrderPrintPreview({
   >({});
   const productImageByNameRef = useRef(productImageByName);
   productImageByNameRef.current = productImageByName;
+  const [productCategoryByName, setProductCategoryByName] = useState<
+    Record<string, string>
+  >({});
+  const productCategoryByNameRef = useRef(productCategoryByName);
+  productCategoryByNameRef.current = productCategoryByName;
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedPageNo, setSelectedPageNo] = useState("");
@@ -685,7 +700,11 @@ export function OrderPrintPreview({
       setOrdersByNumber(nextMap);
       setPages(
         filtered.flatMap((order) =>
-          mapOrderToPrintPages(order, productImageByNameRef.current),
+          mapOrderToPrintPages(
+            order,
+            productImageByNameRef.current,
+            productCategoryByNameRef.current,
+          ),
         ),
       );
     } catch {
@@ -707,21 +726,33 @@ export function OrderPrintPreview({
       try {
         const response = await apiFetch("/api/stock-inventory");
         const data = (await response.json()) as
-          | Array<{ productName?: string; imageUrl?: string | null }>
+          | Array<{
+              productName?: string;
+              imageUrl?: string | null;
+              category?: string | null;
+            }>
           | { message?: string };
         if (!response.ok || !Array.isArray(data) || cancelled) {
           return;
         }
-        const map: Record<string, string> = {};
+        const imageMap: Record<string, string> = {};
+        const categoryMap: Record<string, string> = {};
         for (const item of data) {
           const name = item.productName?.trim();
+          if (!name) continue;
           const imageUrl = item.imageUrl?.trim();
-          if (name && imageUrl) {
-            map[name] = imageUrl;
+          if (imageUrl) {
+            imageMap[name] = imageUrl;
+          }
+          const category = item.category?.trim();
+          if (category) {
+            categoryMap[name] = category;
           }
         }
-        productImageByNameRef.current = map;
-        setProductImageByName(map);
+        productImageByNameRef.current = imageMap;
+        productCategoryByNameRef.current = categoryMap;
+        setProductImageByName(imageMap);
+        setProductCategoryByName(categoryMap);
       } catch {
         // Preview still works without images.
       }
@@ -733,7 +764,10 @@ export function OrderPrintPreview({
 
   // Attach catalog images once stock inventory is loaded.
   useEffect(() => {
-    if (Object.keys(productImageByName).length === 0) {
+    if (
+      Object.keys(productImageByName).length === 0 &&
+      Object.keys(productCategoryByName).length === 0
+    ) {
       return;
     }
     setPages((current) => {
@@ -752,12 +786,18 @@ export function OrderPrintPreview({
         seen.add(page.orderNumber);
         const order = byNumber.get(page.orderNumber);
         if (order) {
-          rebuilt.push(...mapOrderToPrintPages(order, productImageByName));
+          rebuilt.push(
+            ...mapOrderToPrintPages(
+              order,
+              productImageByName,
+              productCategoryByName,
+            ),
+          );
         }
       }
       return rebuilt.length > 0 ? rebuilt : current;
     });
-  }, [productImageByName]);
+  }, [productImageByName, productCategoryByName]);
 
   useEffect(() => {
     void loadOrders();
@@ -955,7 +995,9 @@ export function OrderPrintPreview({
       const y = (pageHeight - imgHeight) / 2;
 
       pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
-      pdf.save(`${selectedPage.pageNo}_선물세트주문서.pdf`);
+      pdf.save(
+        `${selectedPage.pageNo}_${selectedPage.sheetTitle.replace(/\s+/g, "")}.pdf`,
+      );
     } catch (pdfError) {
       console.error("PDF 저장 실패:", pdfError);
       window.alert("PDF 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.");
