@@ -353,7 +353,7 @@ function mapOrderToPrintPages(
     return [
       {
         ...basePageFields,
-        pageNo: `${order.orderNumber}-1`,
+        pageNo: order.orderNumber,
         productName: "-",
         sheetTitle: "제품주문서",
         productImageUrl: null,
@@ -375,7 +375,10 @@ function mapOrderToPrintPages(
       .join(" / ");
     return {
       ...basePageFields,
-      pageNo: `${order.orderNumber}-${index + 1}`,
+      pageNo:
+        items.length === 1
+          ? order.orderNumber
+          : `${order.orderNumber}-${index + 1}`,
       productName: item.productName,
       sheetTitle: sheetTitleForProduct(item.productName, productCategoryByName),
       productImageUrl: productImageByName[item.productName] ?? null,
