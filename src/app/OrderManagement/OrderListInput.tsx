@@ -144,6 +144,17 @@ function isSundayIso(iso: string) {
   return new Date(year, month - 1, day).getDay() === 0;
 }
 
+function formatCalendarDayTitle(iso: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return iso;
+  }
+  const [year, month, day] = iso.split("-").map(Number);
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][
+    new Date(year, month - 1, day).getDay()
+  ];
+  return `${month}/${day}(${weekday})`;
+}
+
 function isDateOnOrAfterToday(value: string) {
   const trimmed = value.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
@@ -5380,6 +5391,7 @@ function OrderStatusPanel({
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [statusView, setStatusView] = useState<"list" | "calendar">("calendar");
   const [calendarDateIso, setCalendarDateIso] = useState<string | null>(null);
+  const [calendarDayModalOpen, setCalendarDayModalOpen] = useState(false);
 
   const deliveryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -5705,15 +5717,27 @@ function OrderStatusPanel({
                       iso >= todayDateValue() &&
                       !isSundayIso(iso)
                     ) {
+                      setCalendarDayModalOpen(false);
                       onCreateOrderForDate?.(iso);
+                      return;
                     }
+                    setCalendarDayModalOpen(true);
                   }}
                 />
               </Panel>
-              {calendarDateIso ? (
-                calendarOrders.length === 0 ? (
-                  <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-lg text-muted-foreground">
-                    {isSundayIso(calendarDateIso)
+              <Dialog
+                open={calendarDayModalOpen && Boolean(calendarDateIso)}
+                title={
+                  calendarDateIso
+                    ? formatCalendarDayTitle(calendarDateIso)
+                    : "주문"
+                }
+                onClose={() => setCalendarDayModalOpen(false)}
+                className="max-h-[80vh] overflow-y-auto"
+              >
+                {calendarOrders.length === 0 ? (
+                  <p className="text-center text-lg text-muted-foreground">
+                    {calendarDateIso && isSundayIso(calendarDateIso)
                       ? "일요일에는 주문서를 작성할 수 없습니다."
                       : "선택한 날짜에 납품 주문이 없습니다."}
                   </p>
@@ -5730,18 +5754,17 @@ function OrderStatusPanel({
                         onView={() => setViewingOrderNumber(order.orderNumber)}
                         onEdit={
                           onEditOrder
-                            ? () => onEditOrder(order.orderNumber)
+                            ? () => {
+                                setCalendarDayModalOpen(false);
+                                onEditOrder(order.orderNumber);
+                              }
                             : undefined
                         }
                       />
                     ))}
                   </div>
-                )
-              ) : (
-                <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-lg text-muted-foreground">
-                  날짜를 선택하면 해당 날의 주문이 표시됩니다.
-                </p>
-              )}
+                )}
+              </Dialog>
             </>
           ) : (
             <>
