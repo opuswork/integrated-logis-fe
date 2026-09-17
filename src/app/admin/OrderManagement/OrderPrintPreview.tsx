@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { apiFetch } from "@/lib/api";
+import { getAuthUser, isSuperAdmin } from "@/lib/auth";
 import {
   parseBranchStoreFromNotes,
   parseChurchFromNotes,
@@ -68,6 +69,7 @@ type ApiOrder = {
   id: number;
   orderNumber: string;
   status: string;
+  orderConfirmedAt?: string | null;
   createdAt: string;
   notes?: string | null;
   factoryAlert?: string | null;
@@ -625,11 +627,29 @@ function GiftSetPrintSheet({ page }: { page: GiftSetPrintPage }) {
   );
 }
 
+function isPlacedUnconfirmed(order: ApiOrder) {
+  return order.status === "PLACED" && !order.orderConfirmedAt;
+}
+
+function apiErrorMessage(data: unknown, fallback: string) {
+  if (data && typeof data === "object" && "message" in data) {
+    const message = (data as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+    if (Array.isArray(message) && typeof message[0] === "string") {
+      return message[0];
+    }
+  }
+  return fallback;
+}
+
 export function OrderPrintPreview({
   orderNumber,
   embedded = false,
   showAdminDeliveryControls = true,
   showFactoryControls = false,
+  onDeleted,
 }: {
   /** When set, only show pages for this order number. */
   orderNumber?: string;
@@ -639,6 +659,7 @@ export function OrderPrintPreview({
   showAdminDeliveryControls?: boolean;
   /** Factory shipment action buttons (공장 출하관리). */
   showFactoryControls?: boolean;
+  onDeleted?: () => void;
 } = {}) {
   const [pages, setPages] = useState<GiftSetPrintPage[]>([]);
   const [ordersByNumber, setOrdersByNumber] = useState<Record<string, ApiOrder>>(
@@ -661,6 +682,8 @@ export function OrderPrintPreview({
   const [busyAction, setBusyAction] = useState<DeliveryAction | null>(null);
   const [actionError, setActionError] = useState("");
   const [clearingFactoryAlert, setClearingFactoryAlert] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const pdfSheetRef = useRef<HTMLDivElement>(null);
 
   const loadOrders = async (silent = false) => {
@@ -873,6 +896,45 @@ export function OrderPrintPreview({
   }, [showFactoryControls, selectedOrder, ordersByNumber]);
 
   const factoryAlertMessage = factoryAlertTarget?.factoryAlert ?? null;
+
+  const canDeleteOrder = Boolean(
+    selectedOrder &&
+      isSuperAdmin(getAuthUser()) &&
+      isPlacedUnconfirmed(selectedOrder),
+  );
+
+  const handleDeleteOrder = async () => {
+    if (!selectedOrder || isDeleting) {
+      return;
+    }
+    if (
+      !window.confirm("이 주문서를 영구 삭제합니다. 되돌릴 수 없습니다.")
+    ) {
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError("");
+    try {
+      const response = await apiFetch(`/api/orders/${selectedOrder.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        let data: unknown = null;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+        setDeleteError(apiErrorMessage(data, "주문서를 삭제하지 못했습니다."));
+        return;
+      }
+      onDeleted?.();
+    } catch {
+      setDeleteError("주문서를 삭제하지 못했습니다.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const runDeliveryAction = async (action: DeliveryAction) => {
     if (!selectedOrder || busyAction) {
@@ -1152,6 +1214,24 @@ export function OrderPrintPreview({
         </div>
       </div>
 
+      {canDeleteOrder ? (
+        <div className="flex flex-col items-center gap-2 pt-3 print:hidden">
+          {deleteError ? (
+            <p className="text-sm text-red">{deleteError}</p>
+          ) : null}
+          <Button
+            type="button"
+            className="border-[#b91c1c] bg-[#dc2626] text-white hover:bg-[#b91c1c]"
+            disabled={isDeleting}
+            onClick={() => {
+              void handleDeleteOrder();
+            }}
+          >
+            {isDeleting ? "삭제 중..." : "주문서 삭제"}
+          </Button>
+        </div>
+      ) : null}
+
       {/* Print: all pages of the selected order */}
       <div className="hidden print:block">
         {pagesForSelectedOrder.map((page, index) => (
@@ -1181,12 +1261,14 @@ export function OrderPrintPreviewModal({
   open,
   orderNumber,
   onClose,
+  onDeleted,
   showAdminDeliveryControls = true,
   showFactoryControls = false,
 }: {
   open: boolean;
   orderNumber: string | null;
   onClose: () => void;
+  onDeleted?: () => void;
   showAdminDeliveryControls?: boolean;
   showFactoryControls?: boolean;
 }) {
@@ -1206,6 +1288,10 @@ export function OrderPrintPreviewModal({
         embedded
         showAdminDeliveryControls={showAdminDeliveryControls}
         showFactoryControls={showFactoryControls}
+        onDeleted={() => {
+          onDeleted?.();
+          onClose();
+        }}
       />
     </Dialog>
   );

@@ -149,6 +149,11 @@ export function canPressShipmentFinalActions(
   return canWriteOrderChecklist(user, storeRegion);
 }
 
+export function isSuperAdmin(user: AuthUser | null | undefined): boolean {
+  if (!user || user.role !== "admin") return false;
+  return Boolean(user.isSuperAdmin) || user.adminRegion == null;
+}
+
 export function canCreateAdminOrder(
   user: AuthUser | null | undefined,
 ): boolean {
