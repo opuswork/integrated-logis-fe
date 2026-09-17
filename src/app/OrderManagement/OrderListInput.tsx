@@ -4491,12 +4491,12 @@ function ProductOrderPanel({
               ))}
             </select>
           </div>
-          <label className={omLabelClass}>업체명 *</label>
+          <label className={omLabelClass}>납품업체명 *</label>
           <input
             type="text"
             value={deliveryCompanyName}
             onChange={(event) => setDeliveryCompanyName(event.target.value)}
-            placeholder="업체명"
+            placeholder="납품업체명"
             required
             className={omInputClass}
           />
@@ -4556,12 +4556,12 @@ function ProductOrderPanel({
               setParcelShipDate(iso);
             }}
           />
-          <label className={omLabelClass}>업체명 *</label>
+          <label className={omLabelClass}>납품업체명 *</label>
           <input
             type="text"
             value={parcelCompanyName}
             onChange={(event) => setParcelCompanyName(event.target.value)}
-            placeholder="업체명"
+            placeholder="납품업체명"
             required
             className={omInputClass}
           />
