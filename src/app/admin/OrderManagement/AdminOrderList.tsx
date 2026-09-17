@@ -1326,6 +1326,9 @@ export function AdminOrderList({
         open={Boolean(viewingOrderNumber)}
         orderNumber={viewingOrderNumber}
         onClose={() => setViewingOrderNumber(null)}
+        onDeleted={() => {
+          void loadOrders(true);
+        }}
       />
     </div>
   );
