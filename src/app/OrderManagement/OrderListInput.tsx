@@ -1398,6 +1398,51 @@ function productImageSrc(imageUrl: string | null | undefined) {
   return trimmed ? trimmed : DEFAULT_PRODUCT_IMAGE;
 }
 
+function catalogItemMatches(
+  item: StockCatalogItem,
+  filter: {
+    mode: "all" | "box" | "giftUnit";
+    defaultOrderKind: OrderType;
+    keyword: string;
+    categoryFilter: string;
+  },
+) {
+  const { mode, defaultOrderKind, categoryFilter } = filter;
+  const normalizedKeyword = filter.keyword.trim().toLowerCase();
+
+  if (mode === "box") {
+    if (!isBoxProduct(item.productName)) {
+      return false;
+    }
+  } else if (mode === "giftUnit") {
+    if (!isGiftUnitProduct(item.category, item.productName, item.spec)) {
+      return false;
+    }
+  } else if (
+    defaultOrderKind === "parcel" &&
+    isDeliveryOnlyProduct(item.category, item.productName)
+  ) {
+    // 택배 통합: 배달 전용(선물세트 박스) 제외
+    return false;
+  }
+
+  if (
+    mode === "all" &&
+    categoryFilter !== "all" &&
+    item.category !== categoryFilter
+  ) {
+    return false;
+  }
+  if (!normalizedKeyword) {
+    return true;
+  }
+  return (
+    item.productName.toLowerCase().includes(normalizedKeyword) ||
+    item.code.toLowerCase().includes(normalizedKeyword) ||
+    (item.spec ?? "").toLowerCase().includes(normalizedKeyword)
+  );
+}
+
 interface ProductDialogItem {
   product: string;
   qty: number;
@@ -1496,6 +1541,20 @@ function ProductAddDialog({
           }
         }
         setQuantities(prefill);
+
+        // 수정 모드: 이미 담긴 첫 상품으로 커서 이동 (검색/구분은 위에서 초기화됨)
+        const visible = data.filter((item) =>
+          catalogItemMatches(item, {
+            mode,
+            defaultOrderKind,
+            keyword: "",
+            categoryFilter: "all",
+          }),
+        );
+        const firstSelected = visible.findIndex(
+          (item) => (prefill[item.id] ?? 0) > 0,
+        );
+        setActiveIndex(Math.max(0, firstSelected));
       } catch {
         if (!cancelled) {
           setLoadError("상품 목록을 불러오지 못했습니다.");
@@ -1513,7 +1572,7 @@ function ProductAddDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, openStockOnly]);
+  }, [open, openStockOnly, mode, defaultOrderKind]);
 
   useEffect(() => {
     if (!open) {
@@ -1525,41 +1584,18 @@ function ProductAddDialog({
     return () => window.cancelAnimationFrame(frame);
   }, [open]);
 
-  const filteredCatalog = useMemo(() => {
-    const normalizedKeyword = keyword.trim().toLowerCase();
-
-    return catalog.filter((item) => {
-      if (mode === "box") {
-        if (!isBoxProduct(item.productName)) {
-          return false;
-        }
-      } else if (mode === "giftUnit") {
-        if (
-          !isGiftUnitProduct(item.category, item.productName, item.spec)
-        ) {
-          return false;
-        }
-      } else if (
-        defaultOrderKind === "parcel" &&
-        isDeliveryOnlyProduct(item.category, item.productName)
-      ) {
-        // 택배 통합: 배달 전용(선물세트 박스) 제외
-        return false;
-      }
-
-      if (mode === "all" && categoryFilter !== "all" && item.category !== categoryFilter) {
-        return false;
-      }
-      if (!normalizedKeyword) {
-        return true;
-      }
-      return (
-        item.productName.toLowerCase().includes(normalizedKeyword) ||
-        item.code.toLowerCase().includes(normalizedKeyword) ||
-        (item.spec ?? "").toLowerCase().includes(normalizedKeyword)
-      );
-    });
-  }, [catalog, keyword, categoryFilter, defaultOrderKind, mode]);
+  const filteredCatalog = useMemo(
+    () =>
+      catalog.filter((item) =>
+        catalogItemMatches(item, {
+          mode,
+          defaultOrderKind,
+          keyword,
+          categoryFilter,
+        }),
+      ),
+    [catalog, keyword, categoryFilter, defaultOrderKind, mode],
+  );
 
   useEffect(() => {
     setActiveIndex(0);
@@ -1771,6 +1807,7 @@ function ProductAddDialog({
             {filteredCatalog.map((item, index) => {
               const qty = quantities[item.id] ?? 0;
               const active = index === activeIndex;
+              const selected = qty > 0;
               return (
                 <div
                   key={item.id}
@@ -1779,8 +1816,13 @@ function ProductAddDialog({
                   data-product-index={index}
                   onClick={() => setActiveIndex(index)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5",
-                    active ? "bg-[#eff6ff]" : "bg-white",
+                    "flex items-center gap-3 px-3 py-2.5 border-l-4",
+                    selected ? "border-l-brand" : "border-l-transparent",
+                    active
+                      ? "bg-[#eff6ff]"
+                      : selected
+                        ? "bg-[#f5f9ff]"
+                        : "bg-white",
                   )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1790,11 +1832,19 @@ function ProductAddDialog({
                     className="h-14 w-14 shrink-0 rounded border border-line bg-white object-contain"
                   />
                   <div className="min-w-0 flex-1">
-                    <ProductNameWithStock
-                      name={item.productName}
-                      stock={item.stock}
-                      stockMax={item.stockMax}
-                    />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <ProductNameWithStock
+                        name={item.productName}
+                        stock={item.stock}
+                        stockMax={item.stockMax}
+                      />
+                      {selected ? (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                          <Check className="size-3" />
+                          {editList ? "담김" : "선택"}
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="mt-0.5 text-xs text-[#64748b]">
                       {item.spec || "규격 없음"}
                     </p>
