@@ -1219,8 +1219,8 @@ export function OrderPrintPreview({
           {deleteError ? (
             <p className="text-sm text-red">{deleteError}</p>
           ) : null}
-          <Button
-            type="button"
+        <Button
+          type="button"
             className="border-[#b91c1c] bg-[#dc2626] text-white hover:bg-[#b91c1c]"
             disabled={isDeleting}
             onClick={() => {
@@ -1228,7 +1228,7 @@ export function OrderPrintPreview({
             }}
           >
             {isDeleting ? "삭제 중..." : "주문서 삭제"}
-          </Button>
+        </Button>
         </div>
       ) : null}
 
