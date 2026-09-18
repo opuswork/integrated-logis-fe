@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, Plus, Trash2, X } from "lucide-react";
+import { Check, Menu, Plus, Trash2, X } from "lucide-react";
 import {
   useRef,
   useState,
@@ -1398,6 +1398,15 @@ function productImageSrc(imageUrl: string | null | undefined) {
   return trimmed ? trimmed : DEFAULT_PRODUCT_IMAGE;
 }
 
+interface ProductDialogItem {
+  product: string;
+  qty: number;
+  note: string;
+  unitPrice: number;
+  deliveryOnly: boolean;
+  lineSection: "box" | "giftUnit";
+}
+
 function ProductAddDialog({
   open,
   onClose,
@@ -1405,24 +1414,27 @@ function ProductAddDialog({
   defaultOrderKind,
   openStockOnly = false,
   mode = "all",
+  editList = false,
+  initialQuantities,
+  onReplaceItems,
 }: {
   open: boolean;
   onClose: () => void;
-  onAddItems: (
-    items: Array<{
-      product: string;
-      qty: number;
-      note: string;
-      unitPrice: number;
-      deliveryOnly: boolean;
-      lineSection: "box" | "giftUnit";
-    }>,
-  ) => void;
+  onAddItems: (items: ProductDialogItem[]) => void;
   defaultOrderKind: OrderType;
   /** 개인회원 제품주문서: openStock=true 상품만 */
   openStockOnly?: boolean;
   /** all=택배 통합 / box=①박스 / giftUnit=②선물세트(개) */
   mode?: "all" | "box" | "giftUnit";
+  /** 수정 모드: 현재 목록을 미리 채우고, 확정 시 추가가 아닌 목록 교체 */
+  editList?: boolean;
+  /** editList 시 미리 채울 수량 (품명 → 수량) */
+  initialQuantities?: Record<string, number>;
+  /** editList 확정. catalogProducts = 카탈로그에 있는 품명(없는 행은 유지 판단용) */
+  onReplaceItems?: (
+    items: ProductDialogItem[],
+    catalogProducts: string[],
+  ) => void;
 }) {
   const [catalog, setCatalog] = useState<StockCatalogItem[]>([]);
   const [quantities, setQuantities] = useState<Record<number, number>>({});
@@ -1434,6 +1446,10 @@ function ProductAddDialog({
   const listRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const qtyRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+  const initialQuantitiesRef = useRef(initialQuantities);
+  useEffect(() => {
+    initialQuantitiesRef.current = initialQuantities;
+  }, [initialQuantities]);
 
   useEffect(() => {
     if (!open) {
@@ -1469,7 +1485,17 @@ function ProductAddDialog({
         }
 
         setCatalog(data);
-        setQuantities({});
+        const prefill: Record<number, number> = {};
+        const initial = initialQuantitiesRef.current;
+        if (initial) {
+          for (const item of data) {
+            const qty = initial[item.productName];
+            if (qty && qty > 0) {
+              prefill[item.id] = qty;
+            }
+          }
+        }
+        setQuantities(prefill);
       } catch {
         if (!cancelled) {
           setLoadError("상품 목록을 불러오지 못했습니다.");
@@ -1587,10 +1613,18 @@ function ProductAddDialog({
   };
 
   const handleAdd = () => {
-    if (selectedItems.length === 0) {
-      return;
+    if (editList && onReplaceItems) {
+      // 수정 모드: 0종이어도 확정 가능(전부 제거)
+      onReplaceItems(
+        selectedItems,
+        catalog.map((item) => item.productName),
+      );
+    } else {
+      if (selectedItems.length === 0) {
+        return;
+      }
+      onAddItems(selectedItems);
     }
-    onAddItems(selectedItems);
     setQuantities({});
     onClose();
   };
@@ -1625,8 +1659,9 @@ function ProductAddDialog({
     row?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  const dialogTitle =
-    mode === "box"
+  const dialogTitle = editList
+    ? "상품목록수정"
+    : mode === "box"
       ? "박스상품 추가"
       : mode === "giftUnit"
         ? "선물세트 낱개 추가"
@@ -1838,11 +1873,15 @@ function ProductAddDialog({
         <Button
           type="button"
           className="h-11 w-full rounded-full border-brand bg-brand text-white hover:bg-[#1856bf]"
-          disabled={selectedItems.length === 0}
+          disabled={!editList && selectedItems.length === 0}
           onClick={handleAdd}
         >
-          <Plus className="size-4" />
-          상품 추가
+          {editList ? (
+            <Check className="size-4" />
+          ) : (
+            <Plus className="size-4" />
+          )}
+          {editList ? "목록 적용" : "상품 추가"}
         </Button>
       </div>
     </Dialog>
@@ -2842,6 +2881,8 @@ function ProductOrderPanel({
   const [productDialogMode, setProductDialogMode] = useState<
     "all" | "box" | "giftUnit"
   >("all");
+  /** 수정 주문서의 "상품목록수정": 박스 목록을 통째로 교체 */
+  const [isProductListEdit, setIsProductListEdit] = useState(false);
   const [ordererName, setOrdererName] = useState("");
   const [ordererPhone, setOrdererPhone] = useState("");
   const [orderDate, setOrderDate] = useState(() => todayDateValue());
@@ -3346,16 +3387,7 @@ function ProductOrderPanel({
     }
   }, [churchQuery, churchId, churches]);
 
-  const addProductItems = (
-    items: Array<{
-      product: string;
-      qty: number;
-      note: string;
-      unitPrice: number;
-      deliveryOnly: boolean;
-      lineSection: "box" | "giftUnit";
-    }>,
-  ) => {
+  const addProductItems = (items: ProductDialogItem[]) => {
     if (!orderType) {
       return;
     }
@@ -3405,6 +3437,51 @@ function ProductOrderPanel({
       }
 
       return next;
+    });
+  };
+
+  /**
+   * 상품목록수정 확정: ①박스 행을 선택 결과로 교체.
+   * 같은 품명은 비고 유지, 카탈로그에 없는(단종 등) 기존 행은 그대로 둔다.
+   */
+  const replaceBoxProductItems = (
+    items: ProductDialogItem[],
+    catalogProducts: string[],
+  ) => {
+    if (!orderType) {
+      return;
+    }
+
+    const selectedOrderType = orderType;
+    const inCatalog = new Set(catalogProducts);
+
+    setProductItems((current) => {
+      const previousBox = new Map(
+        current
+          .filter((row) => row.lineSection === "box")
+          .map((row) => [row.product, row] as const),
+      );
+      const nextBox: ProductLineItem[] = items.map((item) => {
+        const existing = previousBox.get(item.product);
+        return {
+          product: item.product,
+          qty: item.qty,
+          note: existing?.note ?? item.note,
+          unitPrice: item.unitPrice,
+          orderKind: selectedOrderType,
+          greeting: savedGreetingsByProduct[item.product]?.id
+            ? "인사장보기"
+            : "",
+          deliveryOnly: existing?.deliveryOnly || item.deliveryOnly,
+          lineSection: "box",
+        };
+      });
+      const keptUnknown = current.filter(
+        (row) => row.lineSection === "box" && !inCatalog.has(row.product),
+      );
+      const others = current.filter((row) => row.lineSection !== "box");
+
+      return [...nextBox, ...keptUnknown, ...others];
     });
   };
 
@@ -4123,6 +4200,10 @@ function ProductOrderPanel({
   const boxProductItems = productItems.filter(
     (item) => item.lineSection === "box",
   );
+  const boxAddLabel = isEditMode ? "상품목록수정" : "+ 박스상품 추가";
+  const boxQuantitiesByProduct = Object.fromEntries(
+    boxProductItems.map((item) => [item.product, item.qty]),
+  ) as Record<string, number>;
   const giftUnitProductItems = productItems.filter(
     (item) => item.lineSection !== "box",
   );
@@ -4652,11 +4733,12 @@ function ProductOrderPanel({
                   type="button"
                   onClick={() => {
                     setProductDialogMode("box");
+                    setIsProductListEdit(isEditMode);
                     setIsProductDialogOpen(true);
                   }}
                   className="rounded-lg border border-[#CBD5E0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1A365D]"
                 >
-                  + 박스상품 추가
+                  {boxAddLabel}
                 </button>
               </div>
               {isWideProductList ? (
@@ -4665,15 +4747,15 @@ function ProductOrderPanel({
                     caption="박스 상품 목록"
                     columns={boxProductColumns}
                     data={boxProductItems}
-                    emptyMessage="박스단위로만 주문 가능합니다 (인사장 없음). '+ 박스상품 추가'로 담아주세요."
+                    emptyMessage={`박스단위로만 주문 가능합니다 (인사장 없음). '${boxAddLabel}'로 담아주세요.`}
                     scrollable={!isDesktop}
                     visibleRows={isDesktop ? undefined : 4}
                   />
                 </div>
               ) : boxProductItems.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
-                  박스단위로만 주문 가능합니다 (인사장 없음). &apos;+ 박스상품
-                  추가&apos;로 담아주세요.
+                  박스단위로만 주문 가능합니다 (인사장 없음). &apos;{boxAddLabel}
+                  &apos;로 담아주세요.
                 </p>
               ) : (
                 <ul className="space-y-2.5">
@@ -4752,6 +4834,7 @@ function ProductOrderPanel({
                     type="button"
                     onClick={() => {
                       setProductDialogMode("giftUnit");
+                      setIsProductListEdit(false);
                       setIsProductDialogOpen(true);
                     }}
                     className="rounded-lg border border-[#9AE6B4] bg-[#F0FFF4] px-3 py-2 text-[12.5px] font-bold text-[#276749]"
@@ -4910,6 +4993,7 @@ function ProductOrderPanel({
                 type="button"
                 onClick={() => {
                   setProductDialogMode("all");
+                  setIsProductListEdit(false);
                   setIsProductDialogOpen(true);
                 }}
                 className="rounded-lg px-3 py-2 text-[12.5px] font-bold bg-[#1A365D] text-white"
@@ -5153,6 +5237,9 @@ function ProductOrderPanel({
         defaultOrderKind={orderType ?? "delivery"}
         openStockOnly={openStockOnly}
         mode={productDialogMode}
+        editList={isProductListEdit}
+        initialQuantities={isProductListEdit ? boxQuantitiesByProduct : undefined}
+        onReplaceItems={replaceBoxProductItems}
         onClose={() => setIsProductDialogOpen(false)}
         onAddItems={addProductItems}
       />
