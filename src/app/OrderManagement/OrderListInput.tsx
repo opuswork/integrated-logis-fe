@@ -2998,6 +2998,9 @@ function ProductOrderPanel({
   const [isDirector, setIsDirector] = useState<boolean>(false);
   const [proxyOrder, setProxyOrder] = useState(false);
   const [loggedInMemberType, setLoggedInMemberType] = useState("");
+  /** 대신 주문서 넣기 시 표시용: 로그인한 관장 이름 / 소속 중앙 */
+  const [loggedInName, setLoggedInName] = useState("");
+  const [loggedInChurchName, setLoggedInChurchName] = useState("");
   const selfOrdererRef = useRef({ name: "", phone: "" });
   const proxyOrderRef = useRef(false);
   /** 관리자 대리작성에서 자동완성으로 고른 기존 회원. null이면 신규 주문자 */
@@ -3122,6 +3125,7 @@ function ProductOrderPanel({
       if (auth.name) {
         selfOrdererRef.current.name = auth.name;
         setOrdererName(auth.name);
+        setLoggedInName(auth.name);
       }
       if (auth.phone) {
         const phone = formatPhoneInput(auth.phone);
@@ -3167,8 +3171,10 @@ function ProductOrderPanel({
         }
 
         setLoggedInMemberType(data.user.memberType ?? "");
+        setLoggedInChurchName(data.user.church?.name ?? "");
         if (data.user.name) {
           selfOrdererRef.current.name = data.user.name;
+          setLoggedInName(data.user.name);
           if (!proxyOrderRef.current) {
             setOrdererName(data.user.name);
           }
@@ -4501,6 +4507,35 @@ function ProductOrderPanel({
                 ordererFieldsReadOnly && "bg-[#EDF2F7]",
               )}
             />
+
+            {proxyOrder ? (
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className={omLabelClass}>중앙</label>
+                  <div
+                    className={cn(
+                      omInputClass,
+                      "pointer-events-none flex items-center bg-[#EDF2F7]",
+                    )}
+                    aria-readonly
+                  >
+                    {loggedInChurchName || "-"}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className={omLabelClass}>관장님</label>
+                  <div
+                    className={cn(
+                      omInputClass,
+                      "pointer-events-none flex items-center bg-[#EDF2F7]",
+                    )}
+                    aria-readonly
+                  >
+                    {loggedInName || "-"}
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </>
         ) : null}
 
