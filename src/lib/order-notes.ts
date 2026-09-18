@@ -274,9 +274,17 @@ export function splitSavedAddress(
   return { address: trimmed, detail };
 }
 
+/** 지번/도로명 마지막 토큰: …로, …길, …리, …동, …가 (읍·면 단독은 번지 앞에 오지 않음) */
+const ADDRESS_STREET_SUFFIX = /(로|길|리|동|가)$/;
+/** 번지: 290, 10-3, 152 */
+const LOT_NUMBER = /^\d+(-\d+)?$/;
+
 /**
- * 본주소 끝의 호수/숫자(suite)를 상세주소로 분리.
- * 예: "서울 중구 서소문로 10-3 신송빌라트 77" → address + detail "77"
+ * 본주소 끝의 상세주소를 분리 (상세주소 태그가 없는 구주문용 휴리스틱).
+ * 1) 끝 토큰이 호수/숫자면 그것만 상세주소.
+ *    "서울 중구 서소문로 10-3 신송빌라트 77" → detail "77"
+ * 2) 아니면 마지막 번지("석현리 290", "서소문로 10-3") 뒤 텍스트 전체를 상세주소.
+ *    "경기 양주시 장흥면 석현리 290 허경영힐링센타 김옥립" → detail "허경영힐링센타 김옥립"
  */
 export function splitAddressAndDetail(full: string): {
   address: string;
@@ -291,17 +299,34 @@ export function splitAddressAndDetail(full: string): {
     return { address: trimmed, detail: "" };
   }
   const last = parts[parts.length - 1] ?? "";
+  const beforeLast = parts[parts.length - 2] ?? "";
   // 77, 101, 12-3, #77, 77호, 101동 등
   const isSuiteLike =
     /^#?\d+([.-]\d+)?(호|동|실|층)?$/i.test(last) ||
     /^\d+[A-Za-z]?$/i.test(last);
-  if (!isSuiteLike) {
-    return { address: trimmed, detail: "" };
+  // "테헤란로 152", "석현리 290"처럼 도로/리/동 바로 뒤 숫자는 번지이지 호수가 아님
+  const isLotNumber =
+    LOT_NUMBER.test(last) && ADDRESS_STREET_SUFFIX.test(beforeLast);
+  if (isSuiteLike && !isLotNumber) {
+    return {
+      address: parts.slice(0, -1).join(" "),
+      detail: last.replace(/^#/, ""),
+    };
   }
-  return {
-    address: parts.slice(0, -1).join(" "),
-    detail: last.replace(/^#/, ""),
-  };
+
+  // 마지막 "<도로/리/동> <번지>" 쌍을 찾아 그 뒤를 상세주소로
+  for (let i = parts.length - 2; i >= 1; i -= 1) {
+    if (
+      LOT_NUMBER.test(parts[i] ?? "") &&
+      ADDRESS_STREET_SUFFIX.test(parts[i - 1] ?? "")
+    ) {
+      return {
+        address: parts.slice(0, i + 1).join(" "),
+        detail: parts.slice(i + 1).join(" "),
+      };
+    }
+  }
+  return { address: trimmed, detail: "" };
 }
 
 export function parseDeliveryDateTimeFromNotes(
