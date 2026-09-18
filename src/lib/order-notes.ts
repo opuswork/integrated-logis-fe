@@ -136,7 +136,7 @@ export function parseSenderPartsFromNotes(notes: string | null | undefined): {
     return { name: "", phone: "", address: "" };
   }
   const match =
-    /보내는사람:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:수취연락|받는분이메일|받는분팩스|받는분주소|주문작업지역|지부매장|인사장종류|인사장번호|\[)|$)/.exec(
+    /보내는사람:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:보내는분상세주소|수취연락|받는분이메일|받는분팩스|받는분주소|주문작업지역|지부매장|인사장종류|인사장번호|\[)|$)/.exec(
       notes,
     );
   if (!match) {
@@ -235,6 +235,43 @@ export function parcelRecipientContactDisplay(
       parseRecipientPartsFromNotes(notes).address ||
       parseOrderNoteField(notes, "받는분주소"),
   };
+}
+
+/** `받는분상세주소:` 태그 (상세주소를 정확히 복원하기 위해 별도 저장). */
+export function parseRecipientAddressDetailFromNotes(
+  notes: string | null | undefined,
+) {
+  return parseOrderNoteField(notes, "받는분상세주소");
+}
+
+/** `보내는분상세주소:` 태그. */
+export function parseSenderAddressDetailFromNotes(
+  notes: string | null | undefined,
+) {
+  return parseOrderNoteField(notes, "보내는분상세주소");
+}
+
+/**
+ * 저장된 전체 주소를 본주소/상세주소로 복원.
+ * 상세주소 태그가 있으면 그대로 쓰고(전체 주소 끝에서 제거), 없는 구주문은
+ * 숫자형 호수 휴리스틱(splitAddressAndDetail)으로 분리.
+ */
+export function splitSavedAddress(
+  full: string,
+  savedDetail: string,
+): { address: string; detail: string } {
+  const trimmed = full.trim();
+  const detail = savedDetail.trim();
+  if (!detail) {
+    return splitAddressAndDetail(trimmed);
+  }
+  if (trimmed.endsWith(detail)) {
+    return {
+      address: trimmed.slice(0, trimmed.length - detail.length).trim(),
+      detail,
+    };
+  }
+  return { address: trimmed, detail };
 }
 
 /**
