@@ -61,7 +61,9 @@ import {
   parseRecipientPartsFromNotes,
   parseSenderPartsFromNotes,
   parseShipDateFromNotes,
-  splitAddressAndDetail,
+  splitSavedAddress,
+  parseRecipientAddressDetailFromNotes,
+  parseSenderAddressDetailFromNotes,
   PARCEL_CONTACT_MODE_LABEL,
   type ParcelRecipientContactMode,
 } from "@/lib/order-notes";
@@ -3338,14 +3340,20 @@ function ProductOrderPanel({
               ? recipientAddressValue || order.shipment?.deliveryAddress || ""
               : recipientAddressValue
             : "";
-        const recipientSplit = splitAddressAndDetail(recipientFull);
+        const recipientSplit = splitSavedAddress(
+          recipientFull,
+          parseRecipientAddressDetailFromNotes(notes),
+        );
         setRecipientName(recipient.name);
         setRecipientPhone(formatPhoneInput(recipient.phone));
         setRecipientAddress(recipientSplit.address);
         setRecipientAddressDetail(recipientSplit.detail);
 
         const sender = parseSenderPartsFromNotes(notes);
-        const senderSplit = splitAddressAndDetail(sender.address);
+        const senderSplit = splitSavedAddress(
+          sender.address,
+          parseSenderAddressDetailFromNotes(notes),
+        );
         setSenderName(sender.name);
         setSenderPhone(formatPhoneInput(sender.phone));
         setSenderAddress(senderSplit.address);
@@ -3902,9 +3910,15 @@ function ProductOrderPanel({
         hasParcelItems
           ? `보내는사람:${senderName.trim()} / ${senderPhone.trim()} / ${fullSenderAddress}`
           : null,
+        hasParcelItems && senderAddressDetail.trim()
+          ? `보내는분상세주소:${senderAddressDetail.trim()}`
+          : null,
         `수취연락:${PARCEL_CONTACT_MODE_LABEL[parcelContactMode]}`,
         parcelContactMode === "address" && fullRecipientAddress
           ? `받는분주소:${fullRecipientAddress}`
+          : null,
+        parcelContactMode === "address" && recipientAddressDetail.trim()
+          ? `받는분상세주소:${recipientAddressDetail.trim()}`
           : null,
         parcelContactMode === "email" && fullRecipientEmail
           ? `받는분이메일:${fullRecipientEmail}`
