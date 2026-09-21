@@ -42,7 +42,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, getAuthUser } from "@/lib/auth";
-import { formatMonthDay } from "@/lib/date-format";
+import { formatMonthDay, toLocalIsoDate } from "@/lib/date-format";
 import { openDaumPostcode } from "@/lib/daum-postcode";
 import { API_BASE_URL } from "@/lib/env";
 import {
@@ -329,10 +329,6 @@ function buildMemberOrderSummary(
   const [first, ...rest] = items;
   const head = `${first.productName} ${first.quantity}개`;
   return rest.length > 0 ? `${head} 외 ${rest.length}건` : head;
-}
-
-function formatMemberOrderDate(value: string) {
-  return value.slice(0, 10);
 }
 
 const PAGE_META: Record<
@@ -5856,7 +5852,7 @@ function OrderStatusPanel({
           0,
         ),
         orderDate:
-          orderDateFromNotes || formatMemberOrderDate(order.createdAt),
+          orderDateFromNotes || toLocalIsoDate(order.createdAt) || "",
         deliveryDate: parseDeliveryRequestDateFromNotes(order.notes),
         deliveryPlace:
           parseDeliveryCompanyFromNotes(order.notes) ||

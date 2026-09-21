@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
+import { toLocalIsoDate } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 
 type OrderRow = {
@@ -130,10 +131,10 @@ export function AdminDashboardMng() {
   const metrics = useMemo(() => {
     const totalOrders = orders.length;
     const createdToday = orders.filter(
-      (o) => toDateOnly(o.createdAt) === today,
+      (o) => toLocalIsoDate(o.createdAt) === today,
     ).length;
     const createdYesterday = orders.filter(
-      (o) => toDateOnly(o.createdAt) === yesterday,
+      (o) => toLocalIsoDate(o.createdAt) === yesterday,
     ).length;
     let dayDeltaLabel = "전일 대비 —";
     let dayDeltaClass = "text-[#64748B]";
@@ -201,7 +202,7 @@ export function AdminDashboardMng() {
     for (let i = days - 1; i >= 0; i -= 1) {
       const iso = addDaysIso(today, -i);
       counts.push(
-        orders.filter((o) => toDateOnly(o.createdAt) === iso).length,
+        orders.filter((o) => toLocalIsoDate(o.createdAt) === iso).length,
       );
     }
     const labels = counts.map((_, idx) => `${days - idx}일`);

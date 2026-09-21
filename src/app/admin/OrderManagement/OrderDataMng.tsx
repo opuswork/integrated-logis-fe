@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
+import { toLocalIsoDate } from "@/lib/date-format";
 import {
   parseBranchStoreFromNotes,
   parseBusinessCardFromNotes,
@@ -237,7 +238,7 @@ function mapOrders(data: ApiOrder[]): {
       orderStatus: ORDER_STATUS_LABEL[order.status] ?? order.status,
       type: orderType,
       orderDate:
-        parseOrderDateFromNotes(notes) || formatDateOnly(order.createdAt),
+        parseOrderDateFromNotes(notes) || toLocalIsoDate(order.createdAt) || "",
       branchStore: parseBranchStoreFromNotes(notes),
       churchName:
         parseChurchFromNotes(notes) || order.user?.church?.name || "",

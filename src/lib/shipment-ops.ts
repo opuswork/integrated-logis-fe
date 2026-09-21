@@ -1,3 +1,4 @@
+import { toLocalIsoDate } from "@/lib/date-format";
 import {
   isDeliveryOrderType,
   memberFacingStatusLabel,
@@ -238,7 +239,9 @@ export function mapShipmentOpsOrder(order: {
     }),
     createdAt: order.createdAt,
     orderDate:
-      parseOrderDateFromNotes(order.notes) || order.createdAt.slice(0, 10),
+      parseOrderDateFromNotes(order.notes) ||
+      toLocalIsoDate(order.createdAt) ||
+      "",
     storeRegion,
     storeLabel: regionLabel(storeRegion) !== "—"
       ? regionLabel(storeRegion)

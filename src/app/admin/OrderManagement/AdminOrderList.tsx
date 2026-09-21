@@ -23,7 +23,7 @@ import {
   type AdminRegion,
   type AuthUser,
 } from "@/lib/auth";
-import { formatMonthDay } from "@/lib/date-format";
+import { formatMonthDay, toLocalIsoDate } from "@/lib/date-format";
 import {
   ASSIGNMENT_CHANGE_ALERT,
   canEditOrderStatus,
@@ -376,7 +376,8 @@ export function AdminOrderList({
             : "접수",
         orderDate:
           parseOrderDateFromNotes(order.notes) ||
-          order.createdAt.slice(0, 10),
+          toLocalIsoDate(order.createdAt) ||
+          "",
         deliveryRequestDate: parseDeliveryRequestDateFromNotes(order.notes),
         requestedShipDate: toDateOnlyIso(order.requestedShipDate),
         storeRegion: order.storeRegion ?? regionFromNotes(order.notes),
