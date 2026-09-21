@@ -1,6 +1,14 @@
 "use client";
 
-import { Check, MapPin, Menu, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  MapPin,
+  Menu,
+  Plus,
+  ShoppingCart,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   useRef,
   useState,
@@ -25,6 +33,7 @@ import {
 import { ProductNameWithStock } from "@/components/product-name-with-stock";
 import { Button } from "@/components/ui/button";
 import { Chip, type ChipVariant } from "@/components/ui/chip";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
@@ -1504,6 +1513,7 @@ function ProductAddDialog({
   editList = false,
   initialQuantities,
   onReplaceItems,
+  presentation = "dialog",
 }: {
   open: boolean;
   onClose: () => void;
@@ -1511,6 +1521,8 @@ function ProductAddDialog({
   defaultOrderKind: OrderType;
   /** 개인회원 제품주문서: openStock=true 상품만 */
   openStockOnly?: boolean;
+  /** sheet=모바일 개인회원용 바텀시트(검색창 없음, 큰 글씨) / dialog=기존 중앙 모달 */
+  presentation?: "dialog" | "sheet";
   /** all=택배 통합 / box=①박스 / giftUnit=②선물세트(개) */
   mode?: "all" | "box" | "giftUnit";
   /** 수정 모드: 현재 목록을 미리 채우고, 확정 시 추가가 아닌 목록 교체 */
@@ -1616,15 +1628,18 @@ function ProductAddDialog({
     };
   }, [open, openStockOnly, mode, defaultOrderKind]);
 
+  const isSheet = presentation === "sheet";
+
   useEffect(() => {
-    if (!open) {
+    // 시트 모드는 검색창이 없고, 모바일 키보드가 튀어오르지 않도록 자동 포커스도 하지 않는다.
+    if (!open || isSheet) {
       return;
     }
     const frame = window.requestAnimationFrame(() => {
       searchInputRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [open]);
+  }, [open, isSheet]);
 
   const filteredCatalog = useMemo(
     () =>
@@ -1745,79 +1760,99 @@ function ProductAddDialog({
         ? "선물세트 낱개 추가"
         : "상품 추가";
 
-  return (
-    <Dialog
-      open={open}
-      title={dialogTitle}
-      onClose={onClose}
-      className="max-w-lg"
-    >
-      <div className="space-y-3">
-        <p className="text-sm text-[#64748b]">
-          주문종류:{" "}
-          <span className="font-semibold text-ink">
-            {orderKindLabel(defaultOrderKind)}
-          </span>{" "}
-          {mode === "box"
-            ? "· 박스 상품만 표시"
-            : mode === "giftUnit"
-              ? "· 선물세트 (개)만 표시"
-              : "(현재 배달/택배 탭 기준)"}
-        </p>
+  const subtitle = (
+    <>
+      주문종류:{" "}
+      <span className="font-semibold text-ink">
+        {orderKindLabel(defaultOrderKind)}
+      </span>{" "}
+      {mode === "box"
+        ? "· 박스 상품만 표시"
+        : mode === "giftUnit"
+          ? "· 선물세트 (개)만 표시"
+          : "(현재 배달/택배 탭 기준)"}
+    </>
+  );
 
-        <div
+  const filterControls = (
+    <div
+      className={cn(
+        "grid gap-2",
+        mode === "all" && !isSheet ? "min-[480px]:grid-cols-[140px_1fr]" : "",
+      )}
+    >
+      {mode === "all" ? (
+        <select
+          aria-label="구분 필터"
+          value={categoryFilter}
+          onChange={(event) => setCategoryFilter(event.target.value)}
           className={cn(
-            "grid gap-2",
-            mode === "all" ? "min-[480px]:grid-cols-[140px_1fr]" : "",
+            "w-full border border-[#cbd5e1] bg-white text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
+            isSheet
+              ? "min-h-14 rounded-xl px-4 text-[18px] font-semibold"
+              : "min-h-9 rounded-[7px] px-2.5 py-2 text-sm",
           )}
         >
-          {mode === "all" ? (
-            <select
-              aria-label="구분 필터"
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              className="min-h-9 w-full rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
-            >
-              <option value="all">전체</option>
-              <option value="선물세트">선물세트</option>
-              <option value="일반품">일반품</option>
-            </select>
-          ) : null}
-          <input
-            ref={searchInputRef}
-            type="search"
-            autoFocus
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Tab" || event.shiftKey) {
-                return;
-              }
-              if (filteredCatalog.length === 0) {
-                return;
-              }
-              event.preventDefault();
-              setActiveIndex(0);
-              window.setTimeout(() => focusList(), 0);
-            }}
-            placeholder="품명 / 코드 / 규격 검색"
-            className="min-h-9 w-full rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-2 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
-          />
-        </div>
+          <option value="all">전체</option>
+          <option value="선물세트">선물세트</option>
+          <option value="일반품">일반품</option>
+        </select>
+      ) : null}
+      {/* 시트 모드(모바일 개인회원)는 검색창 없이 목록만 보여준다. */}
+      {!isSheet ? (
+        <input
+          ref={searchInputRef}
+          type="search"
+          autoFocus
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Tab" || event.shiftKey) {
+              return;
+            }
+            if (filteredCatalog.length === 0) {
+              return;
+            }
+            event.preventDefault();
+            setActiveIndex(0);
+            window.setTimeout(() => focusList(), 0);
+          }}
+          placeholder="품명 / 코드 / 규격 검색"
+          className="min-h-9 w-full rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-2 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+        />
+      ) : null}
+    </div>
+  );
 
-        {isLoading ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            상품 목록을 불러오는 중...
-          </p>
-        ) : loadError ? (
-          <p className="rounded-[7px] border border-red/30 bg-[#fff0ed] px-3 py-2 text-sm text-red">
-            {loadError}
-          </p>
-        ) : filteredCatalog.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            검색 결과가 없습니다.
-          </p>
-        ) : (
+  const listContent = isLoading ? (
+    isSheet ? (
+      <div className="flex justify-center py-12 text-[#7c3aed]">
+        <Spinner size="xl" label="상품 목록 불러오는 중" />
+      </div>
+    ) : (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        상품 목록을 불러오는 중...
+      </p>
+    )
+  ) : loadError ? (
+    <p
+      className={cn(
+        "rounded-[7px] border border-red/30 bg-[#fff0ed] px-3 py-2 text-sm text-red",
+        isSheet && "mx-4 text-base",
+      )}
+    >
+      {loadError}
+    </p>
+  ) : filteredCatalog.length === 0 ? (
+    <p
+      className={cn(
+        "py-8 text-center text-muted-foreground",
+        isSheet ? "text-lg" : "text-sm",
+      )}
+    >
+      {isSheet ? "표시할 상품이 없습니다." : "검색 결과가 없습니다."}
+    </p>
+  ) : (
           <div
             ref={listRef}
             tabIndex={0}
@@ -1844,7 +1879,12 @@ function ProductAddDialog({
                 handleAdd();
               }
             }}
-            className="max-h-[50vh] divide-y divide-[#e5eaf0] overflow-y-auto rounded-lg border border-line focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            className={cn(
+              "divide-y divide-[#e5eaf0] focus:outline-none",
+              isSheet
+                ? "border-y border-[#e5eaf0]"
+                : "max-h-[50vh] overflow-y-auto rounded-lg border border-line focus:border-brand focus:ring-2 focus:ring-brand/20",
+            )}
           >
             {filteredCatalog.map((item, index) => {
               const qty = quantities[item.id] ?? 0;
@@ -1858,7 +1898,8 @@ function ProductAddDialog({
                   data-product-index={index}
                   onClick={() => setActiveIndex(index)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 border-l-4",
+                    "flex items-center border-l-4",
+                    isSheet ? "gap-4 px-4 py-4" : "gap-3 px-3 py-2.5",
                     selected ? "border-l-brand" : "border-l-transparent",
                     active
                       ? "bg-[#eff6ff]"
@@ -1871,7 +1912,10 @@ function ProductAddDialog({
                   <img
                     src={productImageSrc(item.imageUrl)}
                     alt={item.productName}
-                    className="h-14 w-14 shrink-0 rounded border border-line bg-white object-contain"
+                    className={cn(
+                      "shrink-0 border border-line bg-white object-contain",
+                      isSheet ? "h-20 w-20 rounded-xl" : "h-14 w-14 rounded",
+                    )}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -1879,6 +1923,9 @@ function ProductAddDialog({
                         name={item.productName}
                         stock={item.stock}
                         stockMax={item.stockMax}
+                        className={
+                          isSheet ? "text-[22px] leading-tight" : undefined
+                        }
                       />
                       {selected ? (
                         <span className="inline-flex items-center gap-0.5 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
@@ -1887,10 +1934,20 @@ function ProductAddDialog({
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-0.5 text-xs text-[#64748b]">
+                    <p
+                      className={cn(
+                        "text-[#64748b]",
+                        isSheet ? "mt-1 text-[17px]" : "mt-0.5 text-xs",
+                      )}
+                    >
                       {item.spec || "규격 없음"}
                     </p>
-                    <p className="mt-0.5 text-xs text-[#64748b]">
+                    <p
+                      className={cn(
+                        "text-[#64748b]",
+                        isSheet ? "mt-0.5 text-[17px]" : "mt-0.5 text-xs",
+                      )}
+                    >
                       {item.unit} · {item.category} ·{" "}
                       {formatPrice(item.wholesalePrice)}
                     </p>
@@ -1945,13 +2002,90 @@ function ProductAddDialog({
                         focusList();
                       }
                     }}
-                    className="h-9 w-20 shrink-0 rounded-md border border-[#cbd5e1] bg-white px-2 text-center text-sm font-semibold text-ink placeholder:text-[#94a3b8] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className={cn(
+                      "shrink-0 border-[#cbd5e1] bg-white text-center font-semibold text-ink placeholder:text-[#94a3b8] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+                      isSheet
+                        ? "h-20 w-[110px] rounded-2xl border-2 px-2 text-[24px] font-bold"
+                        : "h-9 w-20 rounded-md border px-2 text-sm",
+                    )}
                   />
                 </div>
               );
             })}
           </div>
-        )}
+        );
+
+  const confirmDisabled = !editList && selectedItems.length === 0;
+
+  if (isSheet) {
+    return (
+      <BottomSheet
+        open={open}
+        title={dialogTitle}
+        subtitle={subtitle}
+        onClose={onClose}
+        footer={
+          <div className="space-y-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="whitespace-nowrap text-[17px] text-[#64748b]">
+                선택 {selectedItems.length}종 · 수량 {selectedQtyTotal}개
+              </span>
+              <span className="whitespace-nowrap text-[22px] font-bold text-ink">
+                합계: {formatPrice(selectedPriceTotal)}
+              </span>
+            </div>
+            <div className="grid grid-cols-[1fr_2fr] gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-16 rounded-xl border-2 border-[#cbd5e1] text-[20px] font-bold text-[#334155]"
+                onClick={onClose}
+              >
+                취소
+              </Button>
+              <Button
+                type="button"
+                className={cn(
+                  "h-16 rounded-xl text-[20px] font-bold",
+                  confirmDisabled
+                    ? "border-[#e2e8f0] bg-[#e2e8f0] text-[#94a3b8]"
+                    : "border-brand bg-brand text-white hover:bg-[#1856bf]",
+                )}
+                disabled={confirmDisabled}
+                onClick={handleAdd}
+              >
+                {editList ? (
+                  <Check className="size-6" />
+                ) : (
+                  <ShoppingCart className="size-6" />
+                )}
+                {editList ? "목록 적용" : "장바구니 담기"}
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        {mode === "all" ? (
+          <div className="px-4 pt-1 pb-3">{filterControls}</div>
+        ) : null}
+        {listContent}
+      </BottomSheet>
+    );
+  }
+
+  return (
+    <Dialog
+      open={open}
+      title={dialogTitle}
+      onClose={onClose}
+      className="max-w-lg"
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-[#64748b]">{subtitle}</p>
+
+        {filterControls}
+
+        {listContent}
 
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[#64748b]">
           <span>
@@ -1965,7 +2099,7 @@ function ProductAddDialog({
         <Button
           type="button"
           className="h-11 w-full rounded-full border-brand bg-brand text-white hover:bg-[#1856bf]"
-          disabled={!editList && selectedItems.length === 0}
+          disabled={confirmDisabled}
           onClick={handleAdd}
         >
           {editList ? (
@@ -2937,6 +3071,7 @@ function ProductOrderPanel({
   onApplyGreetingToAll,
   onRemoveGreeting,
   presetShipDate = null,
+  sheetOnMobile = false,
 }: {
   onGreetingClick: (context: {
     productNames: string[];
@@ -2976,9 +3111,14 @@ function ProductOrderPanel({
   onRemoveGreeting?: (productName: string) => void;
   /** 달력에서 고른 납품일. 있으면 배달일/택배발송일에 넣고 수정 불가. */
   presetShipDate?: string | null;
+  /** 개인회원 앱: 모바일(<1040px)에서 상품 추가를 바텀시트로 표시 */
+  sheetOnMobile?: boolean;
 }) {
   const isEditMode = Boolean(editOrderNumber);
   const isMemberNewOrder = !blankCustomerFields && !isEditMode;
+  const isDesktopWidth = useMinWidth(1040);
+  const productDialogPresentation =
+    sheetOnMobile && !isDesktopWidth ? "sheet" : "dialog";
   const [editOrderId, setEditOrderId] = useState<number | null>(null);
   const [editOrderStatus, setEditOrderStatus] = useState<string | null>(null);
   const [isHydrating, setIsHydrating] = useState(isEditMode);
@@ -5393,6 +5533,7 @@ function ProductOrderPanel({
         open={isProductDialogOpen && orderType !== null}
         defaultOrderKind={orderType ?? "delivery"}
         openStockOnly={openStockOnly}
+        presentation={productDialogPresentation}
         mode={productDialogMode}
         editList={isProductListEdit}
         initialQuantities={isProductListEdit ? boxQuantitiesByProduct : undefined}
@@ -6373,6 +6514,7 @@ export function OrderListInput({
                 key={orderFormKey}
                 blankCustomerFields={embedded}
                 openStockOnly={!embedded}
+                sheetOnMobile={!embedded}
                 presetShipDate={presetShipDate}
                 hasUnsavedGreeting={hasUnsavedGreeting}
                 savedGreetingsByProduct={savedGreetingsByProduct}
