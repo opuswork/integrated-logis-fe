@@ -56,10 +56,13 @@ type ProductFormState = {
   openStock: boolean;
 };
 
+/** 구분 필터: 카테고리(선물세트/일반품) + 고객공개 여부(공개/비공개) */
 const CATEGORY_FILTER_OPTIONS = [
   { value: "all", label: "전체" },
   { value: "선물세트", label: "선물세트" },
   { value: "일반품", label: "일반품" },
+  { value: "open", label: "공개" },
+  { value: "closed", label: "비공개" },
 ] as const;
 
 const CATEGORY_FORM_OPTIONS = [
@@ -671,7 +674,15 @@ export function StockInventoryMng() {
     const normalizedKeyword = keyword.trim().toLowerCase();
 
     return products.filter((product) => {
-      if (categoryFilter !== "all" && product.category !== categoryFilter) {
+      if (categoryFilter === "open" || categoryFilter === "closed") {
+        const isOpen = product.openStock !== false;
+        if (isOpen !== (categoryFilter === "open")) {
+          return false;
+        }
+      } else if (
+        categoryFilter !== "all" &&
+        product.category !== categoryFilter
+      ) {
         return false;
       }
 
