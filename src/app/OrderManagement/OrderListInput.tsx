@@ -3769,10 +3769,11 @@ function ProductOrderPanel({
     setOrderType(null);
     setDeliveryCompanyName("");
     setParcelCompanyName("");
-    setDeliveryDate("");
+    // 달력에서 고른 납품일(presetShipDate)은 폼초기화 후에도 유지
+    setDeliveryDate(presetShipDate ?? "");
     setDeliveryAmPm("");
     setDeliveryTime("");
-    setParcelShipDate("");
+    setParcelShipDate(presetShipDate ?? "");
     setRecipientName("");
     setRecipientPhone("");
     setRecipientAddress("");
