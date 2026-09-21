@@ -13,6 +13,7 @@ import {
 
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { MemberHomeInstallMng } from "@/app/OrderManagement/MemberHomeInstallMng";
+import { MemberLogoutButton } from "@/app/OrderManagement/MemberLogoutButton";
 import { MemberOrderCalendar } from "@/app/OrderManagement/MemberOrderCalendar";
 import { MemberGreetingMng } from "@/app/OrderManagement/MemberGreetingMng";
 import { MemberPartnerMng } from "@/app/OrderManagement/MemberPartnerMng";
@@ -641,9 +642,7 @@ function MobileMemberHeader({
               {greeting}
             </span>
           ) : null}
-          <LogoutButton className="rounded-lg bg-white px-4 py-2 text-[16px] font-bold text-[#1e2a5b]">
-            나가기
-          </LogoutButton>
+          <MemberLogoutButton className="rounded-lg bg-white px-4 py-2 text-[16px] font-bold text-[#1e2a5b]" />
         </div>
       </header>
 
