@@ -601,13 +601,20 @@ function MobileMemberHeader({
   onToggle,
   onMenuChange,
   memberName,
+  memberTypeLabel,
 }: {
   activeMenu: MemberNav;
   isOpen: boolean;
   onToggle: () => void;
   onMenuChange: (menu: MemberNav) => void;
   memberName?: string;
+  memberTypeLabel?: string;
 }) {
+  // "김정호 관장님" — 직분이 없으면 "김정호 님"
+  const greeting = memberName
+    ? `${memberName} ${memberTypeLabel ? `${memberTypeLabel}님` : "님"}`
+    : "";
+
   return (
     <div className="sticky top-0 z-30 bg-[#1e2a5b] pt-[env(safe-area-inset-top)] min-[1040px]:hidden">
       <header className="relative z-50 flex h-16 items-center justify-between px-4 text-white">
@@ -621,12 +628,17 @@ function MobileMemberHeader({
           >
             {isOpen ? <X className="size-7" /> : <Menu className="size-7" />}
           </button>
-          <strong className="text-[24px] font-bold leading-none">주문</strong>
+          <div className="flex flex-col leading-none">
+            <strong className="text-[24px] font-bold">간장</strong>
+            <span className="mt-0.5 text-[12px] font-semibold text-white/80">
+              주문
+            </span>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {memberName ? (
+          {greeting ? (
             <span className="text-[15px] font-bold text-[#f9a8d4]">
-              {memberName} 님
+              {greeting}
             </span>
           ) : null}
           <LogoutButton className="rounded-lg bg-white px-4 py-2 text-[16px] font-bold text-[#1e2a5b]">
@@ -2246,6 +2258,24 @@ type MemberSuggest = {
 function isGwanjangMemberType(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed === "GWANJANG" || trimmed === "관장";
+}
+
+const MEMBER_TYPE_LABEL: Record<string, string> = {
+  GWANJANG: "관장",
+  GENERAL: "일반",
+  CHONGMU: "총무",
+  SAJANG: "사장",
+  BUSAJANG: "부사장",
+  SANGMU: "상무",
+};
+
+/** 직분 코드(GWANJANG 등) → 한글 라벨. 이미 한글이면 그대로. */
+function formatMemberTypeLabel(value?: string | null) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  return MEMBER_TYPE_LABEL[trimmed] ?? trimmed;
 }
 
 /** 관리자 대리작성 전용: 이름 일부로 기존 회원을 찾아 연락처·중앙까지 채웁니다. */
@@ -6107,7 +6137,9 @@ export function OrderListInput({
   const [memberProfile, setMemberProfile] = useState<{
     name: string;
     churchName: string;
-  }>({ name: "", churchName: "" });
+    /** 직분 라벨 (관장/일반/총무/...) */
+    memberTypeLabel: string;
+  }>({ name: "", churchName: "", memberTypeLabel: "" });
 
   useEffect(() => {
     if (pwaInstalled && activeMenu === "바로가기추가") {
@@ -6148,6 +6180,7 @@ export function OrderListInput({
         const data = (await response.json()) as {
           user?: {
             name?: string;
+            memberType?: string | null;
             church?: { name?: string | null } | null;
           };
         };
@@ -6157,6 +6190,7 @@ export function OrderListInput({
         setMemberProfile({
           name: data.user?.name?.trim() || auth?.name || "",
           churchName: data.user?.church?.name?.trim() || "",
+          memberTypeLabel: formatMemberTypeLabel(data.user?.memberType),
         });
       } catch {
         // Keep session name if /me fails.
@@ -6527,6 +6561,7 @@ export function OrderListInput({
           onToggle={() => setIsMobileMenuOpen((open) => !open)}
           onMenuChange={handleMenuChange}
           memberName={memberProfile.name}
+          memberTypeLabel={memberProfile.memberTypeLabel}
         />
 
         <div className="px-4 pt-4 pb-6 min-[1040px]:p-0">{content}</div>
