@@ -6,41 +6,55 @@
   font-family: inherit;
 }
 
+/* 월 이동 (◀ 2026년 9월 ▶) */
 .member-order-calendar .react-calendar__navigation {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
-  height: 40px;
+  justify-content: space-between;
+  height: 48px;
+  margin-bottom: 12px;
 }
 
-.member-order-calendar .react-calendar__navigation button {
-  min-width: 36px;
-  background: none;
-  font-size: 22px;
-  font-weight: 600;
+.member-order-calendar .react-calendar__navigation__arrow {
+  min-width: 48px;
+  width: 48px;
+  height: 48px;
+  flex-grow: 0;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 10px;
+  background: #f5f3ff;
+  font-size: 18px;
+  font-weight: 700;
   color: #7c3aed;
   line-height: 1;
 }
 
-.member-order-calendar .react-calendar__navigation button:enabled:hover,
-.member-order-calendar .react-calendar__navigation button:enabled:focus {
-  background: #f5f3ff;
-  border-radius: 999px;
+.member-order-calendar .react-calendar__navigation__arrow:enabled:hover,
+.member-order-calendar .react-calendar__navigation__arrow:enabled:focus {
+  background: #ede9fe;
 }
 
 .member-order-calendar .react-calendar__navigation__label {
+  flex-grow: 1;
+  border: none;
+  background: none;
   pointer-events: none;
-  font-size: 18px;
-  font-weight: 700;
-  color: #1a202c;
+  font-size: 22px;
+  font-weight: 800;
+  color: #1e293b;
 }
 
+/* 요일 */
 .member-order-calendar .react-calendar__month-view__weekdays {
   text-align: center;
   text-transform: none;
-  font-weight: 600;
-  font-size: 13px;
-  color: #334155;
+  font-size: 15px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.member-order-calendar .react-calendar__month-view__weekdays__weekday {
+  padding: 6px 0;
 }
 
 .member-order-calendar .react-calendar__month-view__weekdays__weekday abbr {
@@ -51,18 +65,25 @@
   color: #f43f5e;
 }
 
+.member-order-calendar .react-calendar__month-view__weekdays__weekday:last-child {
+  color: #a78bfa;
+}
+
+/* 날짜 타일 */
 .member-order-calendar .react-calendar__tile {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  min-height: 64px;
-  padding: 6px 2px 8px;
+  min-height: 66px;
+  padding: 6px 0 4px;
   background: none;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  color: #1a202c;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
 }
 
 .member-order-calendar .react-calendar__tile:enabled:hover,
@@ -70,45 +91,54 @@
   background: #f5f3ff;
 }
 
-.member-order-calendar .react-calendar__tile--active {
-  background: #fff !important;
-  color: #1a202c;
-}
-
-.member-order-calendar .react-calendar__tile--active abbr,
-.member-order-calendar .member-order-calendar-today abbr {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid #7c3aed;
-  border-radius: 999px;
-}
-
 .member-order-calendar .react-calendar__tile--now {
   background: transparent;
 }
 
-.member-order-calendar .react-calendar__month-view__days__day--neighboringMonth {
-  color: #cbd5e1;
+.member-order-calendar .react-calendar__tile--active,
+.member-order-calendar .member-order-calendar-today {
+  border-color: #c4b5fd;
+  background: #fff !important;
+  color: #1e293b;
 }
 
-.member-order-calendar-sunday {
+.member-order-calendar-past abbr {
   color: #94a3b8;
 }
 
 .member-order-calendar-sunday abbr {
-  color: #94a3b8;
+  color: #fb7185;
 }
 
+.member-order-calendar-saturday abbr {
+  color: #a78bfa;
+}
+
+/* 배지 (오늘 / 배달) */
 .member-order-calendar-badge {
   display: flex;
-  min-height: 22px;
+  min-height: 20px;
   flex-direction: column;
   align-items: center;
-  margin-top: 2px;
-  font-size: 10px;
+  gap: 2px;
+  margin-top: 3px;
+}
+
+.member-order-calendar-tag {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.member-order-calendar-tag--today {
+  color: #7c3aed;
+}
+
+.member-order-calendar-tag--delivery {
+  color: #7c3aed;
+  background: #ede9fe;
 }

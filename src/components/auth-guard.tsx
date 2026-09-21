@@ -92,7 +92,13 @@ export function AuthGuard({
   );
 }
 
-export function LogoutButton({ className }: { className?: string }) {
+export function LogoutButton({
+  className,
+  children = "로그아웃",
+}: {
+  className?: string;
+  children?: ReactNode;
+}) {
   const router = useRouter();
 
   return (
@@ -104,7 +110,7 @@ export function LogoutButton({ className }: { className?: string }) {
         router.replace("/login");
       }}
     >
-      로그아웃
+      {children}
     </button>
   );
 }
