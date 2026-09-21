@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Menu, Plus, Trash2, X } from "lucide-react";
+import { Check, MapPin, Menu, Plus, Trash2, X } from "lucide-react";
 import {
   useRef,
   useState,
@@ -501,6 +501,34 @@ function Panel({
   );
 }
 
+/** 개인회원 내 주문 현황 요약 카드: 📍교회명 / 총 N건 / 목록보기 */
+function MemberStatusSummaryCard({
+  churchName,
+  action,
+  children,
+}: {
+  churchName?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="min-w-0 rounded-2xl bg-white p-4">
+      <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-[#f9a8d4] bg-[#f5f0ff] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <MapPin className="size-6 shrink-0 text-[#e11d48]" />
+          <div className="min-w-0">
+            <p className="truncate text-[18px] font-bold text-[#4c1d95]">
+              {churchName || "내 주문"}
+            </p>
+            {children}
+          </div>
+        </div>
+        {action}
+      </div>
+    </section>
+  );
+}
+
 function MemberNavList({
   activeMenu,
   onMenuChange,
@@ -570,41 +598,40 @@ function MobileMemberHeader({
   isOpen,
   onToggle,
   onMenuChange,
-  churchName,
   memberName,
 }: {
   activeMenu: MemberNav;
   isOpen: boolean;
   onToggle: () => void;
   onMenuChange: (menu: MemberNav) => void;
-  churchName?: string;
   memberName?: string;
 }) {
-  const profileLine = [churchName, memberName ? `${memberName}님` : ""]
-    .filter(Boolean)
-    .join(", ");
-
   return (
-    <div className="relative mb-3.5 min-[1040px]:hidden">
-      <div className="flex items-center justify-between rounded-lg bg-[#1f2937] px-4 py-3 text-[#e5edf7]">
-        <div className="min-w-0">
-          <strong className="block text-base">개인회원</strong>
-          {profileLine ? (
-            <p className="mt-0.5 truncate text-[12px] text-[#94a3b8]">
-              {profileLine}
-            </p>
-          ) : null}
+    <div className="sticky top-0 z-30 bg-[#1e2a5b] pt-[env(safe-area-inset-top)] min-[1040px]:hidden">
+      <header className="relative z-50 flex h-16 items-center justify-between px-4 text-white">
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            aria-label={isOpen ? "메뉴 닫기" : "메뉴 열기"}
+            aria-expanded={isOpen}
+            onClick={onToggle}
+            className="-ml-2 rounded-lg p-2 text-white transition-colors hover:bg-white/10"
+          >
+            {isOpen ? <X className="size-7" /> : <Menu className="size-7" />}
+          </button>
+          <strong className="text-[24px] font-bold leading-none">주문</strong>
         </div>
-        <button
-          type="button"
-          aria-label={isOpen ? "메뉴 닫기" : "메뉴 열기"}
-          aria-expanded={isOpen}
-          onClick={onToggle}
-          className="rounded-[7px] p-2 text-[#e5edf7] transition-colors hover:bg-[#334155]"
-        >
-          {isOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-        </button>
-      </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {memberName ? (
+            <span className="text-[15px] font-bold text-[#f9a8d4]">
+              {memberName} 님
+            </span>
+          ) : null}
+          <LogoutButton className="rounded-lg bg-white px-4 py-2 text-[16px] font-bold text-[#1e2a5b]">
+            나가기
+          </LogoutButton>
+        </div>
+      </header>
 
       {isOpen ? (
         <>
@@ -614,7 +641,7 @@ function MobileMemberHeader({
             className="fixed inset-0 z-40 bg-black/40"
             onClick={onToggle}
           />
-          <div className="absolute top-full right-0 left-0 z-50 mt-2 rounded-lg border border-[#334155] bg-[#1f2937] p-3.5 shadow-lg">
+          <div className="absolute top-full right-0 left-0 z-50 mx-4 mt-2 rounded-lg border border-[#334155] bg-[#1f2937] p-3.5 shadow-lg">
             <MemberNavList
               activeMenu={activeMenu}
               onMenuChange={(menu) => {
@@ -5561,10 +5588,12 @@ function MemberMobileOrderCard({
 
 function OrderStatusPanel({
   reloadToken = 0,
+  churchName,
   onEditOrder,
   onCreateOrderForDate,
 }: {
   reloadToken?: number;
+  churchName?: string;
   onEditOrder?: (orderNumber: string) => void;
   onCreateOrderForDate?: (iso: string) => void;
 }) {
@@ -5860,38 +5889,41 @@ function OrderStatusPanel({
   return (
     <div className="space-y-3">
       {isLoading ? (
-        <Panel title="내 주문 현황">
-          <p className="text-sm text-muted-foreground">불러오는 중...</p>
-        </Panel>
+        <MemberStatusSummaryCard churchName={churchName}>
+          <p className="text-[15px] font-semibold text-[#64748b]">
+            불러오는 중...
+          </p>
+        </MemberStatusSummaryCard>
       ) : error ? (
-        <Panel title="내 주문 현황">
-          <p className="text-sm text-red">{error}</p>
-        </Panel>
+        <MemberStatusSummaryCard churchName={churchName}>
+          <p className="text-[15px] font-semibold text-red">{error}</p>
+        </MemberStatusSummaryCard>
       ) : (
         <>
-          <Panel>
-            <div className="mb-2.5 flex items-baseline justify-between gap-3">
-              <h4 className="text-base font-semibold text-ink">내 주문 현황</h4>
+          <MemberStatusSummaryCard
+            churchName={churchName}
+            action={
               <button
                 type="button"
-                className="shrink-0 text-sm font-semibold text-brand underline underline-offset-2"
+                className="shrink-0 rounded-lg px-2 py-2 text-[18px] font-bold text-[#0f172a] hover:bg-white/60"
                 onClick={() =>
                   setStatusView((view) =>
                     view === "list" ? "calendar" : "list",
                   )
                 }
               >
-                {statusView === "list" ? "달력으로 보기" : "목록으로 보기"}
+                {statusView === "list" ? "달력보기" : "목록보기"}
               </button>
-            </div>
-            <p className="text-sm text-[#64748b] min-[1040px]:text-lg">
+            }
+          >
+            <p className="text-[15px] font-semibold text-[#1e293b]">
               총 {orders.length}건
             </p>
-          </Panel>
+          </MemberStatusSummaryCard>
 
           {statusView === "calendar" ? (
             <>
-              <Panel>
+              <section className="min-w-0 rounded-2xl bg-white p-4">
                 <MemberOrderCalendar
                   counts={deliveryCounts}
                   selectedIso={calendarDateIso}
@@ -5910,7 +5942,7 @@ function OrderStatusPanel({
                     setCalendarDayModalOpen(true);
                   }}
                 />
-              </Panel>
+              </section>
               <Dialog
                 open={calendarDayModalOpen && Boolean(calendarDateIso)}
                 title={
@@ -6415,6 +6447,7 @@ export function OrderListInput({
         return (
           <OrderStatusPanel
             reloadToken={ordersReloadToken}
+            churchName={memberProfile.churchName}
             onEditOrder={handleStartEditOrder}
             onCreateOrderForDate={handleCreateOrderForDate}
           />
@@ -6426,9 +6459,13 @@ export function OrderListInput({
     }
   };
 
+  // 내 주문 현황(달력/목록)은 고령 사용자용으로 제목·설명 없이 요약 카드부터 바로 보여준다.
+  const hidePageMeta =
+    !embedded && activeMenu === "내 주문 현황" && !editingOrderNumber;
+
   const content = (
     <>
-      {!embedded ? (
+      {!embedded && !hidePageMeta ? (
         <div className="mb-3.5 flex flex-col gap-3 min-[1100px]:flex-row min-[1100px]:items-start min-[1100px]:justify-between">
           <div>
             {pageMeta.title === "제품주문서 (신규작성)" ? (
@@ -6457,7 +6494,7 @@ export function OrderListInput({
   }
 
   return (
-    <div className="grid min-h-[calc(100dvh-2rem)] grid-cols-1 overflow-hidden rounded-[10px] border border-[#cbd3df] bg-white min-[1040px]:min-h-[730px] min-[1040px]:grid-cols-[200px_1fr]">
+    <div className="grid min-h-[100dvh] grid-cols-1 bg-white min-[1040px]:min-h-[730px] min-[1040px]:grid-cols-[200px_1fr] min-[1040px]:overflow-hidden min-[1040px]:rounded-[10px] min-[1040px]:border min-[1040px]:border-[#cbd3df]">
       <MemberSidebar
         activeMenu={activeMenu}
         onMenuChange={handleMenuChange}
@@ -6465,17 +6502,16 @@ export function OrderListInput({
         memberName={memberProfile.name}
       />
 
-      <section className="bg-[#f7f9fc] p-4">
+      <section className="bg-[#f1f0f5] min-[1040px]:bg-[#f7f9fc] min-[1040px]:p-4">
         <MobileMemberHeader
           activeMenu={activeMenu}
           isOpen={isMobileMenuOpen}
           onToggle={() => setIsMobileMenuOpen((open) => !open)}
           onMenuChange={handleMenuChange}
-          churchName={memberProfile.churchName}
           memberName={memberProfile.name}
         />
 
-        {content}
+        <div className="px-4 pt-4 pb-6 min-[1040px]:p-0">{content}</div>
       </section>
     </div>
   );

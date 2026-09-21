@@ -53,31 +53,36 @@ export function MemberOrderCalendar({
       }
       next2Label={null}
       prev2Label={null}
-      nextLabel="›"
-      prevLabel="‹"
-      showNeighboringMonth
+      nextLabel="▶"
+      prevLabel="◀"
+      nextAriaLabel="다음 달"
+      prevAriaLabel="이전 달"
+      showNeighboringMonth={false}
       tileClassName={({ date, view }) => {
         if (view !== "month") return null;
         const iso = toIso(date);
         return cn(
           date.getDay() === 0 && "member-order-calendar-sunday",
+          date.getDay() === 6 && "member-order-calendar-saturday",
+          iso < todayIso && "member-order-calendar-past",
           iso === todayIso && "member-order-calendar-today",
           (counts[iso] ?? 0) > 0 && "member-order-calendar-has-delivery",
         );
       }}
       tileContent={({ date, view }) => {
         if (view !== "month") return null;
-        if (date.getMonth() !== activeStartDate.getMonth()) {
-          return <span className="member-order-calendar-badge" />;
-        }
         const iso = toIso(date);
         const count = counts[iso] ?? 0;
         const isToday = iso === todayIso;
         return (
           <span className="member-order-calendar-badge">
-            {isToday ? <span className="text-[#7c3aed]">오늘</span> : null}
+            {isToday ? (
+              <span className="member-order-calendar-tag member-order-calendar-tag--today">
+                오늘
+              </span>
+            ) : null}
             {count > 0 ? (
-              <span className="text-[#e11d48]">
+              <span className="member-order-calendar-tag member-order-calendar-tag--delivery">
                 배달{count > 1 ? count : ""}
               </span>
             ) : null}
