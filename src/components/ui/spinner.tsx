@@ -4,6 +4,7 @@ const sizeClass = {
   sm: "size-4",
   md: "size-5",
   lg: "size-6",
+  xl: "size-8",
 } as const;
 
 export type SpinnerSize = keyof typeof sizeClass;
