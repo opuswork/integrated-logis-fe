@@ -9,6 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { apiFetch } from "@/lib/api";
 import { getAuthUser, isSuperAdmin } from "@/lib/auth";
+import { toLocalIsoDate } from "@/lib/date-format";
 import {
   parseBranchStoreFromNotes,
   parseChurchFromNotes,
@@ -286,7 +287,7 @@ function mapOrderToPrintPages(
   const notes = order.notes;
   const type = toPrintShipType(notes, order.shipment?.fulfillmentType);
   const orderDate =
-    parseOrderDateFromNotes(notes) || order.createdAt.slice(0, 10);
+    parseOrderDateFromNotes(notes) || toLocalIsoDate(order.createdAt) || "";
   const shipDate =
     parseShipDateFromNotes(notes) ||
     order.shipment?.estimatedWindow?.slice(0, 10) ||

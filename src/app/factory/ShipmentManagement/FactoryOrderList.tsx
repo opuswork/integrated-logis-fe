@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
+import { toLocalIsoDate } from "@/lib/date-format";
 import {
   type DeliveryOrderStatus,
   isDispatchWaitingStatus,
@@ -85,10 +86,6 @@ function datePickerOnlyProps() {
       openDatePicker(event.currentTarget);
     },
   };
-}
-
-function formatOrderDate(value: string) {
-  return value.slice(0, 10);
 }
 
 function formatFulfillmentType(type?: string | null, notes?: string | null) {
@@ -324,7 +321,8 @@ export function FactoryOrderList() {
             statusLabel: memberFacingStatusLabel(status),
             productCount: order.items?.length ?? 0,
             summary: buildSummary(order.items),
-            orderDate: orderDateFromNotes || formatOrderDate(order.createdAt),
+            orderDate:
+              orderDateFromNotes || toLocalIsoDate(order.createdAt) || "",
             factoryAlert: order.factoryAlert ?? "",
           };
         });
