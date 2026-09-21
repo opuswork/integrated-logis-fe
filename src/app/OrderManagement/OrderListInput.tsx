@@ -77,6 +77,8 @@ const MEMBER_NAV = [
   "거래처관리",
   "바로가기추가",
 ] as const;
+/** 내 주문 현황 첫 로딩 시 스피너 최소 표시 시간 */
+const STATUS_LOADING_MIN_MS = 2000;
 const GREETING_NUMBERS = ["1", "2", "3", "4"] as const;
 const GREETING_SIZES = ["8칸", "6칸", "4칸", "자체"] as const;
 const GREETING_RECEIVE_PLACES = [
@@ -5698,6 +5700,7 @@ function OrderStatusPanel({
     let cancelled = false;
 
     const load = async (silent = false) => {
+      const startedAt = Date.now();
       if (!silent) {
         setIsLoading(true);
         setError("");
@@ -5745,7 +5748,15 @@ function OrderStatusPanel({
         }
       } finally {
         if (!cancelled && !silent) {
-          setIsLoading(false);
+          // 스피너가 너무 짧게 깜빡이지 않도록 최소 표시 시간을 보장한다.
+          const remaining =
+            STATUS_LOADING_MIN_MS - (Date.now() - startedAt);
+          if (remaining > 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, remaining));
+          }
+          if (!cancelled) {
+            setIsLoading(false);
+          }
         }
       }
     };
@@ -5889,10 +5900,17 @@ function OrderStatusPanel({
   return (
     <div className="space-y-3">
       {isLoading ? (
-        <MemberStatusSummaryCard churchName={churchName}>
-          <p className="text-[15px] font-semibold text-[#64748b]">
-            불러오는 중...
-          </p>
+        <MemberStatusSummaryCard
+          churchName={churchName}
+          action={
+            <Spinner
+              size="xl"
+              label="주문 불러오는 중"
+              className="mr-2 text-[#7c3aed]"
+            />
+          }
+        >
+          <p className="text-[15px] font-semibold text-[#64748b]">&nbsp;</p>
         </MemberStatusSummaryCard>
       ) : error ? (
         <MemberStatusSummaryCard churchName={churchName}>
