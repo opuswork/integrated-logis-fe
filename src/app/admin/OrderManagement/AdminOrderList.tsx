@@ -16,7 +16,6 @@ import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import {
-  canApproveGreetingAction,
   canCreateAdminOrder,
   canWriteOrderChecklist,
   getAuthUser,
@@ -33,14 +32,11 @@ import {
   type DeliveryOrderStatus,
 } from "@/lib/order-delivery";
 import {
-  isSelfOrCardOnlyGreeting,
-  mergeGreetingSelections,
   parseBranchStoreFromNotes,
   parseDeliveryRequestDateFromNotes,
   parseOrderDateFromNotes,
   parseOrdererFromNotes,
   parseOrderTypeFromNotes,
-  type GreetingSelection,
 } from "@/lib/order-notes";
 import { cn } from "@/lib/utils";
 
@@ -77,7 +73,6 @@ type AdminOrderRow = {
   paymentAuthor: string | null;
   greetingDone: boolean;
   greetingCount: number;
-  greetingSelection: GreetingSelection;
   slipDone: boolean;
   slipAuthor: string | null;
   readyForShipment: boolean;
@@ -306,7 +301,6 @@ export function AdminOrderList({
   onEditOrder?: (orderNumber: string) => void;
 }) {
   const authUser = getAuthUser();
-  const canApproveGreeting = canApproveGreetingAction(authUser);
   const canCreateOrder = canCreateAdminOrder(authUser);
 
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
@@ -388,10 +382,6 @@ export function AdminOrderList({
         paymentAuthor: order.paymentAuthor ?? null,
         greetingDone: order.greetingDone === true,
         greetingCount: order.greetingForms?.length ?? 0,
-        greetingSelection: mergeGreetingSelections(
-          order.greetingForms ?? [],
-          order.notes,
-        ),
         slipDone: order.slipDone === true,
         slipAuthor: order.slipAuthor ?? null,
         readyForShipment: order.readyForShipment === true,
@@ -764,8 +754,8 @@ export function AdminOrderList({
             주문관리
           </h3>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            지역 매장관리자는 자지역 주문만 처리합니다. 인사장완료는
-            Factory-G(01029647088)만 확인 가능합니다. 공장관리자는 목록만
+            지역 매장관리자는 자지역 주문만 처리합니다. 인사장 완료 처리는
+            인사장관리의 &apos;완료&apos; 버튼으로 합니다. 공장관리자는 목록만
             조회합니다.
           </p>
         </div>
@@ -854,7 +844,7 @@ export function AdminOrderList({
                   <th className="px-2 py-2 font-semibold">주문확인</th>
                   <th className="px-2 py-2 font-semibold">상태</th>
                   <th className="px-2 py-2 font-semibold">결제완료</th>
-                  <th className="px-2 py-2 font-semibold">인사장완료</th>
+                  <th className="px-2 py-2 font-semibold">인사장여부</th>
                   <th className="px-2 py-2 font-semibold">기표지완료</th>
                   <th className="px-2 py-2 font-semibold">출력</th>
                 </tr>
@@ -1200,52 +1190,15 @@ export function AdminOrderList({
                         )}
                       </td>
                       <td className="px-2 py-2 align-top">
-                        {!needsGreeting ? (
+                        {/* 인사장 유무만 표시. 완료 처리는 인사장관리 "완료" 버튼 */}
+                        {needsGreeting ? (
+                          <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
+                            O
+                          </span>
+                        ) : (
                           <span className="rounded bg-[#f1f5f9] px-2 py-0.5 text-[11px] font-semibold text-[#64748b]">
                             X
                           </span>
-                        ) : isSelfOrCardOnlyGreeting(row.greetingSelection) ? (
-                          <div className="flex flex-wrap items-center gap-1">
-                            {row.greetingSelection.includeCard ? (
-                              <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[11px] font-semibold text-[#1d4ed8]">
-                                명함
-                              </span>
-                            ) : null}
-                            {row.greetingSelection.includeCard &&
-                            row.greetingSelection.includeSelf ? (
-                              <span className="text-[10px] text-[#94a3b8]">
-                                or
-                              </span>
-                            ) : null}
-                            {row.greetingSelection.includeSelf ? (
-                              <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[11px] font-semibold text-[#1d4ed8]">
-                                자체
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : row.greetingDone ? (
-                          <div className="flex flex-col gap-1">
-                            <span className="rounded bg-[#dcfce7] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
-                              Y
-                            </span>
-                            <CellBtn disabled>확인</CellBtn>
-                          </div>
-                        ) : (
-                          <CellBtn
-                            disabled={
-                              !canApproveGreeting ||
-                              savingId === `g-${row.id}`
-                            }
-                            onClick={() =>
-                              void patchChecklist(
-                                row.id,
-                                { action: "greeting" },
-                                `g-${row.id}`,
-                              )
-                            }
-                          >
-                            확인
-                          </CellBtn>
                         )}
                       </td>
                       <td className="px-2 py-2 align-top">
@@ -1305,9 +1258,10 @@ export function AdminOrderList({
         )}
 
         <p className="mt-3 text-[11px] leading-relaxed text-[#64748b]">
-          지역 매장관리자는 자지역 주문만 작성·수정·확인합니다. 인사장완료는
-          Factory-G(01029647088)만 가능합니다. 인사장이 없으면 인사장완료는 X,
-          택배가 아니면 기표지완료는 X입니다. 작업자·주문확인·결제·인사장·기표지
+          지역 매장관리자는 자지역 주문만 작성·수정·확인합니다. 인사장여부는
+          인사장 유무(O/X)만 표시하며, 인사장 완료 처리는 인사장관리의
+          &apos;완료&apos; 버튼으로 합니다. 택배가 아니면 기표지완료는
+          X입니다. 작업자·주문확인·결제·인사장·기표지
           5항목이 모두 충족되면 배송관리에 표시됩니다. 매장 작업은 배송관리에서만
           처리하고, 공장 작업은 출고관리·포장관리(포장 전)에도 올라갑니다.
         </p>
