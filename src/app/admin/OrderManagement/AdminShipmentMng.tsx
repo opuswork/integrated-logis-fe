@@ -496,7 +496,7 @@ export function AdminShipmentMng() {
                                 )
                               }
                             >
-                              수령완료
+                              발송완료
                             </CellBtn>
                           )
                         ) : (
