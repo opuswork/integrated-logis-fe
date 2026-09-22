@@ -46,7 +46,12 @@ type ProductFormState = {
   productName: string;
   spec: string;
   unit: string;
+  /** 남은 수량 절대값. 등록 시 초기 수량, 수정 시에는 실사 정정 모드에서만 전송한다. */
   stock: string;
+  /** 이번에 추가 입고한 수량. 남은 수량과 누적 총 입고량에 함께 더해진다. */
+  stockIn: string;
+  /** 체크 시 남은 수량을 절대값으로 정정한다 (평상시에는 입고 수량만 입력). */
+  adjustStock: boolean;
   effectiveDate: string;
   priceOver500man: string;
   priceOver100man: string;
@@ -109,6 +114,8 @@ function emptyFormState(): ProductFormState {
     spec: "",
     unit: "1",
     stock: "",
+    stockIn: "",
+    adjustStock: false,
     effectiveDate: new Date().toISOString().slice(0, 10),
     priceOver500man: "",
     priceOver100man: "",
@@ -125,7 +132,12 @@ function formFromProduct(product: StockInventoryRow): ProductFormState {
     productName: product.productName,
     spec: product.spec ?? "",
     unit: String(product.unit),
-    stock: product.stock === null || product.stock === undefined ? "" : String(product.stock),
+    stock:
+      product.stock === null || product.stock === undefined
+        ? ""
+        : String(product.stock),
+    stockIn: "",
+    adjustStock: false,
     effectiveDate: formatDate(product.effectiveDate),
     priceOver500man: String(product.priceOver500man),
     priceOver100man: String(product.priceOver100man),
@@ -244,6 +256,7 @@ function StockInventoryDetailContent({
 
 function ProductFormEditor({
   mode,
+  currentProduct,
   form,
   setForm,
   imageFile,
@@ -255,6 +268,7 @@ function ProductFormEditor({
   onSubmit,
 }: {
   mode: "create" | "edit";
+  currentProduct: StockInventoryRow | null;
   form: ProductFormState;
   setForm: Dispatch<SetStateAction<ProductFormState>>;
   imageFile: File | null;
@@ -285,6 +299,27 @@ function ProductFormEditor({
     (event: ChangeEvent<HTMLInputElement>) => {
       setForm((prev) => ({ ...prev, [key]: event.target.value }));
     };
+
+  /** 입고 수량을 입력하는 즉시 "저장 후 12/13" 형태로 결과를 미리 보여준다. */
+  const stockInPreview = (() => {
+    if (!currentProduct) {
+      return "";
+    }
+    const added = Number(form.stockIn);
+    if (
+      form.stockIn.trim() === "" ||
+      !Number.isFinite(added) ||
+      !Number.isInteger(added) ||
+      added <= 0
+    ) {
+      return "";
+    }
+    const base = currentProduct.stock ?? 0;
+    const baseMax = currentProduct.stockMax ?? currentProduct.stock ?? 0;
+    return ` 저장하면 ${(base + added).toLocaleString("ko-KR")}/${(
+      baseMax + added
+    ).toLocaleString("ko-KR")} 가 됩니다.`;
+  })();
 
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
@@ -399,14 +434,77 @@ function ProductFormEditor({
           onChange={updateField("unit")}
           required
         />
-        <Input
-          label="재고 (처음 입력값이 기준 수량, 예: 3 → 3/3)"
-          type="number"
-          min={0}
-          value={form.stock}
-          onChange={updateField("stock")}
-          placeholder="무제한"
-        />
+        {mode === "create" ? (
+          <Input
+            label="초기 재고 (비우면 무제한, 예: 3 → 3/3)"
+            type="number"
+            min={0}
+            value={form.stock}
+            onChange={updateField("stock")}
+            placeholder="무제한"
+          />
+        ) : (
+          <div className="rounded-md border border-line bg-[#f8fafc] p-3 min-[640px]:col-span-2">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-sm font-semibold text-ink">현재 재고</span>
+              <span className="text-sm font-semibold text-ink">
+                {currentProduct
+                  ? formatStock(currentProduct.stock, currentProduct.stockMax)
+                  : "-"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                남은 수량 / 누적 총 입고량
+              </span>
+            </div>
+
+            <div className="mt-3">
+              <Input
+                label="입고 수량 추가"
+                type="number"
+                min={0}
+                value={form.stockIn}
+                onChange={updateField("stockIn")}
+                placeholder="비우면 재고 변동 없음"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                입력한 수량이 기존 재고에 더해집니다.
+                {stockInPreview}
+              </p>
+            </div>
+
+            <label className="mt-3 flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={form.adjustStock}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    adjustStock: event.target.checked,
+                  }))
+                }
+                className="h-4 w-4 rounded border-[#cbd5e1]"
+              />
+              재고 수량 직접 수정 (실사 정정)
+            </label>
+
+            {form.adjustStock ? (
+              <div className="mt-2">
+                <Input
+                  label="남은 수량 정정값"
+                  type="number"
+                  min={0}
+                  value={form.stock}
+                  onChange={updateField("stock")}
+                  placeholder="비우면 무제한(재고 미추적)"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  실제 창고 수량과 다를 때만 사용하세요. 정정으로 늘어난 분은
+                  입고로 간주되어 누적 총 입고량에도 반영됩니다.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        )}
         <Input
           label="적용일자"
           type="date"
@@ -747,6 +845,16 @@ export function StockInventoryMng() {
         return "재고는 0 이상의 정수이거나 비워 두세요 (무제한).";
       }
     }
+    if (form.stockIn.trim() !== "") {
+      const stockIn = Number(form.stockIn);
+      if (
+        !Number.isFinite(stockIn) ||
+        stockIn < 0 ||
+        !Number.isInteger(stockIn)
+      ) {
+        return "입고 수량은 0 이상의 정수이거나 비워 두세요.";
+      }
+    }
     const prices = [
       form.priceOver500man,
       form.priceOver100man,
@@ -771,10 +879,17 @@ export function StockInventoryMng() {
       formData.append("spec", form.spec.trim());
     }
     formData.append("unit", String(Number(form.unit)));
-    formData.append(
-      "stock",
-      form.stock.trim() === "" ? "" : String(Number(form.stock)),
-    );
+    // 등록 시에만 재고 절대값을 보낸다. 수정 시에는 입고분(stockIn)만 더하고,
+    // 실사 정정을 체크한 경우에만 절대값으로 덮어쓴다.
+    if (view === "create" || form.adjustStock) {
+      formData.append(
+        "stock",
+        form.stock.trim() === "" ? "" : String(Number(form.stock)),
+      );
+    }
+    if (view !== "create" && form.stockIn.trim() !== "") {
+      formData.append("stockIn", String(Number(form.stockIn)));
+    }
     formData.append("effectiveDate", form.effectiveDate);
     formData.append("priceOver500man", String(Number(form.priceOver500man)));
     formData.append("priceOver100man", String(Number(form.priceOver100man)));
@@ -973,6 +1088,7 @@ export function StockInventoryMng() {
         </div>
         <ProductFormEditor
           mode={view}
+          currentProduct={editingProduct}
           form={form}
           setForm={setForm}
           imageFile={imageFile}
