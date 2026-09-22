@@ -5755,6 +5755,81 @@ function MemberMobileOrderCard({
   );
 }
 
+/** 달력 날짜 바텀시트용 주문 카드 (큰 글씨, 유형 라벨 + 주문서 보기) */
+function MemberCalendarOrderCard({
+  order,
+  onView,
+  onEdit,
+  onConfirmReceive,
+  isConfirming,
+}: {
+  order: OrderRow;
+  onView: () => void;
+  onEdit?: () => void;
+  onConfirmReceive: () => void;
+  isConfirming: boolean;
+}) {
+  const editable = canEditOrderStatus(order.statusCode);
+  const isDelivery = order.type === "배달" || order.type.startsWith("배달");
+
+  return (
+    <article className="rounded-2xl border border-[#d8e0ea] bg-white px-4 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[20px] font-bold text-ink">
+          {isDelivery ? "🚚 하차배송" : "📦 택배배송"}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-12 shrink-0 rounded-xl border-[#93c5fd] bg-[#eff6ff] px-4 text-[17px] font-bold text-brand hover:bg-[#dbeafe]"
+          onClick={onView}
+        >
+          주문서 보기
+        </Button>
+      </div>
+      <p className="mt-1 text-[18px] font-bold text-ink">
+        {editable && onEdit ? (
+          <button
+            type="button"
+            className="text-left text-brand underline-offset-2 hover:underline"
+            onClick={onEdit}
+          >
+            {order.orderNumber}
+          </button>
+        ) : (
+          order.orderNumber
+        )}
+      </p>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <span className="text-[22px] font-bold text-ink">{order.name}</span>
+        <span className="rounded-md bg-[#fce7f3] px-2 py-0.5 text-[14px] font-bold text-[#9d174d]">
+          {order.status}
+        </span>
+      </div>
+      <p className="mt-2 break-words text-[17px] text-[#64748b]">
+        {order.productName}
+      </p>
+      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[17px] text-[#64748b]">
+        <li className="break-words">주문일:{order.orderDate}</li>
+        <li className="break-words">
+          납품일(배달일): {order.deliveryDate || "-"}
+        </li>
+        <li className="break-words">납품처: {order.deliveryPlace || "-"}</li>
+      </ul>
+      {order.canConfirmReceive ? (
+        <Button
+          type="button"
+          className="mt-3 h-12 w-full rounded-xl border-[#db2777] bg-[#fce7f3] text-[17px] font-bold text-[#9d174d] hover:bg-[#fbcfe8]"
+          disabled={isConfirming}
+          onClick={onConfirmReceive}
+        >
+          {isConfirming ? "처리 중..." : "상품수령"}
+        </Button>
+      ) : null}
+    </article>
+  );
+}
+
 function OrderStatusPanel({
   reloadToken = 0,
   churchName,
@@ -5776,6 +5851,20 @@ function OrderStatusPanel({
   const [statusView, setStatusView] = useState<"list" | "calendar">("calendar");
   const [calendarDateIso, setCalendarDateIso] = useState<string | null>(null);
   const [calendarDayModalOpen, setCalendarDayModalOpen] = useState(false);
+  /** 상품추가 시트와 같은 기준: 데스크톱은 Dialog, 모바일은 바텀시트 */
+  const isDesktopWidth = useMinWidth(1040);
+
+  /** 선택한 날짜에 주문을 추가할 수 있는지 (오늘 이후 평일만) */
+  const canAddOrderForDate =
+    Boolean(calendarDateIso && onCreateOrderForDate) &&
+    calendarDateIso !== null &&
+    calendarDateIso >= todayDateValue() &&
+    !isSundayIso(calendarDateIso);
+  const handleAddOrderForDate = () => {
+    if (!calendarDateIso) return;
+    setCalendarDayModalOpen(false);
+    onCreateOrderForDate?.(calendarDateIso);
+  };
 
   const deliveryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -6064,6 +6153,47 @@ function OrderStatusPanel({
     },
   ];
 
+  // 달력 날짜 모달(모바일: 바텀시트 / 데스크톱: Dialog) 공통 조각
+  const dayModalOpen = calendarDayModalOpen && Boolean(calendarDateIso);
+  const dayTitle = calendarDateIso
+    ? formatCalendarDayTitle(calendarDateIso)
+    : "주문";
+  const closeDayModal = () => setCalendarDayModalOpen(false);
+  const dayEmptyMessage =
+    calendarDateIso && isSundayIso(calendarDateIso)
+      ? "일요일에는 주문서를 작성할 수 없습니다."
+      : "선택한 날짜에 납품 주문이 없습니다.";
+  const addOrderButton = (
+    <button
+      type="button"
+      className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#c4b5fd] bg-[#faf5ff] text-[20px] font-bold text-[#5b21b6] hover:bg-[#f3e8ff]"
+      onClick={handleAddOrderForDate}
+    >
+      <span aria-hidden>+ 📦</span>
+      주문 추가
+    </button>
+  );
+  const renderDayCards = (Card: typeof MemberCalendarOrderCard) =>
+    calendarOrders.map((order) => (
+      <Card
+        key={order.id}
+        order={order}
+        isConfirming={confirmingId === order.id}
+        onConfirmReceive={() => {
+          void handleConfirmReceive(order.id);
+        }}
+        onView={() => setViewingOrderNumber(order.orderNumber)}
+        onEdit={
+          onEditOrder
+            ? () => {
+                closeDayModal();
+                onEditOrder(order.orderNumber);
+              }
+            : undefined
+        }
+      />
+    ));
+
   return (
     <div className="space-y-3">
       {isLoading ? (
@@ -6128,46 +6258,44 @@ function OrderStatusPanel({
                   }}
                 />
               </section>
-              <Dialog
-                open={calendarDayModalOpen && Boolean(calendarDateIso)}
-                title={
-                  calendarDateIso
-                    ? formatCalendarDayTitle(calendarDateIso)
-                    : "주문"
-                }
-                onClose={() => setCalendarDayModalOpen(false)}
-                className="max-h-[80vh] overflow-y-auto"
-              >
-                {calendarOrders.length === 0 ? (
-                  <p className="text-center text-lg text-muted-foreground">
-                    {calendarDateIso && isSundayIso(calendarDateIso)
-                      ? "일요일에는 주문서를 작성할 수 없습니다."
-                      : "선택한 날짜에 납품 주문이 없습니다."}
-                  </p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {calendarOrders.map((order) => (
-                      <MemberMobileOrderCard
-                        key={order.id}
-                        order={order}
-                        isConfirming={confirmingId === order.id}
-                        onConfirmReceive={() => {
-                          void handleConfirmReceive(order.id);
-                        }}
-                        onView={() => setViewingOrderNumber(order.orderNumber)}
-                        onEdit={
-                          onEditOrder
-                            ? () => {
-                                setCalendarDayModalOpen(false);
-                                onEditOrder(order.orderNumber);
-                              }
-                            : undefined
-                        }
-                      />
-                    ))}
+              {!isDesktopWidth ? (
+                <BottomSheet
+                  open={dayModalOpen}
+                  title={dayTitle}
+                  onClose={closeDayModal}
+                  footer={canAddOrderForDate ? addOrderButton : undefined}
+                >
+                  <div className="space-y-3 px-4 pt-1 pb-4">
+                    {calendarOrders.length === 0 ? (
+                      <p className="py-6 text-center text-lg text-muted-foreground">
+                        {dayEmptyMessage}
+                      </p>
+                    ) : (
+                      renderDayCards(MemberCalendarOrderCard)
+                    )}
                   </div>
-                )}
-              </Dialog>
+                </BottomSheet>
+              ) : (
+                <Dialog
+                  open={dayModalOpen}
+                  title={dayTitle}
+                  onClose={closeDayModal}
+                  className="max-h-[80vh] overflow-y-auto"
+                >
+                  {calendarOrders.length === 0 ? (
+                    <p className="text-center text-lg text-muted-foreground">
+                      {dayEmptyMessage}
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {renderDayCards(MemberMobileOrderCard)}
+                    </div>
+                  )}
+                  {canAddOrderForDate ? (
+                    <div className="mt-4">{addOrderButton}</div>
+                  ) : null}
+                </Dialog>
+              )}
             </>
           ) : (
             <>
