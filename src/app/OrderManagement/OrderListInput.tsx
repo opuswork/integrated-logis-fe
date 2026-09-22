@@ -80,7 +80,10 @@ import {
   type LineShipInfo,
   type LineShipment,
 } from "@/lib/order-notes";
-import { canEditOrderStatus, memberFacingStatusLabel } from "@/lib/order-delivery";
+import {
+  canEditOrderStatus,
+  memberFacingStatusLabel,
+} from "@/lib/order-delivery";
 import { usePwaInstalled } from "@/lib/pwa-install";
 import { cn } from "@/lib/utils";
 
@@ -101,12 +104,8 @@ const GREETING_RECEIVE_PLACES = [
   "남부매장",
   "방문",
 ] as const;
-const ORDER_TYPES = [
-  { value: "parcel", label: "택배" },
-  { value: "delivery", label: "배달" },
-] as const;
-
-type OrderType = (typeof ORDER_TYPES)[number]["value"];
+/** 줄별 배송방식. 화면 라벨은 LINE_SHIP_OPTIONS 참고 */
+type OrderType = "parcel" | "delivery";
 
 type ChurchOption = {
   id: number;
@@ -200,7 +199,7 @@ interface ProductLineItem {
   /** 같은 품명이 택배/상차로 갈라질 수 있어 행 식별은 품명이 아닌 이 id로 한다 */
   lineId: string;
   product: string;
-  /** 개인앱은 줄마다 고름. ""=아직 배송선택 안 함 */
+  /** 줄마다 고름. ""=아직 배송선택 안 함 */
   orderKind: OrderType | "";
   qty: number;
   /** 분할 기준 수량(처음 담은 수량). qty<baseQty면 나머지가 형제 줄로 복사된다 */
@@ -315,10 +314,7 @@ function buildMemberOrderSummary(
   return rest.length > 0 ? `${head} 외 ${rest.length}건` : head;
 }
 
-const PAGE_META: Record<
-  MemberNav,
-  { title: string; description: string }
-> = {
+const PAGE_META: Record<MemberNav, { title: string; description: string }> = {
   "새 주문서 작성": {
     title: "제품주문서 (신규작성)",
     description: "상품별 주문수량과 인사장 연계 여부를 작성합니다.",
@@ -385,59 +381,6 @@ function StatusChip({ status }: { status: string }) {
   return <Chip variant={STATUS_VARIANT[status] ?? "blue"}>{status}</Chip>;
 }
 
-
-function OrderTypePicker({
-  value,
-  locked,
-  onSelect,
-  onReset,
-}: {
-  value: OrderType | null;
-  locked: boolean;
-  onSelect: (value: OrderType) => void;
-  onReset: () => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="flex rounded-lg bg-[#EDF2F7] p-[3px]">
-        {ORDER_TYPES.map((option) => {
-          const selected = value === option.value;
-          const disabled = locked && !selected;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                if (!locked) {
-                  onSelect(option.value);
-                }
-              }}
-              className={cn(
-                "flex-1 rounded-md px-2 py-2.5 text-[13px] font-bold transition-colors",
-                selected
-                  ? "bg-[#1A365D] text-white"
-                  : disabled
-                    ? "cursor-not-allowed text-[#A0AEC0]"
-                    : "bg-transparent text-[#64748B] hover:text-[#1A202C]",
-              )}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-      {locked ? (
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={onReset}>
-            폼초기화
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function ChoiceGrid<T extends string>({
   label,
   items,
@@ -453,7 +396,9 @@ function ChoiceGrid<T extends string>({
 }) {
   return (
     <div className="mt-2.5">
-      <label className="mb-1.5 block text-2xl font-bold text-ink">{label}</label>
+      <label className="mb-1.5 block text-2xl font-bold text-ink">
+        {label}
+      </label>
       <div
         className="grid overflow-hidden rounded-[7px] border border-line"
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
@@ -465,7 +410,9 @@ function ChoiceGrid<T extends string>({
             onClick={() => onChange(item)}
             className={cn(
               "border-r border-line px-1 py-2 text-center text-xs font-bold last:border-r-0",
-              value === item ? "bg-[#e9f1ff] text-brand" : "bg-white text-ink hover:bg-soft",
+              value === item
+                ? "bg-[#e9f1ff] text-brand"
+                : "bg-white text-ink hover:bg-soft",
             )}
           >
             {item}
@@ -486,8 +433,15 @@ function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("min-w-0 rounded-lg border border-line bg-panel p-3.5", className)}>
-      {title ? <h4 className="mb-2.5 text-base font-semibold text-ink">{title}</h4> : null}
+    <section
+      className={cn(
+        "min-w-0 rounded-lg border border-line bg-panel p-3.5",
+        className,
+      )}
+    >
+      {title ? (
+        <h4 className="mb-2.5 text-base font-semibold text-ink">{title}</h4>
+      ) : null}
       {children}
     </section>
   );
@@ -690,9 +644,7 @@ function formatGreetingDraftNotes(draft: GreetingDraft) {
       ? `인사장내용:${draft.greetingContent.trim()}`
       : null,
     draft.quantity.trim() ? `인사장수량:${draft.quantity.trim()}` : null,
-    draft.productName.trim()
-      ? `인사장제품:${draft.productName.trim()}`
-      : null,
+    draft.productName.trim() ? `인사장제품:${draft.productName.trim()}` : null,
     `인사장받을곳:${draft.receivePlace}`,
     draft.specialNote.trim()
       ? `인사장특이사항:${draft.specialNote.trim()}`
@@ -719,10 +671,7 @@ async function createGreetingFormFromDraft(
   const formData = new FormData();
   formData.append("greetingNumber", draft.greetingNumber);
   formData.append("includeSelf", String(draft.includeSelf));
-  formData.append(
-    "businessCard",
-    draft.businessCard || BUSINESS_CARD_DEFAULT,
-  );
+  formData.append("businessCard", draft.businessCard || BUSINESS_CARD_DEFAULT);
   formData.append("content", draft.greetingContent.trim());
   formData.append("quantity", draft.quantity.trim() || "1");
   formData.append("size", draft.greetingSize);
@@ -813,7 +762,8 @@ function greetingDraftFromApi(form: {
     greetingContent: form.content?.trim() ?? "",
     quantity: form.quantity != null ? String(form.quantity) : "",
     productName: form.productName?.trim() ?? "",
-    receivePlace: form.receivePlace?.trim() || GREETING_RECEIVE_PLACE_PLACEHOLDER,
+    receivePlace:
+      form.receivePlace?.trim() || GREETING_RECEIVE_PLACE_PLACEHOLDER,
     specialNote: form.specialNote?.trim() ?? "",
     imageNumbers: greetingNumber ? [greetingNumber] : [],
     imageUrl: form.imageUrl?.trim() || undefined,
@@ -851,7 +801,10 @@ function validateGreetingForm({
   if (!greetingSize) {
     return "크기를 선택해 주세요.";
   }
-  if (!receivePlace.trim() || receivePlace === GREETING_RECEIVE_PLACE_PLACEHOLDER) {
+  if (
+    !receivePlace.trim() ||
+    receivePlace === GREETING_RECEIVE_PLACE_PLACEHOLDER
+  ) {
     return "받을 곳을 선택해 주세요.";
   }
   return "";
@@ -1041,7 +994,8 @@ function GreetingForm({
     receivePlace,
     specialNote,
     imageNumbers: greetingNumber ? [greetingNumber] : [],
-    imageUrl: imageUrl || savedImageUrl || catalogImageUrl || initialDraft?.imageUrl,
+    imageUrl:
+      imageUrl || savedImageUrl || catalogImageUrl || initialDraft?.imageUrl,
   });
 
   const runRequiredValidation = () => {
@@ -1135,14 +1089,15 @@ function GreetingForm({
       onSave(buildDraft(created.id, created.imageUrl));
     } catch (error) {
       setFormError(
-        error instanceof Error ? error.message : "인사장 저장에 실패하였습니다.",
+        error instanceof Error
+          ? error.message
+          : "인사장 저장에 실패하였습니다.",
       );
       setResultDialog({ open: true, success: false });
     } finally {
       setIsSaving(false);
     }
   };
-
 
   const closeResultDialog = () => {
     const wasSuccess = resultDialog.success;
@@ -1343,7 +1298,10 @@ function GreetingForm({
       </div>
 
       <div className="mt-2.5">
-        <label htmlFor="special-note" className="mb-1.5 block text-2xl font-bold text-ink">
+        <label
+          htmlFor="special-note"
+          className="mb-1.5 block text-2xl font-bold text-ink"
+        >
           특이사항
         </label>
         <textarea
@@ -1499,7 +1457,7 @@ function ProductAddDialog({
   open: boolean;
   onClose: () => void;
   onAddItems: (items: ProductDialogItem[]) => void;
-  /** 개인앱은 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다. */
+  /** 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다. */
   showOrderKind?: boolean;
   defaultOrderKind: OrderType;
   /** 개인회원 제품주문서: openStock=true 상품만 */
@@ -1551,8 +1509,7 @@ function ProductAddDialog({
           `/api/stock-inventory${openStockOnly ? "?openOnly=true" : ""}`,
         );
         const data = (await response.json()) as
-          | StockCatalogItem[]
-          | { message?: string };
+          StockCatalogItem[] | { message?: string };
 
         if (!response.ok || !Array.isArray(data) || cancelled) {
           if (!cancelled) {
@@ -1675,7 +1632,10 @@ function ProductAddDialog({
       });
   }, [catalog, quantities, mode]);
 
-  const selectedQtyTotal = selectedItems.reduce((sum, item) => sum + item.qty, 0);
+  const selectedQtyTotal = selectedItems.reduce(
+    (sum, item) => sum + item.qty,
+    0,
+  );
   const selectedPriceTotal = selectedItems.reduce(
     (sum, item) => sum + item.qty * item.unitPrice,
     0,
@@ -1840,167 +1800,161 @@ function ProductAddDialog({
       {isSheet ? "표시할 상품이 없습니다." : "검색 결과가 없습니다."}
     </p>
   ) : (
+    <div
+      ref={listRef}
+      tabIndex={0}
+      role="listbox"
+      aria-label="상품 목록"
+      onKeyDown={(event) => {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          moveActive(1);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          moveActive(-1);
+          return;
+        }
+        if (event.key === "Tab" && !event.shiftKey) {
+          event.preventDefault();
+          focusActiveQty();
+          return;
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          handleAdd();
+        }
+      }}
+      className={cn(
+        "divide-y divide-[#e5eaf0] focus:outline-none",
+        isSheet
+          ? "border-y border-[#e5eaf0]"
+          : "max-h-[50vh] overflow-y-auto rounded-lg border border-line focus:border-brand focus:ring-2 focus:ring-brand/20",
+      )}
+    >
+      {filteredCatalog.map((item, index) => {
+        const qty = quantities[item.id] ?? 0;
+        const active = index === activeIndex;
+        const selected = qty > 0;
+        return (
           <div
-            ref={listRef}
-            tabIndex={0}
-            role="listbox"
-            aria-label="상품 목록"
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                moveActive(1);
-                return;
-              }
-              if (event.key === "ArrowUp") {
-                event.preventDefault();
-                moveActive(-1);
-                return;
-              }
-              if (event.key === "Tab" && !event.shiftKey) {
-                event.preventDefault();
-                focusActiveQty();
-                return;
-              }
-              if (event.key === "Enter") {
-                event.preventDefault();
-                handleAdd();
-              }
-            }}
+            key={item.id}
+            role="option"
+            aria-selected={active}
+            data-product-index={index}
+            onClick={() => setActiveIndex(index)}
             className={cn(
-              "divide-y divide-[#e5eaf0] focus:outline-none",
-              isSheet
-                ? "border-y border-[#e5eaf0]"
-                : "max-h-[50vh] overflow-y-auto rounded-lg border border-line focus:border-brand focus:ring-2 focus:ring-brand/20",
+              "flex items-center border-l-4",
+              isSheet ? "gap-4 px-4 py-4" : "gap-3 px-3 py-2.5",
+              selected ? "border-l-brand" : "border-l-transparent",
+              active ? "bg-[#eff6ff]" : selected ? "bg-[#f5f9ff]" : "bg-white",
             )}
           >
-            {filteredCatalog.map((item, index) => {
-              const qty = quantities[item.id] ?? 0;
-              const active = index === activeIndex;
-              const selected = qty > 0;
-              return (
-                <div
-                  key={item.id}
-                  role="option"
-                  aria-selected={active}
-                  data-product-index={index}
-                  onClick={() => setActiveIndex(index)}
-                  className={cn(
-                    "flex items-center border-l-4",
-                    isSheet ? "gap-4 px-4 py-4" : "gap-3 px-3 py-2.5",
-                    selected ? "border-l-brand" : "border-l-transparent",
-                    active
-                      ? "bg-[#eff6ff]"
-                      : selected
-                        ? "bg-[#f5f9ff]"
-                        : "bg-white",
-                  )}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={productImageSrc(item.imageUrl)}
-                    alt={item.productName}
-                    className={cn(
-                      "shrink-0 border border-line bg-white object-contain",
-                      isSheet ? "h-20 w-20 rounded-xl" : "h-14 w-14 rounded",
-                    )}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <ProductNameWithStock
-                        name={item.productName}
-                        stock={item.stock}
-                        stockMax={item.stockMax}
-                        className={
-                          isSheet ? "text-[22px] leading-tight" : undefined
-                        }
-                      />
-                      {selected ? (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                          <Check className="size-3" />
-                          {editList ? "담김" : "선택"}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p
-                      className={cn(
-                        "text-[#64748b]",
-                        isSheet ? "mt-1 text-[17px]" : "mt-0.5 text-xs",
-                      )}
-                    >
-                      {item.spec || "규격 없음"}
-                    </p>
-                    <p
-                      className={cn(
-                        "text-[#64748b]",
-                        isSheet ? "mt-0.5 text-[17px]" : "mt-0.5 text-xs",
-                      )}
-                    >
-                      {item.unit} · {item.category} ·{" "}
-                      {formatPrice(item.wholesalePrice)}
-                    </p>
-                  </div>
-                  <input
-                    ref={(node) => {
-                      if (node) {
-                        qtyRefs.current.set(item.id, node);
-                      } else {
-                        qtyRefs.current.delete(item.id);
-                      }
-                    }}
-                    type="number"
-                    min={0}
-                    inputMode="numeric"
-                    tabIndex={-1}
-                    aria-label={`${item.productName} 수량`}
-                    placeholder="0"
-                    value={qty === 0 ? "" : qty}
-                    onChange={(event) => {
-                      const raw = event.target.value;
-                      if (raw === "") {
-                        setQty(item.id, 0);
-                        return;
-                      }
-                      const nextQty = Number(raw);
-                      if (!Number.isNaN(nextQty)) {
-                        setQty(item.id, nextQty);
-                      }
-                    }}
-                    onFocus={() => setActiveIndex(index)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Tab") {
-                        event.preventDefault();
-                        focusList();
-                        return;
-                      }
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        handleAdd();
-                        return;
-                      }
-                      if (event.key === "ArrowDown") {
-                        event.preventDefault();
-                        moveActive(1);
-                        focusList();
-                        return;
-                      }
-                      if (event.key === "ArrowUp") {
-                        event.preventDefault();
-                        moveActive(-1);
-                        focusList();
-                      }
-                    }}
-                    className={cn(
-                      "shrink-0 border-[#cbd5e1] bg-white text-center font-semibold text-ink placeholder:text-[#94a3b8] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
-                      isSheet
-                        ? "h-20 w-[110px] rounded-2xl border-2 px-2 text-[24px] font-bold"
-                        : "h-9 w-20 rounded-md border px-2 text-sm",
-                    )}
-                  />
-                </div>
-              );
-            })}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={productImageSrc(item.imageUrl)}
+              alt={item.productName}
+              className={cn(
+                "shrink-0 border border-line bg-white object-contain",
+                isSheet ? "h-20 w-20 rounded-xl" : "h-14 w-14 rounded",
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <ProductNameWithStock
+                  name={item.productName}
+                  stock={item.stock}
+                  stockMax={item.stockMax}
+                  className={isSheet ? "text-[22px] leading-tight" : undefined}
+                />
+                {selected ? (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                    <Check className="size-3" />
+                    {editList ? "담김" : "선택"}
+                  </span>
+                ) : null}
+              </div>
+              <p
+                className={cn(
+                  "text-[#64748b]",
+                  isSheet ? "mt-1 text-[17px]" : "mt-0.5 text-xs",
+                )}
+              >
+                {item.spec || "규격 없음"}
+              </p>
+              <p
+                className={cn(
+                  "text-[#64748b]",
+                  isSheet ? "mt-0.5 text-[17px]" : "mt-0.5 text-xs",
+                )}
+              >
+                {item.unit} · {item.category} ·{" "}
+                {formatPrice(item.wholesalePrice)}
+              </p>
+            </div>
+            <input
+              ref={(node) => {
+                if (node) {
+                  qtyRefs.current.set(item.id, node);
+                } else {
+                  qtyRefs.current.delete(item.id);
+                }
+              }}
+              type="number"
+              min={0}
+              inputMode="numeric"
+              tabIndex={-1}
+              aria-label={`${item.productName} 수량`}
+              placeholder="0"
+              value={qty === 0 ? "" : qty}
+              onChange={(event) => {
+                const raw = event.target.value;
+                if (raw === "") {
+                  setQty(item.id, 0);
+                  return;
+                }
+                const nextQty = Number(raw);
+                if (!Number.isNaN(nextQty)) {
+                  setQty(item.id, nextQty);
+                }
+              }}
+              onFocus={() => setActiveIndex(index)}
+              onKeyDown={(event) => {
+                if (event.key === "Tab") {
+                  event.preventDefault();
+                  focusList();
+                  return;
+                }
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleAdd();
+                  return;
+                }
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  moveActive(1);
+                  focusList();
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  moveActive(-1);
+                  focusList();
+                }
+              }}
+              className={cn(
+                "shrink-0 border-[#cbd5e1] bg-white text-center font-semibold text-ink placeholder:text-[#94a3b8] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+                isSheet
+                  ? "h-20 w-[110px] rounded-2xl border-2 px-2 text-[24px] font-bold"
+                  : "h-9 w-20 rounded-md border px-2 text-sm",
+              )}
+            />
           </div>
         );
+      })}
+    </div>
+  );
 
   const confirmDisabled = !editList && selectedItems.length === 0;
 
@@ -2122,8 +2076,14 @@ function handleSuggestListKeyDown<T>(
     onClose: () => void;
   },
 ) {
-  const { isOpen, items, highlightIndex, setHighlightIndex, onSelect, onClose } =
-    options;
+  const {
+    isOpen,
+    items,
+    highlightIndex,
+    setHighlightIndex,
+    onSelect,
+    onClose,
+  } = options;
   if (!isOpen || items.length === 0) {
     if (event.key === "Escape") {
       onClose();
@@ -2303,7 +2263,9 @@ function ChurchSearchField({
           className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-[7px] border border-line bg-white shadow-lg"
         >
           {isLoading ? (
-            <li className="px-3 py-2.5 text-sm text-[#64748b]">중앙 목록 불러오는 중...</li>
+            <li className="px-3 py-2.5 text-sm text-[#64748b]">
+              중앙 목록 불러오는 중...
+            </li>
           ) : loadError || churches.length === 0 ? (
             <li className="px-3 py-2.5 text-sm text-[#64748b]">
               <p>{loadError || "중앙 목록을 불러오지 못했습니다."}</p>
@@ -2319,7 +2281,9 @@ function ChurchSearchField({
               ) : null}
             </li>
           ) : filtered.length === 0 ? (
-            <li className="px-3 py-2.5 text-sm text-[#64748b]">검색 결과가 없습니다.</li>
+            <li className="px-3 py-2.5 text-sm text-[#64748b]">
+              검색 결과가 없습니다.
+            </li>
           ) : (
             filtered.map((church, index) => {
               const selected = selectedId === church.id;
@@ -2342,7 +2306,9 @@ function ChurchSearchField({
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => selectChurch(church)}
                   >
-                    <span className="text-sm font-semibold text-ink">{church.name}</span>
+                    <span className="text-sm font-semibold text-ink">
+                      {church.name}
+                    </span>
                     <span className="text-xs text-[#64748b]">
                       {church.region}
                       {church.branchCode ? ` · ${church.branchCode}` : ""}
@@ -2437,8 +2403,7 @@ function OrdererNameField({
       void apiFetch(`/api/members/search?q=${encodeURIComponent(q)}`)
         .then(async (res) => {
           const data = (await res.json()) as
-            | MemberSuggest[]
-            | { message?: string };
+            MemberSuggest[] | { message?: string };
           if (cancelled) return;
           if (!res.ok || !Array.isArray(data)) {
             setSuggestions([]);
@@ -2618,7 +2583,9 @@ function AddressField({
         onDetailChange("");
       });
     } catch {
-      window.alert("주소 검색을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      window.alert(
+        "주소 검색을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      );
     } finally {
       setIsSearching(false);
     }
@@ -2628,7 +2595,10 @@ function AddressField({
     <div className="space-y-2">
       <div>
         <div className="mb-[5px] flex items-center justify-between gap-2">
-          <label htmlFor={id} className="block text-[12px] font-bold text-[#64748B]">
+          <label
+            htmlFor={id}
+            className="block text-[12px] font-bold text-[#64748B]"
+          >
             {required ? <RequiredLabel>{label}</RequiredLabel> : label}
           </label>
           {labelExtra}
@@ -2758,13 +2728,7 @@ function resolveGreetingImageUrl(url: string) {
   return `${API_BASE_URL}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
-function GreetingViewField({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function GreetingViewField({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-xs font-semibold text-[#64748b]">{label}</dt>
@@ -2959,7 +2923,9 @@ function GreetingViewModal({
           </div>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">표시할 인사장 정보가 없습니다.</p>
+        <p className="text-sm text-muted-foreground">
+          표시할 인사장 정보가 없습니다.
+        </p>
       )}
     </Dialog>
   );
@@ -3403,27 +3369,21 @@ function ProductOrderPanel({
   const [orderType, setOrderType] = useState<OrderType | null>(null);
   const [productItems, setProductItems] = useState<ProductLineItem[]>([]);
   /**
-   * 개인앱: 줄마다 배송방식과 배송정보를 따로 고른다.
-   * 관리자(blankCustomerFields)는 기존 주문 단위 택배/배달 탭을 그대로 쓴다.
-   */
-  const perLineShipping = !blankCustomerFields;
-  /**
+   * 개인앱·관리자 모두 줄마다 배송방식과 배송정보를 따로 고른다.
    * 줄 자동분할(택배↔상차)은 신규작성에서만.
    * 접수 후에는 주문 1건 = 배송 1건이라, 수정화면에서 쪼개면 주문번호 규칙이 깨진다.
    */
-  const canSplitLines = perLineShipping && !isEditMode;
+  const canSplitLines = !isEditMode;
   /** lineId → 저장된 배송정보 */
-  const [lineShipInfo, setLineShipInfo] = useState<Record<string, LineShipInfo>>(
-    {},
-  );
+  const [lineShipInfo, setLineShipInfo] = useState<
+    Record<string, LineShipInfo>
+  >({});
   /** 배송정보입력 시트를 연 대상 줄 */
   const [shipSheetLineId, setShipSheetLineId] = useState<string | null>(null);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productDialogMode, setProductDialogMode] = useState<
     "all" | "box" | "giftUnit"
   >("all");
-  /** 수정 주문서의 "상품목록수정": 박스 목록을 통째로 교체 */
-  const [isProductListEdit, setIsProductListEdit] = useState(false);
   const [ordererName, setOrdererName] = useState("");
   const [ordererPhone, setOrdererPhone] = useState("");
   const [orderDate, setOrderDate] = useState(() => todayDateValue());
@@ -3439,8 +3399,7 @@ function ProductOrderPanel({
     try {
       const response = await apiFetch("/api/churches");
       const data = (await response.json()) as
-        | ChurchOption[]
-        | { message?: string };
+        ChurchOption[] | { message?: string };
       if (!response.ok || !Array.isArray(data)) {
         setChurches([]);
         setChurchesLoadError(
@@ -3472,7 +3431,6 @@ function ProductOrderPanel({
   const [senderPhone, setSenderPhone] = useState("");
   const [senderAddress, setSenderAddress] = useState("");
   const [senderAddressDetail, setSenderAddressDetail] = useState("");
-  const [sameAsSenderAddress, setSameAsSenderAddress] = useState(false);
   const [parcelContactMode, setParcelContactMode] =
     useState<ParcelRecipientContactMode>("address");
   const [branchStore, setBranchStore] = useState<BranchStoreId | null>(null);
@@ -3509,10 +3467,11 @@ function ProductOrderPanel({
     null,
   );
   /** 줄 단위로 쪼개 접수된 주문번호들 (접수완료 안내 문구용) */
-  const [acceptedOrderNumbers, setAcceptedOrderNumbers] = useState<string[]>([]);
+  const [acceptedOrderNumbers, setAcceptedOrderNumbers] = useState<string[]>(
+    [],
+  );
   const isDesktop = useMinWidth(1040);
   const isWideProductList = useMinWidth(500);
-  const isDelivery = orderType === "delivery";
   const memberFieldsReadOnly = !blankCustomerFields;
   const showDirectorCheckbox = !isMemberNewOrder;
   const showProxyToggle =
@@ -3803,12 +3762,16 @@ function ProductOrderPanel({
           const parts = deliveryDt.split(/\s+/).filter(Boolean);
           hydratedDeliveryDate = parts[0]?.slice(0, 10) ?? "";
           if (parts[1] === "오전" || parts[1] === "오후") {
-            const clock = normalizeDeliveryClock(parts[1], parts[2]?.slice(0, 5) ?? "");
+            const clock = normalizeDeliveryClock(
+              parts[1],
+              parts[2]?.slice(0, 5) ?? "",
+            );
             hydratedDeliveryAmPm = clock.ampm;
             hydratedDeliveryTime = clock.time;
           } else {
-            const clock = fromTwentyFourHour(parts[1]?.slice(0, 5) ?? "")
-              ?? normalizeDeliveryClock("", parts[1]?.slice(0, 5) ?? "");
+            const clock =
+              fromTwentyFourHour(parts[1]?.slice(0, 5) ?? "") ??
+              normalizeDeliveryClock("", parts[1]?.slice(0, 5) ?? "");
             hydratedDeliveryAmPm = clock.ampm;
             hydratedDeliveryTime = clock.time;
           }
@@ -3897,9 +3860,7 @@ function ProductOrderPanel({
           );
 
         // 줄별 배송정보(배송상세 세그먼트)가 있으면 그대로 복원한다.
-        const savedLines = perLineShipping
-          ? parseLineShipmentsFromNotes(notes)
-          : null;
+        const savedLines = parseLineShipmentsFromNotes(notes);
 
         if (savedLines) {
           const restoredInfo: Record<string, LineShipInfo> = {};
@@ -3927,7 +3888,7 @@ function ProductOrderPanel({
               greeting: greetingFor(line.product)?.id ? "인사장보기" : "",
               unitPrice: line.unitPrice || 0,
               // 구버전 payload 는 deliveryOnly 가 없으니 저장된 배송방식으로 판단
-              deliveryOnly: line.deliveryOnly ?? (line.ship.kind === "delivery"),
+              deliveryOnly: line.deliveryOnly ?? line.ship.kind === "delivery",
               lineSection,
             };
           });
@@ -3935,35 +3896,31 @@ function ProductOrderPanel({
           setProductItems(rows);
         } else {
           // 구주문: 주문 단위 배송정보 1벌을 모든 줄에 복사해 둔다.
-          const legacyInfo: LineShipInfo | null = perLineShipping
-            ? {
-                ...emptyLineShipInfo(orderKind),
-                companyName: isDeliveryOrder
-                  ? parseDeliveryCompanyFromNotes(notes)
-                  : parseParcelCompanyFromNotes(notes),
-                deliveryDate: isDeliveryOrder ? hydratedDeliveryDate : "",
-                deliveryAmPm: isDeliveryOrder ? hydratedDeliveryAmPm : "",
-                deliveryTime: isDeliveryOrder ? hydratedDeliveryTime : "",
-                recipientName: recipient.name,
-                recipientPhone: formatPhoneInput(recipient.phone),
-                recipientAddress: recipientSplit.address,
-                recipientAddressDetail: recipientSplit.detail,
-                parcelShipDate:
-                  !isDeliveryOrder && shipDate ? shipDate.slice(0, 10) : "",
-                senderName: sender.name,
-                senderPhone: formatPhoneInput(sender.phone),
-                senderAddress: senderSplit.address,
-                senderAddressDetail: senderSplit.detail,
-                sameAsSenderAddress: false,
-                contactMode: parcelMode,
-              }
-            : null;
+          const legacyInfo: LineShipInfo = {
+            ...emptyLineShipInfo(orderKind),
+            companyName: isDeliveryOrder
+              ? parseDeliveryCompanyFromNotes(notes)
+              : parseParcelCompanyFromNotes(notes),
+            deliveryDate: isDeliveryOrder ? hydratedDeliveryDate : "",
+            deliveryAmPm: isDeliveryOrder ? hydratedDeliveryAmPm : "",
+            deliveryTime: isDeliveryOrder ? hydratedDeliveryTime : "",
+            recipientName: recipient.name,
+            recipientPhone: formatPhoneInput(recipient.phone),
+            recipientAddress: recipientSplit.address,
+            recipientAddressDetail: recipientSplit.detail,
+            parcelShipDate:
+              !isDeliveryOrder && shipDate ? shipDate.slice(0, 10) : "",
+            senderName: sender.name,
+            senderPhone: formatPhoneInput(sender.phone),
+            senderAddress: senderSplit.address,
+            senderAddressDetail: senderSplit.detail,
+            sameAsSenderAddress: false,
+            contactMode: parcelMode,
+          };
           const restoredInfo: Record<string, LineShipInfo> = {};
           const rows: ProductLineItem[] = (order.items ?? []).map((item) => {
             const lineId = nextLineId();
-            if (legacyInfo) {
-              restoredInfo[lineId] = { ...legacyInfo };
-            }
+            restoredInfo[lineId] = { ...legacyInfo };
             const lineSection = inferLineSection(item.productName);
             return {
               lineId,
@@ -3972,7 +3929,7 @@ function ProductOrderPanel({
               orderKind,
               qty: item.quantity || 1,
               baseQty: item.quantity || 1,
-              shipSaved: Boolean(legacyInfo),
+              shipSaved: true,
               note: parseItemNoteFromNotes(
                 notes,
                 item.productName,
@@ -4024,18 +3981,9 @@ function ProductOrderPanel({
   }, [churchQuery, churchId, churches]);
 
   const addProductItems = (items: ProductDialogItem[]) => {
-    if (!perLineShipping && !orderType) {
-      return;
-    }
-
-    // 개인앱은 전역 주문종류가 없으므로 줄별 배송선택 전까지 ""로 둔다.
-    const selectedOrderType: OrderType | "" = perLineShipping
-      ? ""
-      : (orderType as OrderType);
-    const allowedItems =
-      selectedOrderType === "parcel"
-        ? items.filter((item) => !item.deliveryOnly)
-        : items;
+    // 전역 주문종류가 없으므로 줄별 배송선택 전까지 ""로 둔다.
+    const selectedOrderType: OrderType | "" = "";
+    const allowedItems = items;
 
     if (allowedItems.length === 0) {
       return;
@@ -4049,7 +3997,8 @@ function ProductOrderPanel({
         const existingIndex = next.findIndex(
           (row) =>
             row.product === item.product &&
-            (!perLineShipping || (!row.shipSaved && row.orderKind === "")),
+            !row.shipSaved &&
+            row.orderKind === "",
         );
 
         if (existingIndex >= 0) {
@@ -4111,7 +4060,8 @@ function ProductOrderPanel({
     }
 
     const siblingIndex = next.findIndex(
-      (row) => row.lineId !== lineId && row.splitGroupId === target.splitGroupId,
+      (row) =>
+        row.lineId !== lineId && row.splitGroupId === target.splitGroupId,
     );
     const remainder = target.baseQty - target.qty;
     // 선물세트 박스는 배달 전용이라 반대 방식(택배)으로 복사할 수 없다.
@@ -4120,7 +4070,9 @@ function ProductOrderPanel({
     if (!canSplit) {
       if (siblingIndex >= 0 && !next[siblingIndex].shipSaved) {
         const removedId = next[siblingIndex].lineId;
-        setProductItems(next.filter((_, rowIndex) => rowIndex !== siblingIndex));
+        setProductItems(
+          next.filter((_, rowIndex) => rowIndex !== siblingIndex),
+        );
         setLineShipInfo((info) => {
           if (!info[removedId]) return info;
           const rest = { ...info };
@@ -4156,106 +4108,14 @@ function ProductOrderPanel({
     setProductItems(next);
   };
 
-  /**
-   * 상품목록수정 확정: ①박스 행을 선택 결과로 교체.
-   * 같은 품명은 비고 유지, 카탈로그에 없는(단종 등) 기존 행은 그대로 둔다.
-   */
-  const replaceBoxProductItems = (
-    items: ProductDialogItem[],
-    catalogProducts: string[],
-  ) => {
-    if (!orderType) {
-      return;
-    }
-
-    const selectedOrderType = orderType;
-    const inCatalog = new Set(catalogProducts);
-
-    setProductItems((current) => {
-      const previousBox = new Map(
-        current
-          .filter((row) => row.lineSection === "box")
-          .map((row) => [row.product, row] as const),
-      );
-      const nextBox: ProductLineItem[] = items.map((item) => {
-        const existing = previousBox.get(item.product);
-        const lineId = existing?.lineId ?? nextLineId();
-        return {
-          lineId,
-          splitGroupId: existing?.splitGroupId ?? lineId,
-          product: item.product,
-          qty: item.qty,
-          baseQty: item.qty,
-          shipSaved: false,
-          note: existing?.note ?? item.note,
-          unitPrice: item.unitPrice,
-          orderKind: selectedOrderType,
-          greeting: savedGreetingsByProduct[item.product]?.id
-            ? "인사장보기"
-            : "",
-          deliveryOnly: existing?.deliveryOnly || item.deliveryOnly,
-          lineSection: "box",
-        };
-      });
-      const keptUnknown = current.filter(
-        (row) => row.lineSection === "box" && !inCatalog.has(row.product),
-      );
-      const others = current.filter((row) => row.lineSection !== "box");
-
-      return [...nextBox, ...keptUnknown, ...others];
-    });
-  };
-
   useEffect(() => {
     setProductItems((current) =>
       current.map((item) => ({
         ...item,
-        greeting: savedGreetingsByProduct[item.product]?.id
-          ? "인사장보기"
-          : "",
+        greeting: savedGreetingsByProduct[item.product]?.id ? "인사장보기" : "",
       })),
     );
   }, [savedGreetingsByProduct]);
-
-  const handleOrderTypeChange = (nextType: OrderType) => {
-    if (orderType !== null) {
-      return;
-    }
-    setOrderType(nextType);
-    if (nextType === "delivery") {
-      // 배달은 받는 사람 주소로만 수취
-      setParcelContactMode("address");
-    }
-  };
-
-  const resetOrderTypeForm = () => {
-    setOrderType(null);
-    setDeliveryCompanyName("");
-    setParcelCompanyName("");
-    // 달력에서 고른 납품일(presetShipDate)은 폼초기화 후에도 유지
-    setDeliveryDate(presetShipDate ?? "");
-    setDeliveryAmPm("");
-    setDeliveryTime("");
-    setParcelShipDate(presetShipDate ?? "");
-    setRecipientName("");
-    setRecipientPhone("");
-    setRecipientAddress("");
-    setRecipientAddressDetail("");
-    setSenderName("");
-    setSenderPhone("");
-    setSenderAddress("");
-    setSenderAddressDetail("");
-    setSameAsSenderAddress(false);
-    setParcelContactMode("address");
-  };
-
-  useEffect(() => {
-    if (!sameAsSenderAddress) {
-      return;
-    }
-    setRecipientAddress(senderAddress);
-    setRecipientAddressDetail(senderAddressDetail);
-  }, [sameAsSenderAddress, senderAddress, senderAddressDetail]);
 
   const productListTotal = productItems.reduce(
     (sum, item) => sum + item.qty * (item.unitPrice || 0),
@@ -4269,7 +4129,7 @@ function ProductOrderPanel({
         return current;
       }
 
-      if (!perLineShipping || !canSplitLines) {
+      if (!canSplitLines) {
         // 관리자 / 수정 모드: 분할 없이 수량만 바꾼다 (baseQty 도 함께 따라감)
         const nextQty = Math.max(1, qty);
         return current.map((item, index) =>
@@ -4341,9 +4201,6 @@ function ProductOrderPanel({
         return current;
       }
       const rest = current.filter((_, index) => index !== rowIndex);
-      if (!perLineShipping) {
-        return rest;
-      }
       // 분할 형제가 남으면 원래 수량 기준을 남은 줄로 되돌린다.
       return rest.map((row) =>
         row.splitGroupId === target.splitGroupId
@@ -4388,7 +4245,8 @@ function ProductOrderPanel({
     if (matchingLines.length === 0) {
       setAlertDialog({
         open: true,
-        message: "인사장 작성을 위해선 상품이 필요합니다. 상품을 먼저 추가하세요!",
+        message:
+          "인사장 작성을 위해선 상품이 필요합니다. 상품을 먼저 추가하세요!",
       });
       return;
     }
@@ -4404,16 +4262,13 @@ function ProductOrderPanel({
       ordererName: displayOrdererName || ordererName.trim(),
       phone: ordererPhone.trim(),
       churchName: churchQuery.trim(),
-      // 개인앱은 보내는 사람이 줄별 택배정보에 있으므로 거기서 먼저 찾는다.
+      // 보내는 사람은 줄별 택배정보에 있으므로 거기서 먼저 찾는다.
       senderName:
-        (perLineShipping
-          ? (matchingLines
-              .map((line) => lineShipInfo[line.lineId])
-              .find((info) => info?.kind === "parcel" && info.senderName.trim())
-              ?.senderName.trim() ?? "")
-          : isDelivery
-            ? displayOrdererName || ordererName.trim()
-            : senderName.trim()) ||
+        (matchingLines
+          .map((line) => lineShipInfo[line.lineId])
+          .find((info) => info?.kind === "parcel" && info.senderName.trim())
+          ?.senderName.trim() ??
+          "") ||
         displayOrdererName ||
         ordererName.trim(),
     });
@@ -4423,81 +4278,29 @@ function ProductOrderPanel({
     if (!branchStore) {
       return "주문 작업 지역(남부/중부/서부)을 선택해 주세요.";
     }
-    if (!perLineShipping && !orderType) {
-      return "배달 또는 택배를 선택해 주세요.";
-    }
-    if (!ordererName.trim() || !ordererPhone.trim() || !orderDate || !churchId) {
+    if (
+      !ordererName.trim() ||
+      !ordererPhone.trim() ||
+      !orderDate ||
+      !churchId
+    ) {
       return "성명, 연락처, 주문일자, 중앙을 모두 입력해 주세요.";
     }
     if (!isDateOnOrAfterToday(orderDate)) {
       return "주문일자는 오늘 이후 날짜만 선택할 수 있습니다.";
     }
-
-    if (perLineShipping) {
-      if (productItems.length === 0) {
-        return "상품을 1개 이상 추가해 주세요.";
-      }
-      const noKind = productItems.find((item) => !item.orderKind);
-      if (noKind) {
-        return `'${noKind.product}'의 배송선택(택배/상차)을 골라 주세요.`;
-      }
-      const noShip = productItems.find(
-        (item) => !item.shipSaved || !lineShipInfo[item.lineId],
-      );
-      if (noShip) {
-        return `'${noShip.product}'의 배송정보를 입력해 주세요.`;
-      }
-      return "";
-    }
-
-    const hasDeliveryItems = isDelivery;
-    const hasParcelItems = !isDelivery;
-
-    if (hasDeliveryItems) {
-      if (!deliveryCompanyName.trim()) {
-        return "배달 업체명을 입력해 주세요.";
-      }
-      if (
-        !deliveryDate ||
-        !deliveryAmPm ||
-        !isValidTwelveHourClock(deliveryTime) ||
-        !recipientName.trim() ||
-        !recipientPhone.trim()
-      ) {
-        return "배달 정보를 모두 입력해 주세요.";
-      }
-      // 배달은 받는 사람 주소 필수
-      if (!recipientAddress.trim()) {
-        return "받는 사람 주소를 입력해 주세요.";
-      }
-      if (!isDateOnOrAfterToday(deliveryDate)) {
-        return "배달일은 오늘 이후 날짜만 선택할 수 있습니다.";
-      }
-    }
-
-    if (hasParcelItems) {
-      if (!parcelCompanyName.trim()) {
-        return "택배 업체명을 입력해 주세요.";
-      }
-      if (
-        !parcelShipDate ||
-        !senderName.trim() ||
-        !senderPhone.trim() ||
-        !senderAddress.trim()
-      ) {
-        return "택배 정보를 모두 입력해 주세요.";
-      }
-      if (!isDateOnOrAfterToday(parcelShipDate)) {
-        return "택배발송일은 오늘 이후 날짜만 선택할 수 있습니다.";
-      }
-      // 택배: 주소 선택 시에만 주소 필수. 이메일/팩스는 선택 여부만 기록
-      if (parcelContactMode === "address" && !recipientAddress.trim()) {
-        return "받는 사람 주소를 입력해 주세요.";
-      }
-    }
-
     if (productItems.length === 0) {
       return "상품을 1개 이상 추가해 주세요.";
+    }
+    const noKind = productItems.find((item) => !item.orderKind);
+    if (noKind) {
+      return `'${noKind.product}'의 배송선택(택배/상차)을 골라 주세요.`;
+    }
+    const noShip = productItems.find(
+      (item) => !item.shipSaved || !lineShipInfo[item.lineId],
+    );
+    if (noShip) {
+      return `'${noShip.product}'의 배송정보를 입력해 주세요.`;
     }
     return "";
   };
@@ -4554,10 +4357,7 @@ function ProductOrderPanel({
       return;
     }
 
-    if (!perLineShipping && !orderType) {
-      return;
-    }
-    // 개인앱은 줄마다 배송방식이 달라서 주문 단위 기본값으로만 쓴다.
+    // 줄마다 배송방식이 달라서 주문 단위 기본값으로만 쓴다.
     const selectedOrderType: OrderType = orderType ?? "delivery";
 
     setIsSubmitting(true);
@@ -4579,15 +4379,11 @@ function ProductOrderPanel({
         };
         for (const [name, draft] of Object.entries(resolved)) {
           if (!draft || draft.id) continue;
-          resolved[name] = await createGreetingFormFromDraft(
-            draft,
-            name,
-            {
-              ordererName: displayOrdererName || ordererName.trim(),
-              churchName: churchQuery.trim(),
-              phone: ordererPhone.trim(),
-            },
-          );
+          resolved[name] = await createGreetingFormFromDraft(draft, name, {
+            ordererName: displayOrdererName || ordererName.trim(),
+            churchName: churchQuery.trim(),
+            phone: ordererPhone.trim(),
+          });
         }
         greetingsForSubmit = resolved;
       }
@@ -4611,13 +4407,16 @@ function ProductOrderPanel({
       };
 
       const greetingKindNoteFor = (drafts: GreetingDraft[]) => {
-        if (drafts.some((draft) => isGreetingCatalogNumber(draft.greetingNumber))) {
+        if (
+          drafts.some((draft) => isGreetingCatalogNumber(draft.greetingNumber))
+        ) {
           return "본사";
         }
         if (
           drafts.some(
             (draft) =>
-              draft.includeSelf || draft.businessCard === BUSINESS_CARD_INCLUDED,
+              draft.includeSelf ||
+              draft.businessCard === BUSINESS_CARD_INCLUDED,
           )
         ) {
           return "자체";
@@ -4634,41 +4433,37 @@ function ProductOrderPanel({
       }
       const year = new Date().getFullYear();
       const baseOrderNumber =
-        editOrderNumber ??
-        `ORD-${year}-${String(Date.now()).slice(-6)}`;
+        editOrderNumber ?? `ORD-${year}-${String(Date.now()).slice(-6)}`;
 
       /*
-       * 개인앱 신규작성은 배송정보가 줄마다 달라서 주문을 줄 단위로 쪼개 접수한다.
+       * 신규작성은 배송정보가 줄마다 달라서 주문을 줄 단위로 쪼개 접수한다.
        * (Shipment 는 주문당 1행이고 notes 도 배송방식 블록이 한 벌뿐이라,
        *  한 주문에 여러 배송지를 담으면 관리자·출력·공장·우체국 화면이 전부 틀어진다)
        * 줄이 2개 이상이면 주문번호에 -1, -2 … 접미사가 붙는다.
        */
-      const orderGroups: ProductLineItem[][] =
-        perLineShipping && !isEditMode
-          ? productItems.map((item) => [item])
-          : [productItems];
+      const orderGroups: ProductLineItem[][] = canSplitLines
+        ? productItems.map((item) => [item])
+        : [productItems];
 
       /** 줄 묶음 하나 → notes + payload 한 벌 */
       const buildOrderBody = (lines: ProductLineItem[]) => {
-        const lineShipments: LineShipment[] = perLineShipping
-          ? lines.flatMap((item) => {
-              const ship = lineShipInfo[item.lineId];
-              return ship
-                ? [
-                    {
-                      product: item.product,
-                      qty: item.qty,
-                      baseQty: item.baseQty,
-                      note: item.note,
-                      unitPrice: item.unitPrice || 0,
-                      lineSection: item.lineSection,
-                      deliveryOnly: item.deliveryOnly,
-                      ship,
-                    },
-                  ]
-                : [];
-            })
-          : [];
+        const lineShipments: LineShipment[] = lines.flatMap((item) => {
+          const ship = lineShipInfo[item.lineId];
+          return ship
+            ? [
+                {
+                  product: item.product,
+                  qty: item.qty,
+                  baseQty: item.baseQty,
+                  note: item.note,
+                  unitPrice: item.unitPrice || 0,
+                  lineSection: item.lineSection,
+                  deliveryOnly: item.deliveryOnly,
+                  ship,
+                },
+              ]
+            : [];
+        });
         const firstDeliveryShip =
           lineShipments.find((line) => line.ship.kind === "delivery")?.ship ??
           null;
@@ -4676,12 +4471,8 @@ function ProductOrderPanel({
           lineShipments.find((line) => line.ship.kind === "parcel")?.ship ??
           null;
 
-        const hasDeliveryItems = perLineShipping
-          ? Boolean(firstDeliveryShip)
-          : isDelivery;
-        const hasParcelItems = perLineShipping
-          ? Boolean(firstParcelShip)
-          : !isDelivery;
+        const hasDeliveryItems = Boolean(firstDeliveryShip);
+        const hasParcelItems = Boolean(firstParcelShip);
 
         // 줄 단위로 쪼갠 주문은 배송정보가 딱 한 벌이라 아래 값들이 곧 정확한 값이다.
         const shipCompany = (
@@ -4690,9 +4481,12 @@ function ProductOrderPanel({
         const parcelCompany = (
           firstParcelShip?.companyName ?? parcelCompanyName
         ).trim();
-        const shipDeliveryDate = firstDeliveryShip?.deliveryDate ?? deliveryDate;
-        const shipDeliveryAmPm = firstDeliveryShip?.deliveryAmPm ?? deliveryAmPm;
-        const shipDeliveryTime = firstDeliveryShip?.deliveryTime ?? deliveryTime;
+        const shipDeliveryDate =
+          firstDeliveryShip?.deliveryDate ?? deliveryDate;
+        const shipDeliveryAmPm =
+          firstDeliveryShip?.deliveryAmPm ?? deliveryAmPm;
+        const shipDeliveryTime =
+          firstDeliveryShip?.deliveryTime ?? deliveryTime;
         const shipParcelDate =
           firstParcelShip?.parcelShipDate ?? parcelShipDate;
         const shipRecipientName = (
@@ -4722,24 +4516,17 @@ function ProductOrderPanel({
         const shipSenderAddressDetail = (
           firstParcelShip?.senderAddressDetail ?? senderAddressDetail
         ).trim();
-        const contactSource = perLineShipping
-          ? (firstParcelShip ?? firstDeliveryShip)
-          : null;
-        const contactAddress = perLineShipping
-          ? joinAddress(
-              contactSource?.recipientAddress ?? "",
-              contactSource?.recipientAddressDetail ?? "",
-            )
-          : fullRecipientAddress;
-        const contactAddressDetail = perLineShipping
-          ? (contactSource?.recipientAddressDetail ?? "").trim()
-          : recipientAddressDetail.trim();
+        const contactSource = firstParcelShip ?? firstDeliveryShip;
+        const contactAddress = joinAddress(
+          contactSource?.recipientAddress ?? "",
+          contactSource?.recipientAddressDetail ?? "",
+        );
+        const contactAddressDetail = (
+          contactSource?.recipientAddressDetail ?? ""
+        ).trim();
         // 배달은 항상 주소로 수취. 택배만 주소/이메일/팩스 선택
-        const contactMode: ParcelRecipientContactMode = perLineShipping
-          ? (firstParcelShip?.contactMode ?? "address")
-          : hasDeliveryItems
-            ? "address"
-            : parcelContactMode;
+        const contactMode: ParcelRecipientContactMode =
+          firstParcelShip?.contactMode ?? "address";
 
         const drafts = greetingsForLines(lines);
         const attachedGreetingNotes =
@@ -4822,8 +4609,7 @@ function ProductOrderPanel({
             })),
             shipment: {
               fulfillmentType: "PARCEL" as const,
-              carrier:
-                primaryKind === "delivery" ? shipCompany : parcelCompany,
+              carrier: primaryKind === "delivery" ? shipCompany : parcelCompany,
               deliveryAddress:
                 primaryKind === "delivery"
                   ? shipRecipientAddress
@@ -5080,7 +4866,7 @@ function ProductOrderPanel({
             return row.qty;
           }
 
-          const locked = perLineShipping && row.shipSaved;
+          const locked = row.shipSaved;
           return (
             <input
               type="number"
@@ -5110,65 +4896,58 @@ function ProductOrderPanel({
         className: "w-[96px]",
         render: (row) => formatPrice(row.unitPrice || 0),
       },
-      ...(perLineShipping
-        ? [
-            {
-              key: "lineShip",
-              header: "배송선택",
-              className: "w-[180px] px-1",
-              render: (row: ProductLineItem) => {
-                const kindOptions = row.deliveryOnly
-                  ? LINE_SHIP_OPTIONS.filter(
-                      (option) => option.value === "delivery",
-                    )
-                  : LINE_SHIP_OPTIONS;
-                return (
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      aria-label={`${row.product} 배송선택`}
-                      value={row.orderKind}
-                      disabled={row.shipSaved}
-                      onChange={(event) =>
-                        handleLineKindChange(
-                          row.lineId,
-                          event.target.value as OrderType | "",
-                        )
-                      }
-                      className="h-8 min-w-0 flex-1 rounded border border-[#cbd5e1] bg-white px-1 text-sm text-ink disabled:bg-[#EDF2F7]"
-                    >
-                      <option value="">선택</option>
-                      {kindOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={!row.orderKind}
-                      onClick={() => setShipSheetLineId(row.lineId)}
-                      className={cn(
-                        "shrink-0 rounded border px-1.5 py-1 text-[11px] font-bold",
-                        !row.orderKind
-                          ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
-                          : row.shipSaved
-                            ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
-                            : "border-[#1A365D] bg-white text-[#1A365D]",
-                      )}
-                    >
-                      {row.shipSaved ? "배송정보수정" : "배송정보입력"}
-                    </button>
-                  </div>
-                );
-              },
-            },
-          ]
-        : []),
+      {
+        key: "lineShip",
+        header: "배송선택",
+        className: "w-[180px] px-1",
+        render: (row: ProductLineItem) => {
+          const kindOptions = row.deliveryOnly
+            ? LINE_SHIP_OPTIONS.filter((option) => option.value === "delivery")
+            : LINE_SHIP_OPTIONS;
+          return (
+            <div className="flex items-center gap-1.5">
+              <select
+                aria-label={`${row.product} 배송선택`}
+                value={row.orderKind}
+                disabled={row.shipSaved}
+                onChange={(event) =>
+                  handleLineKindChange(
+                    row.lineId,
+                    event.target.value as OrderType | "",
+                  )
+                }
+                className="h-8 min-w-0 flex-1 rounded border border-[#cbd5e1] bg-white px-1 text-sm text-ink disabled:bg-[#EDF2F7]"
+              >
+                <option value="">선택</option>
+                {kindOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!row.orderKind}
+                onClick={() => setShipSheetLineId(row.lineId)}
+                className={cn(
+                  "shrink-0 rounded border px-1.5 py-1 text-[11px] font-bold",
+                  !row.orderKind
+                    ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
+                    : row.shipSaved
+                      ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
+                      : "border-[#1A365D] bg-white text-[#1A365D]",
+                )}
+              >
+                {row.shipSaved ? "배송정보수정" : "배송정보입력"}
+              </button>
+            </div>
+          );
+        },
+      },
       {
         key: "note",
         header: "요청사항",
-        render: (row) =>
-          row.note || <span className="text-[#94a3b8]">-</span>,
+        render: (row) => row.note || <span className="text-[#94a3b8]">-</span>,
       },
     ];
 
@@ -5271,16 +5050,7 @@ function ProductOrderPanel({
   const boxProductItems = productItems.filter(
     (item) => item.lineSection === "box",
   );
-  // 개인앱은 줄이 택배/상차로 갈라질 수 있어 품명 키 기반 '상품목록수정'을 쓰지 않는다.
-  const boxAddLabel =
-    isEditMode && !perLineShipping ? "상품목록수정" : "+ 박스상품 추가";
-  const boxQuantitiesByProduct = boxProductItems.reduce<Record<string, number>>(
-    (acc, item) => {
-      acc[item.product] = (acc[item.product] ?? 0) + item.qty;
-      return acc;
-    },
-    {},
-  );
+  const boxAddLabel = "+ 박스상품 추가";
   const giftUnitProductItems = productItems.filter(
     (item) => item.lineSection !== "box",
   );
@@ -5304,14 +5074,10 @@ function ProductOrderPanel({
           : null))
       : null;
 
-  const editorName = getAuthUser()?.name?.trim() || getAuthUser()?.username || "—";
+  const editorName =
+    getAuthUser()?.name?.trim() || getAuthUser()?.username || "—";
   const greetingTargetProducts = Array.from(
-    new Set(
-      (isDelivery || perLineShipping
-        ? giftUnitProductItems
-        : productItems
-      ).map((item) => item.product),
-    ),
+    new Set(giftUnitProductItems.map((item) => item.product)),
   );
   const greetingCountOnProducts = greetingTargetProducts.filter(
     (name) => savedGreetingsByProduct[name],
@@ -5386,10 +5152,10 @@ function ProductOrderPanel({
 
   /**
    * 상품 카드의 수량 / 단가 / 배송선택 줄 (스크린샷 ③④).
-   * 개인앱만 배송선택 드롭다운과 배송정보입력 버튼을 함께 보여준다.
+   * 배송선택 드롭다운과 배송정보입력 버튼을 함께 보여준다.
    */
   const renderLineControls = (row: ProductLineItem, rowIndex: number) => {
-    const locked = perLineShipping && row.shipSaved;
+    const locked = row.shipSaved;
     const kindOptions = row.deliveryOnly
       ? LINE_SHIP_OPTIONS.filter((option) => option.value === "delivery")
       : LINE_SHIP_OPTIONS;
@@ -5398,9 +5164,7 @@ function ProductOrderPanel({
       <div
         className={cn(
           "mt-3 grid gap-2.5",
-          perLineShipping
-            ? "grid-cols-[minmax(56px,1fr)_minmax(0,1fr)] sm:grid-cols-[minmax(56px,0.8fr)_minmax(0,1fr)_minmax(0,1.4fr)]"
-            : "grid-cols-2",
+          "grid-cols-[minmax(56px,1fr)_minmax(0,1fr)] sm:grid-cols-[minmax(56px,0.8fr)_minmax(0,1fr)_minmax(0,1.4fr)]",
         )}
       >
         <label className="block">
@@ -5435,74 +5199,66 @@ function ProductOrderPanel({
             {formatPrice(row.unitPrice || 0)}
           </p>
         </div>
-        {perLineShipping ? (
-          <div className="col-span-2 sm:col-span-1">
-            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-              배송선택
-            </span>
-            <div className="flex items-stretch gap-1.5">
-              <select
-                aria-label={`${row.product} 배송선택`}
-                value={row.orderKind}
-                disabled={locked}
-                onChange={(event) =>
-                  handleLineKindChange(
-                    row.lineId,
-                    event.target.value as OrderType | "",
-                  )
-                }
-                className="h-9 min-w-0 flex-1 rounded-md border border-[#E2E8F0] bg-white px-1.5 text-[12.5px] text-[#1A202C] disabled:bg-[#EDF2F7] disabled:text-[#64748B]"
-              >
-                <option value="">선택</option>
-                {kindOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={!row.orderKind}
-                onClick={() => setShipSheetLineId(row.lineId)}
-                className={cn(
-                  "shrink-0 rounded-md border px-2 py-1 text-[11px] font-bold leading-tight",
-                  !row.orderKind
-                    ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
-                    : row.shipSaved
-                      ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
-                      : "border-[#1A365D] bg-white text-[#1A365D]",
-                )}
-              >
-                {row.shipSaved ? (
-                  <>
-                    배송정보
-                    <br />
-                    수정
-                  </>
-                ) : (
-                  <>
-                    배송정보
-                    <br />
-                    입력
-                  </>
-                )}
-              </button>
-            </div>
+        <div className="col-span-2 sm:col-span-1">
+          <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+            배송선택
+          </span>
+          <div className="flex items-stretch gap-1.5">
+            <select
+              aria-label={`${row.product} 배송선택`}
+              value={row.orderKind}
+              disabled={locked}
+              onChange={(event) =>
+                handleLineKindChange(
+                  row.lineId,
+                  event.target.value as OrderType | "",
+                )
+              }
+              className="h-9 min-w-0 flex-1 rounded-md border border-[#E2E8F0] bg-white px-1.5 text-[12.5px] text-[#1A202C] disabled:bg-[#EDF2F7] disabled:text-[#64748B]"
+            >
+              <option value="">선택</option>
+              {kindOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!row.orderKind}
+              onClick={() => setShipSheetLineId(row.lineId)}
+              className={cn(
+                "shrink-0 rounded-md border px-2 py-1 text-[11px] font-bold leading-tight",
+                !row.orderKind
+                  ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
+                  : row.shipSaved
+                    ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
+                    : "border-[#1A365D] bg-white text-[#1A365D]",
+              )}
+            >
+              {row.shipSaved ? (
+                <>
+                  배송정보
+                  <br />
+                  수정
+                </>
+              ) : (
+                <>
+                  배송정보
+                  <br />
+                  입력
+                </>
+              )}
+            </button>
           </div>
-        ) : null}
+        </div>
       </div>
     );
   };
 
   const omInputClass =
     "mb-3 w-full rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C] disabled:bg-[#EDF2F7] disabled:text-[#A0AEC0]";
-  const omDatePickerClass =
-    "mb-3 flex w-full [&>button]:h-auto [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg [&>button]:border-[#E2E8F0] [&>button]:px-[11px] [&>button]:py-[9px] [&>button]:text-[13px]";
-  const omLabelClass =
-    "mb-[5px] block text-[12px] font-bold text-[#64748B]";
-  const deliveryClock = parseClockParts(deliveryTime);
-  const deliveryHour = deliveryClock?.hour ?? "";
-  const deliveryMinute = deliveryClock ? deliveryClock.minute : "";
+  const omLabelClass = "mb-[5px] block text-[12px] font-bold text-[#64748B]";
 
   return (
     <div className="mx-auto w-full max-w-[420px] space-y-0 rounded-2xl bg-[#F5F7FA] sm:max-w-none">
@@ -5555,7 +5311,8 @@ function ProductOrderPanel({
                   setOrdererPhone("");
                 } else {
                   // 본인으로 복귀: 로그인 회원 직분으로 복원
-                  const selfTitle = ordererTitleFromMemberType(loggedInMemberType);
+                  const selfTitle =
+                    ordererTitleFromMemberType(loggedInMemberType);
                   setOrdererTitle(selfTitle);
                   setIsDirector(Boolean(selfTitle));
                   setOrdererName(selfOrdererRef.current.name);
@@ -5575,7 +5332,9 @@ function ProductOrderPanel({
                 <label className={omLabelClass}>주문자 성명</label>
                 {ordererAutocomplete ? (
                   <OrdererNameField
-                    value={isDirector === true ? displayOrdererName : ordererName}
+                    value={
+                      isDirector === true ? displayOrdererName : ordererName
+                    }
                     onChange={(next) => {
                       if (selectedMemberId !== null) {
                         // 연결된 회원 이름을 수정/삭제하면 성명 칸을 비우고 직분 체크박스 제거
@@ -5600,7 +5359,9 @@ function ProductOrderPanel({
                           ? displayOrdererName
                           : ordererName
                     }
-                    onChange={(event) => handleOrdererNameInput(event.target.value)}
+                    onChange={(event) =>
+                      handleOrdererNameInput(event.target.value)
+                    }
                     readOnly={ordererFieldsReadOnly}
                     required
                     placeholder={
@@ -5738,472 +5499,109 @@ function ProductOrderPanel({
         ) : null}
       </div>
 
-      {/*
-        개인앱은 주문 단위 택배/배달 선택 대신 상품 줄마다 배송선택을 고른다.
-        (관리자 대리작성은 기존 탭 + 주문 단위 배송정보 유지)
-      */}
-      {perLineShipping ? null : (
-        <>
-      {/* Delivery / parcel */}
-      <div className="mb-4">
-        <OrderTypePicker
-          value={orderType}
-          locked={orderType !== null}
-          onSelect={handleOrderTypeChange}
-          onReset={resetOrderTypeForm}
-        />
-      </div>
-
-      {!orderType ? (
-        <p className="mb-4 rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[13px] text-[#64748B]">
-          택배 또는 배달을 선택해 주세요. 선택 후 다른 유형은 폼초기화로만
-          변경할 수 있습니다.
-        </p>
-      ) : isDelivery ? (
-        <div className="mb-4 space-y-0">
-          <label className={omLabelClass}>배달일 *</label>
-          <MdCalendarPicker
-            valueIso={deliveryDate || null}
-            minIso={todayDateValue()}
-            placeholder="m/d"
-            title="배달일"
-            disabled={shipDateLocked}
-            className={omDatePickerClass}
-            onChangeIso={(iso) => {
-              if (iso < todayDateValue()) return;
-              setDeliveryDate(iso);
-            }}
-          />
-          <label className={omLabelClass}>배달 시간 *</label>
-          <div className="mb-3 flex gap-2">
-            <select
-              value={deliveryAmPm}
-              onChange={(event) =>
-                setDeliveryAmPm(
-                  event.target.value === "오전" || event.target.value === "오후"
-                    ? event.target.value
-                    : "",
-                )
-              }
-              required
-              className={cn(
-                omInputClass,
-                "mb-0 w-[88px] shrink-0",
-              )}
-            >
-              <option value="">선택</option>
-              <option value="오전">오전</option>
-              <option value="오후">오후</option>
-            </select>
-            <select
-              value={deliveryHour === "" ? "" : String(deliveryHour)}
-              onChange={(event) => {
-                const hour = Number(event.target.value);
-                const minute =
-                  deliveryMinute === "" ? 0 : Number(deliveryMinute);
-                setDeliveryTime(
-                  event.target.value ? formatClock(hour, minute) : "",
-                );
-              }}
-              required
-              className={cn(omInputClass, "mb-0 min-w-0 flex-1")}
-            >
-              <option value="">시</option>
-              {Array.from({ length: 12 }, (_, index) => index + 1).map(
-                (hour) => (
-                  <option key={hour} value={hour}>
-                    {hour}
-                  </option>
-                ),
-              )}
-            </select>
-            <select
-              value={deliveryMinute === "" ? "" : String(deliveryMinute)}
-              onChange={(event) => {
-                const minute = Number(event.target.value);
-                const hour = deliveryHour === "" ? 12 : Number(deliveryHour);
-                setDeliveryTime(
-                  event.target.value ? formatClock(hour, minute) : "",
-                );
-              }}
-              required
-              className={cn(omInputClass, "mb-0 min-w-0 flex-1")}
-            >
-              <option value="">분</option>
-              {Array.from({ length: 60 }, (_, minute) => (
-                <option key={minute} value={minute}>
-                  {String(minute).padStart(2, "0")}
-                </option>
-              ))}
-            </select>
-          </div>
-          <label className={omLabelClass}>납품업체명 *</label>
-          <input
-            type="text"
-            value={deliveryCompanyName}
-            onChange={(event) => setDeliveryCompanyName(event.target.value)}
-            placeholder="납품업체명"
-            required
-            className={omInputClass}
-          />
-          <label className={omLabelClass}>받는 분 성함 *</label>
-          <input
-            type="text"
-            value={recipientName}
-            onChange={(event) => setRecipientName(event.target.value)}
-            required
-            className={omInputClass}
-          />
-          <label className={omLabelClass}>받는 분 전화번호 *</label>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={13}
-            value={recipientPhone}
-            onChange={(event) =>
-              setRecipientPhone(formatPhoneInput(event.target.value))
-            }
-            required
-            className={omInputClass}
-          />
-          {/* 배달은 받는 사람 주소만 (이메일/팩스 선택 없음) */}
-          <AddressField
-            id="recipient-address"
-            label="받는 사람 주소"
-            value={recipientAddress}
-            onChange={setRecipientAddress}
-            detailValue={recipientAddressDetail}
-            onDetailChange={setRecipientAddressDetail}
-          />
-        </div>
-      ) : (
-        <div className="mb-4 space-y-0">
-          <label className={omLabelClass}>택배발송일 *</label>
-          <MdCalendarPicker
-            valueIso={parcelShipDate || null}
-            minIso={todayDateValue()}
-            placeholder="m/d"
-            title="택배발송일"
-            disabled={shipDateLocked}
-            className={omDatePickerClass}
-            onChangeIso={(iso) => {
-              if (iso < todayDateValue()) return;
-              setParcelShipDate(iso);
-            }}
-          />
-          <label className={omLabelClass}>납품업체명 *</label>
-          <input
-            type="text"
-            value={parcelCompanyName}
-            onChange={(event) => setParcelCompanyName(event.target.value)}
-            placeholder="납품업체명"
-            required
-            className={omInputClass}
-          />
-          <label className={omLabelClass}>보내는 사람 (택배기표지) *</label>
-          <input
-            type="text"
-            value={senderName}
-            onChange={(event) => setSenderName(event.target.value)}
-            required
-            className={omInputClass}
-          />
-          <label className={omLabelClass}>
-            보내는 사람 전화번호 (택배기표지) *
-          </label>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={13}
-            value={senderPhone}
-            onChange={(event) =>
-              setSenderPhone(formatPhoneInput(event.target.value))
-            }
-            required
-            className={omInputClass}
-          />
-          <AddressField
-            id="sender-address"
-            label="보내는 사람 주소 (택배기표지)"
-            value={senderAddress}
-            onChange={setSenderAddress}
-            detailValue={senderAddressDetail}
-            onDetailChange={setSenderAddressDetail}
-          />
-          <RecipientContactChoice
-            mode={parcelContactMode}
-            onModeChange={setParcelContactMode}
-            radioName="parcel-recipient-contact"
-            addressId="parcel-recipient-address"
-            address={recipientAddress}
-            onAddressChange={setRecipientAddress}
-            addressDetail={recipientAddressDetail}
-            onAddressDetailChange={setRecipientAddressDetail}
-            addressLocked={sameAsSenderAddress}
-            addressLabelExtra={
-              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
-                <input
-                  type="checkbox"
-                  checked={sameAsSenderAddress}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setSameAsSenderAddress(checked);
-                    if (checked) {
-                      setRecipientAddress(senderAddress);
-                      setRecipientAddressDetail(senderAddressDetail);
-                    }
-                  }}
-                  className="size-4 accent-[#6B46C1]"
-                />
-                보내는 사람 주소와 같음
-              </label>
-            }
-          />
-        </div>
-      )}
-        </>
-      )}
-
-      {/* Products — 개인앱은 항상, 관리자는 배달/택배 선택 후 표시 */}
-      {perLineShipping || orderType ? (
+      {/* 상품 섹션 (①박스 / ②선물세트) — 배송은 줄마다 고른다 */}
       <div className="mb-4 space-y-3">
-        {perLineShipping && isEditMode ? (
+        {isEditMode ? (
           <p className="rounded-lg border border-[#F6AD55] bg-[#FFFAF0] px-3 py-2 text-[12px] leading-relaxed text-[#9C4221]">
             이 주문서는 배송 1건입니다. 배송방식과 배송정보는 바꿀 수 있지만,
             택배·상차로 나누시려면 주문서를 새로 작성해 주세요.
           </p>
         ) : null}
-        {isDelivery || perLineShipping ? (
-          <>
-            {/* ① 박스상품 */}
-            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-[13px] font-bold text-[#1A202C]">
-                  ① 박스 상품
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProductDialogMode("box");
-                    // 개인앱은 줄이 갈라질 수 있어 품명 키 기반 목록교체를 쓰지 않는다.
-                    setIsProductListEdit(isEditMode && !perLineShipping);
-                    setIsProductDialogOpen(true);
-                  }}
-                  className="rounded-lg border border-[#CBD5E0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1A365D]"
-                >
-                  {boxAddLabel}
-                </button>
-              </div>
-              {isWideProductList ? (
-                <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
-                  <Table
-                    caption="박스 상품 목록"
-                    columns={boxProductColumns}
-                    data={boxProductItems}
-                    emptyMessage={`박스단위로만 주문 가능합니다 (인사장 없음). '${boxAddLabel}'로 담아주세요.`}
-                    scrollable={!isDesktop}
-                    visibleRows={isDesktop ? undefined : 4}
-                  />
-                </div>
-              ) : boxProductItems.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
-                  박스단위로만 주문 가능합니다 (인사장 없음). &apos;{boxAddLabel}
-                  &apos;로 담아주세요.
-                </p>
-              ) : (
-                <ul className="space-y-2.5">
-                  {boxProductItems.map((row) => {
-                    const rowIndex = productItems.indexOf(row);
-                    return (
-                      <li
-                        key={`box-${row.lineId}`}
-                        className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
-                            {row.product}
-                          </p>
-                          <button
-                            type="button"
-                            aria-label={`${row.product} 삭제`}
-                            onClick={() => removeProductItem(rowIndex)}
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </div>
-                        {renderLineControls(row, rowIndex)}
-                        {row.note ? (
-                          <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
-                            <span className="font-semibold text-[#64748B]">
-                              요청사항 ·{" "}
-                            </span>
-                            {row.note}
-                          </p>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+        {/* ① 박스상품 */}
+        <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-[13px] font-bold text-[#1A202C]">
+              ① 박스 상품
+            </h4>
+            <button
+              type="button"
+              onClick={() => {
+                setProductDialogMode("box");
+                setIsProductDialogOpen(true);
+              }}
+              className="rounded-lg border border-[#CBD5E0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1A365D]"
+            >
+              {boxAddLabel}
+            </button>
+          </div>
+          {isWideProductList ? (
+            <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
+              <Table
+                caption="박스 상품 목록"
+                columns={boxProductColumns}
+                data={boxProductItems}
+                emptyMessage={`박스단위로만 주문 가능합니다 (인사장 없음). '${boxAddLabel}'로 담아주세요.`}
+                scrollable={!isDesktop}
+                visibleRows={isDesktop ? undefined : 4}
+              />
             </div>
-
-            {/* ② 선물세트 (인사장 주문) */}
-            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-[13px] font-bold text-[#1A202C]">
-                  ② 선물세트 (인사장 주문)
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProductDialogMode("giftUnit");
-                      setIsProductListEdit(false);
-                      setIsProductDialogOpen(true);
-                    }}
-                    className="rounded-lg border border-[#9AE6B4] bg-[#F0FFF4] px-3 py-2 text-[12.5px] font-bold text-[#276749]"
+          ) : boxProductItems.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
+              박스단위로만 주문 가능합니다 (인사장 없음). &apos;{boxAddLabel}
+              &apos;로 담아주세요.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {boxProductItems.map((row) => {
+                const rowIndex = productItems.indexOf(row);
+                return (
+                  <li
+                    key={`box-${row.lineId}`}
+                    className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
                   >
-                    + 선물세트 낱개 추가
-                  </button>
-                  <button
-                    type="button"
-                    disabled={giftUnitProductItems.length === 0}
-                    onClick={handleApplyInsaAll}
-                    className={cn(
-                      "rounded-lg px-3 py-2 text-[12.5px] font-bold",
-                      giftUnitProductItems.length > 0
-                        ? "bg-[#EBF4FD] text-[#3182CE]"
-                        : "cursor-not-allowed bg-[#EDF2F7] text-[#A0AEC0]",
-                    )}
-                  >
-                    인사장주문 동일적용
-                  </button>
-                </div>
-              </div>
-              {isWideProductList ? (
-                <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
-                  <Table
-                    caption="선물세트 낱개 상품 목록"
-                    columns={productColumns}
-                    data={giftUnitProductItems}
-                    emptyMessage="선물세트 낱개 상품만 검색·주문할 수 있습니다. '+ 선물세트 낱개 추가'로 담아주세요."
-                    scrollable={!isDesktop}
-                    visibleRows={isDesktop ? undefined : 4}
-                  />
-                </div>
-              ) : giftUnitProductItems.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
-                  선물세트 낱개 상품만 검색·주문할 수 있습니다. &apos;+
-                  선물세트 낱개 추가&apos;로 담아주세요.
-                </p>
-              ) : (
-                <ul className="space-y-2.5">
-                  {giftUnitProductItems.map((row) => {
-                    const rowIndex = productItems.indexOf(row);
-                    const draft = savedGreetingsByProduct[row.product];
-                    const isSaved = Boolean(draft);
-                    return (
-                      <li
-                        key={`gift-${row.lineId}`}
-                        className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
+                        {row.product}
+                      </p>
+                      <button
+                        type="button"
+                        aria-label={`${row.product} 삭제`}
+                        onClick={() => removeProductItem(rowIndex)}
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
-                            {row.product}
-                          </p>
-                          <button
-                            type="button"
-                            aria-label={`${row.product} 삭제`}
-                            onClick={() => removeProductItem(rowIndex)}
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </div>
-                        {renderLineControls(row, rowIndex)}
-                        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
-                          <span className="text-[11px] font-bold text-[#64748B]">
-                            인사장
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
-                                isSaved
-                                  ? "bg-[#DCF0DC] text-[#2F855A]"
-                                  : "bg-[#EDF2F7] text-[#64748B]",
-                              )}
-                              onClick={() => {
-                                if (isSaved) {
-                                  setViewingGreetingProduct(row.product);
-                                  setIsGreetingViewOpen(true);
-                                  return;
-                                }
-                                openGreetingForm(row.product);
-                              }}
-                            >
-                              {isSaved ? "인사장보기" : "인사장주문"}
-                            </button>
-                            {isSaved ? (
-                              <button
-                                type="button"
-                                aria-label={`${row.product} 인사장 제거`}
-                                className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
-                                onClick={() => onRemoveGreeting?.(row.product)}
-                              >
-                                <X className="size-4" strokeWidth={2.5} />
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                        {row.note ? (
-                          <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
-                            <span className="font-semibold text-[#64748B]">
-                              요청사항 ·{" "}
-                            </span>
-                            {row.note}
-                          </p>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                    {renderLineControls(row, rowIndex)}
+                    {row.note ? (
+                      <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
+                        <span className="font-semibold text-[#64748B]">
+                          요청사항 ·{" "}
+                        </span>
+                        {row.note}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
-            {productItems.length > 0 ? (
-              <p className="text-[11px] text-[#64748B]">
-                총 {productLineCount}건 · 수량{" "}
-                {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
-                <span className="font-bold text-[#1A202C]">
-                  {formatPrice(productListTotal)}
-                </span>
-              </p>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <div className="mb-2.5 flex flex-wrap gap-2">
+        {/* ② 선물세트 (인사장 주문) */}
+        <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-[13px] font-bold text-[#1A202C]">
+              ② 선물세트 (인사장 주문)
+            </h4>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  setProductDialogMode("all");
-                  setIsProductListEdit(false);
+                  setProductDialogMode("giftUnit");
                   setIsProductDialogOpen(true);
                 }}
-                className="rounded-lg px-3 py-2 text-[12.5px] font-bold bg-[#1A365D] text-white"
+                className="rounded-lg border border-[#9AE6B4] bg-[#F0FFF4] px-3 py-2 text-[12.5px] font-bold text-[#276749]"
               >
-                + 상품추가
+                + 선물세트 낱개 추가
               </button>
               <button
                 type="button"
-                disabled={productItems.length === 0}
+                disabled={giftUnitProductItems.length === 0}
                 onClick={handleApplyInsaAll}
                 className={cn(
                   "rounded-lg px-3 py-2 text-[12.5px] font-bold",
-                  productItems.length > 0
+                  giftUnitProductItems.length > 0
                     ? "bg-[#EBF4FD] text-[#3182CE]"
                     : "cursor-not-allowed bg-[#EDF2F7] text-[#A0AEC0]",
                 )}
@@ -6211,114 +5609,111 @@ function ProductOrderPanel({
                 인사장주문 동일적용
               </button>
             </div>
-            {productItems.length > 0 ? (
-              <p className="mb-2 text-[11px] text-[#64748B]">
-                총 {productLineCount}건 · 수량{" "}
-                {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
-                <span className="font-bold text-[#1A202C]">
-                  {formatPrice(productListTotal)}
-                </span>
-              </p>
-            ) : null}
-
-            {isWideProductList ? (
-              <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
-                <Table
-                  caption="제품 주문 상품 목록"
-                  columns={productColumns}
-                  data={productItems}
-                  emptyMessage="등록된 상품이 없습니다. 「+ 상품추가」로 추가해 주세요."
-                  scrollable={!isDesktop}
-                  visibleRows={isDesktop ? undefined : 4}
-                />
-              </div>
-            ) : productItems.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
-                등록된 상품이 없습니다. 「+ 상품추가」로 추가해 주세요.
-              </p>
-            ) : (
-              <ul className="space-y-2.5">
-                {productItems.map((row, rowIndex) => {
-                  const draft = savedGreetingsByProduct[row.product];
-                  const isSaved = Boolean(draft);
-
-                  return (
-                    <li
-                      key={row.lineId}
-                      className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
-                          {row.product}
-                        </p>
+          </div>
+          {isWideProductList ? (
+            <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
+              <Table
+                caption="선물세트 낱개 상품 목록"
+                columns={productColumns}
+                data={giftUnitProductItems}
+                emptyMessage="선물세트 낱개 상품만 검색·주문할 수 있습니다. '+ 선물세트 낱개 추가'로 담아주세요."
+                scrollable={!isDesktop}
+                visibleRows={isDesktop ? undefined : 4}
+              />
+            </div>
+          ) : giftUnitProductItems.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
+              선물세트 낱개 상품만 검색·주문할 수 있습니다. &apos;+ 선물세트
+              낱개 추가&apos;로 담아주세요.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {giftUnitProductItems.map((row) => {
+                const rowIndex = productItems.indexOf(row);
+                const draft = savedGreetingsByProduct[row.product];
+                const isSaved = Boolean(draft);
+                return (
+                  <li
+                    key={`gift-${row.lineId}`}
+                    className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
+                        {row.product}
+                      </p>
+                      <button
+                        type="button"
+                        aria-label={`${row.product} 삭제`}
+                        onClick={() => removeProductItem(rowIndex)}
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                    {renderLineControls(row, rowIndex)}
+                    <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
+                      <span className="text-[11px] font-bold text-[#64748B]">
+                        인사장
+                      </span>
+                      <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          aria-label={`${row.product} 삭제`}
-                          onClick={() => removeProductItem(rowIndex)}
-                          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#64748B] hover:bg-[#FDEEEE] hover:text-[#E53E3E]"
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+                            isSaved
+                              ? "bg-[#DCF0DC] text-[#2F855A]"
+                              : "bg-[#EDF2F7] text-[#64748B]",
+                          )}
+                          onClick={() => {
+                            if (isSaved) {
+                              setViewingGreetingProduct(row.product);
+                              setIsGreetingViewOpen(true);
+                              return;
+                            }
+                            openGreetingForm(row.product);
+                          }}
                         >
-                          <Trash2 className="size-4" />
+                          {isSaved ? "인사장보기" : "인사장주문"}
                         </button>
-                      </div>
-
-                      {renderLineControls(row, rowIndex)}
-
-                      <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
-                        <span className="text-[11px] font-bold text-[#64748B]">
-                          인사장
-                        </span>
-                        <div className="flex items-center gap-1">
+                        {isSaved ? (
                           <button
                             type="button"
-                            className={cn(
-                              "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
-                              isSaved
-                                ? "bg-[#DCF0DC] text-[#2F855A]"
-                                : "bg-[#EDF2F7] text-[#64748B]",
-                            )}
-                            onClick={() => {
-                              if (isSaved) {
-                                setViewingGreetingProduct(row.product);
-                                setIsGreetingViewOpen(true);
-                                return;
-                              }
-                              openGreetingForm(row.product);
-                            }}
+                            aria-label={`${row.product} 인사장 제거`}
+                            className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
+                            onClick={() => onRemoveGreeting?.(row.product)}
                           >
-                            {isSaved ? "인사장보기" : "인사장주문"}
+                            <X className="size-4" strokeWidth={2.5} />
                           </button>
-                          {isSaved ? (
-                            <button
-                              type="button"
-                              aria-label={`${row.product} 인사장 제거`}
-                              className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
-                              onClick={() => onRemoveGreeting?.(row.product)}
-                            >
-                              <X className="size-4" strokeWidth={2.5} />
-                            </button>
-                          ) : null}
-                        </div>
+                        ) : null}
                       </div>
+                    </div>
+                    {row.note ? (
+                      <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
+                        <span className="font-semibold text-[#64748B]">
+                          요청사항 ·{" "}
+                        </span>
+                        {row.note}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
-                      {row.note ? (
-                        <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
-                          <span className="font-semibold text-[#64748B]">
-                            요청사항 ·{" "}
-                          </span>
-                          {row.note}
-                        </p>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </>
-        )}
+        {productItems.length > 0 ? (
+          <p className="text-[11px] text-[#64748B]">
+            총 {productLineCount}건 · 수량{" "}
+            {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
+            <span className="font-bold text-[#1A202C]">
+              {formatPrice(productListTotal)}
+            </span>
+          </p>
+        ) : null}
       </div>
-      ) : null}
 
-      {(perLineShipping ? productItems.length > 0 : Boolean(orderType)) ? (
+      {productItems.length > 0 ? (
         <div className="mb-4">
           <label htmlFor="order-extra-note" className={omLabelClass}>
             특이사항
@@ -6372,10 +5767,7 @@ function ProductOrderPanel({
         >
           {isSubmitting ? (
             <span className="inline-flex items-center justify-center gap-2">
-              <Spinner
-                size="sm"
-                label={isEditMode ? "저장 중" : "접수 중"}
-              />
+              <Spinner size="sm" label={isEditMode ? "저장 중" : "접수 중"} />
               {isEditMode ? "저장 중..." : "접수 중..."}
             </span>
           ) : isEditMode ? (
@@ -6402,16 +5794,13 @@ function ProductOrderPanel({
       </div>
 
       <ProductAddDialog
-        open={isProductDialogOpen && (perLineShipping || orderType !== null)}
+        open={isProductDialogOpen}
         defaultOrderKind={orderType ?? "delivery"}
-        // 개인앱은 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다.
-        showOrderKind={!perLineShipping}
+        // 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다.
+        showOrderKind={false}
         openStockOnly={openStockOnly}
         presentation={productDialogPresentation}
         mode={productDialogMode}
-        editList={isProductListEdit}
-        initialQuantities={isProductListEdit ? boxQuantitiesByProduct : undefined}
-        onReplaceItems={replaceBoxProductItems}
         onClose={() => setIsProductDialogOpen(false)}
         onAddItems={addProductItems}
       />
@@ -6630,7 +6019,9 @@ function MemberMobileOrderCard({
             <li className="break-words">
               납품일(배달일): {order.deliveryDate || "-"}
             </li>
-            <li className="break-words">납품처: {order.deliveryPlace || "-"}</li>
+            <li className="break-words">
+              납품처: {order.deliveryPlace || "-"}
+            </li>
           </ul>
         </div>
         <div className="flex shrink-0 flex-col gap-1.5">
@@ -6800,7 +6191,10 @@ function OrderStatusPanel({
       createdAt: string;
       notes?: string | null;
       items?: Array<{ productName: string; quantity: number }>;
-      shipment?: { fulfillmentType?: string | null; carrier?: string | null } | null;
+      shipment?: {
+        fulfillmentType?: string | null;
+        carrier?: string | null;
+      } | null;
       greetingForms?: Array<{ id: number; linkedToOrder: boolean }>;
       user?: { fullname?: string | null } | null;
       readyForShipment?: boolean;
@@ -6831,8 +6225,7 @@ function OrderStatusPanel({
       return {
         id: order.id,
         orderNumber: order.orderNumber,
-        name:
-          parseOrdererFromNotes(order.notes) || order.user?.fullname || "-",
+        name: parseOrdererFromNotes(order.notes) || order.user?.fullname || "-",
         type,
         greeting: greetingLabel,
         status:
@@ -6845,8 +6238,7 @@ function OrderStatusPanel({
           (sum, item) => sum + (item.quantity || 0),
           0,
         ),
-        orderDate:
-          orderDateFromNotes || toLocalIsoDate(order.createdAt) || "",
+        orderDate: orderDateFromNotes || toLocalIsoDate(order.createdAt) || "",
         deliveryDate: parseDeliveryRequestDateFromNotes(order.notes),
         deliveryPlace:
           parseDeliveryCompanyFromNotes(order.notes) ||
@@ -6876,7 +6268,10 @@ function OrderStatusPanel({
               createdAt: string;
               notes?: string | null;
               items?: Array<{ productName: string; quantity: number }>;
-              shipment?: { fulfillmentType?: string | null; carrier?: string | null } | null;
+              shipment?: {
+                fulfillmentType?: string | null;
+                carrier?: string | null;
+              } | null;
               greetingForms?: Array<{ id: number; linkedToOrder: boolean }>;
               user?: { fullname?: string | null } | null;
               readyForShipment?: boolean;
@@ -6910,10 +6305,11 @@ function OrderStatusPanel({
       } finally {
         if (!cancelled && !silent) {
           // 스피너가 너무 짧게 깜빡이지 않도록 최소 표시 시간을 보장한다.
-          const remaining =
-            STATUS_LOADING_MIN_MS - (Date.now() - startedAt);
+          const remaining = STATUS_LOADING_MIN_MS - (Date.now() - startedAt);
           if (remaining > 0) {
-            await new Promise((resolve) => window.setTimeout(resolve, remaining));
+            await new Promise((resolve) =>
+              window.setTimeout(resolve, remaining),
+            );
           }
           if (!cancelled) {
             setIsLoading(false);
@@ -6948,12 +6344,9 @@ function OrderStatusPanel({
         },
       );
       const data = (await response.json()) as
-        | { id: number; status: string; message?: string }
-        | { message?: string };
+        { id: number; status: string; message?: string } | { message?: string };
       if (!response.ok) {
-        throw new Error(
-          data.message ?? "상품수령 처리에 실패했습니다.",
-        );
+        throw new Error(data.message ?? "상품수령 처리에 실패했습니다.");
       }
       setOrders((prev) =>
         prev.map((row) =>
@@ -7150,11 +6543,7 @@ function OrderStatusPanel({
                   onSelectIso={(iso) => {
                     setCalendarDateIso(iso);
                     const empty = (deliveryCounts[iso] ?? 0) === 0;
-                    if (
-                      empty &&
-                      iso >= todayDateValue() &&
-                      !isSundayIso(iso)
-                    ) {
+                    if (empty && iso >= todayDateValue() && !isSundayIso(iso)) {
                       setCalendarDayModalOpen(false);
                       onCreateOrderForDate?.(iso);
                       return;
@@ -7331,7 +6720,12 @@ export function OrderListInput({
         Object.keys(savedGreetingsByProduct).length > 0 ||
         hasUnsavedGreeting,
     );
-  }, [orderFormDirty, savedGreetingsByProduct, hasUnsavedGreeting, onDirtyChange]);
+  }, [
+    orderFormDirty,
+    savedGreetingsByProduct,
+    hasUnsavedGreeting,
+    onDirtyChange,
+  ]);
 
   useEffect(() => {
     if (embedded) {
@@ -7539,7 +6933,9 @@ export function OrderListInput({
       case "인사장관리":
         return (
           <>
-            <div className={activeMenu === "새 주문서 작성" ? "block" : "hidden"}>
+            <div
+              className={activeMenu === "새 주문서 작성" ? "block" : "hidden"}
+            >
               <ProductOrderPanel
                 key={orderFormKey}
                 blankCustomerFields={embedded}
@@ -7696,7 +7092,9 @@ export function OrderListInput({
                 Beta 테스트중
               </p>
             ) : null}
-            <h3 className="text-[22px] font-semibold text-ink">{pageMeta.title}</h3>
+            <h3 className="text-[22px] font-semibold text-ink">
+              {pageMeta.title}
+            </h3>
             <p className="mt-1 text-[13px] text-muted-foreground">
               {pageMeta.description}
             </p>
