@@ -82,8 +82,10 @@ function typeLabel(type: HistoryRow["type"]) {
 
 export function StockStatusMng({
   onNavigateToCatalog,
+  onNavigateToExcelUpload,
 }: {
   onNavigateToCatalog?: () => void;
+  onNavigateToExcelUpload?: () => void;
 }) {
   const [data, setData] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,16 +192,16 @@ export function StockStatusMng({
             onClick={() => onNavigateToCatalog?.()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1A202C] hover:bg-[#F5F7FA]"
           >
-            <Upload className="size-3.5" strokeWidth={2} />
-            초기재고 업로드
+            <Package className="size-3.5" strokeWidth={2} />
+            재고/상품 관리
           </button>
           <button
             type="button"
-            onClick={() => onNavigateToCatalog?.()}
+            onClick={() => onNavigateToExcelUpload?.()}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#3182CE] px-3 py-2 text-[12.5px] font-bold text-white hover:bg-[#2B6CB0]"
           >
             <Upload className="size-3.5" strokeWidth={2} />
-            추가재고 업로드
+            엑셀 일괄 업로드
           </button>
         </div>
       </div>

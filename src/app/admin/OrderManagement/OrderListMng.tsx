@@ -23,6 +23,7 @@ import { AdminExcelMng } from "@/app/admin/OrderManagement/AdminExcelMng";
 import { AdminPostOfficeUploadMng } from "@/app/admin/OrderManagement/AdminPostOfficeUploadMng";
 import { GreetingFormMng } from "@/app/admin/OrderManagement/GreetingFormMng";
 import { MembersListMng } from "@/app/admin/OrderManagement/MembersListMng";
+import { StockExcelUploadMng } from "@/app/admin/OrderManagement/StockExcelUploadMng";
 import { StockInventoryMng } from "@/app/admin/OrderManagement/StockInventoryMng";
 import { StockStatusMng } from "@/app/admin/OrderManagement/StockStatusMng";
 import { OrderDataMng } from "@/app/admin/OrderManagement/OrderDataMng";
@@ -56,6 +57,7 @@ type AdminView =
   | "재고관리"
   | "전체 재고 현황"
   | "재고/상품"
+  | "재고 엑셀업로드"
   | "회원관리"
   | "프로필";
 
@@ -137,6 +139,7 @@ const FULL_NAV: NavPrimaryItem[] = [
         view: "전체 재고 현황",
       },
       { id: "inv-catalog", label: "재고/상품", view: "재고/상품" },
+      { id: "inv-excel", label: "엑셀업로드", view: "재고 엑셀업로드" },
     ],
   },
   {
@@ -317,6 +320,8 @@ export function OrderListMng() {
   const [editOrderNumber, setEditOrderNumber] = useState<string | null>(null);
   const [printOrderNumber, setPrintOrderNumber] = useState<string | null>(null);
   const [orderListKey, setOrderListKey] = useState(0);
+  /** 엑셀 업로드 후 재고 화면이 최신 데이터를 다시 불러오게 한다. */
+  const [stockDataKey, setStockDataKey] = useState(0);
 
   const activePrimary = primaryForView(nav, activeMenu);
 
@@ -463,12 +468,22 @@ export function OrderListMng() {
 
     if (activeMenu === "전체 재고 현황" || activeMenu === "재고관리") {
       return (
-        <StockStatusMng onNavigateToCatalog={() => goTo("재고/상품")} />
+        <StockStatusMng
+          key={stockDataKey}
+          onNavigateToCatalog={() => goTo("재고/상품")}
+          onNavigateToExcelUpload={() => goTo("재고 엑셀업로드")}
+        />
       );
     }
 
     if (activeMenu === "재고/상품") {
-      return <StockInventoryMng />;
+      return <StockInventoryMng key={stockDataKey} />;
+    }
+
+    if (activeMenu === "재고 엑셀업로드") {
+      return (
+        <StockExcelUploadMng onUploaded={() => setStockDataKey((k) => k + 1)} />
+      );
     }
 
     if (activeMenu === "회원관리") {
