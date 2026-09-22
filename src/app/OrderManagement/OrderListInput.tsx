@@ -72,8 +72,13 @@ import {
   splitSavedAddress,
   parseRecipientAddressDetailFromNotes,
   parseSenderAddressDetailFromNotes,
+  encodeLineShipments,
+  parseLineShipmentsFromNotes,
+  emptyLineShipInfo,
   PARCEL_CONTACT_MODE_LABEL,
   type ParcelRecipientContactMode,
+  type LineShipInfo,
+  type LineShipment,
 } from "@/lib/order-notes";
 import { canEditOrderStatus, memberFacingStatusLabel } from "@/lib/order-delivery";
 import { usePwaInstalled } from "@/lib/pwa-install";
@@ -192,15 +197,45 @@ type MemberNav = (typeof MEMBER_NAV)[number] | "새 주문서 작성";
 
 interface ProductLineItem {
   [key: string]: string | number | boolean;
+  /** 같은 품명이 택배/상차로 갈라질 수 있어 행 식별은 품명이 아닌 이 id로 한다 */
+  lineId: string;
   product: string;
-  orderKind: OrderType;
+  /** 개인앱은 줄마다 고름. ""=아직 배송선택 안 함 */
+  orderKind: OrderType | "";
   qty: number;
+  /** 분할 기준 수량(처음 담은 수량). qty<baseQty면 나머지가 형제 줄로 복사된다 */
+  baseQty: number;
+  /** 같은 상품에서 갈라진 줄끼리 공유하는 그룹 id */
+  splitGroupId: string;
+  /** 배송정보 저장 완료 → 수량·배송선택 잠김 */
+  shipSaved: boolean;
   note: string;
   greeting: string;
   unitPrice: number;
   deliveryOnly: boolean;
   /** 배달 주문 섹션: 박스 vs 선물세트(개). 택배는 giftUnit로 둠 */
   lineSection: "box" | "giftUnit";
+}
+
+let lineIdCounter = 0;
+
+function nextLineId() {
+  lineIdCounter += 1;
+  return `line-${Date.now().toString(36)}-${lineIdCounter}`;
+}
+
+/** 줄별 배송방식 드롭다운 라벨 (스크린샷 ③④) */
+const LINE_SHIP_OPTIONS = [
+  { value: "parcel" as const, label: "택배/개별" },
+  { value: "delivery" as const, label: "상차/배달" },
+];
+
+function lineShipLabel(kind: OrderType | "") {
+  return LINE_SHIP_OPTIONS.find((option) => option.value === kind)?.label ?? "";
+}
+
+function oppositeKind(kind: OrderType): OrderType {
+  return kind === "delivery" ? "parcel" : "delivery";
 }
 
 function orderKindLabel(kind: OrderType) {
@@ -1453,6 +1488,7 @@ function ProductAddDialog({
   onClose,
   onAddItems,
   defaultOrderKind,
+  showOrderKind = true,
   openStockOnly = false,
   mode = "all",
   editList = false,
@@ -1463,6 +1499,8 @@ function ProductAddDialog({
   open: boolean;
   onClose: () => void;
   onAddItems: (items: ProductDialogItem[]) => void;
+  /** 개인앱은 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다. */
+  showOrderKind?: boolean;
   defaultOrderKind: OrderType;
   /** 개인회원 제품주문서: openStock=true 상품만 */
   openStockOnly?: boolean;
@@ -1705,18 +1743,22 @@ function ProductAddDialog({
         ? "선물세트 낱개 추가"
         : "상품 추가";
 
-  const subtitle = (
+  const scopeLabel =
+    mode === "box"
+      ? "박스 상품만 표시"
+      : mode === "giftUnit"
+        ? "선물세트 (개)만 표시"
+        : "(현재 배달/택배 탭 기준)";
+  const subtitle = showOrderKind ? (
     <>
       주문종류:{" "}
       <span className="font-semibold text-ink">
         {orderKindLabel(defaultOrderKind)}
       </span>{" "}
-      {mode === "box"
-        ? "· 박스 상품만 표시"
-        : mode === "giftUnit"
-          ? "· 선물세트 (개)만 표시"
-          : "(현재 배달/택배 탭 기준)"}
+      {mode === "all" ? scopeLabel : `· ${scopeLabel}`}
     </>
+  ) : (
+    scopeLabel
   );
 
   const filterControls = (
@@ -2923,6 +2965,373 @@ function GreetingViewModal({
   );
 }
 
+/**
+ * 줄별 배송정보 입력 시트 (스크린샷 ⑤⑥).
+ * 배송선택이 택배면 "택배정보입력", 상차/배달이면 "배달정보입력"으로 열린다.
+ * 하단 고정 버튼으로만 저장되며, 저장 전 값은 해당 줄에 반영되지 않는다.
+ */
+function LineShipSheet({
+  open,
+  kind,
+  productName,
+  qty,
+  initial,
+  minDateIso,
+  shipDateLocked,
+  onCancel,
+  onSave,
+}: {
+  open: boolean;
+  kind: OrderType;
+  productName: string;
+  qty: number;
+  initial: LineShipInfo | null;
+  minDateIso: string;
+  /** 달력에서 고른 납품일이 있으면 날짜 칸을 잠근다 */
+  shipDateLocked: boolean;
+  onCancel: () => void;
+  onSave: (info: LineShipInfo) => void;
+}) {
+  // 호출부가 lineId로 key를 주므로 줄이 바뀌면 이 컴포넌트가 새로 마운트된다.
+  const [draft, setDraft] = useState<LineShipInfo>(() =>
+    initial ? { ...initial, kind } : emptyLineShipInfo(kind),
+  );
+  const [error, setError] = useState("");
+
+  const isDelivery = kind === "delivery";
+  const clock = parseClockParts(draft.deliveryTime);
+  const hour = clock?.hour ?? "";
+  const minute = clock ? clock.minute : "";
+
+  const patch = (next: Partial<LineShipInfo>) => {
+    setDraft((current) => ({ ...current, ...next }));
+  };
+
+  /** "보내는 사람 주소와 같음" 중이면 받는 사람 주소도 함께 따라간다. */
+  const patchSenderAddress = (next: {
+    senderAddress?: string;
+    senderAddressDetail?: string;
+  }) => {
+    setDraft((current) => {
+      const merged = { ...current, ...next };
+      return current.sameAsSenderAddress
+        ? {
+            ...merged,
+            recipientAddress: merged.senderAddress,
+            recipientAddressDetail: merged.senderAddressDetail,
+          }
+        : merged;
+    });
+  };
+
+  const validate = () => {
+    if (!draft.companyName.trim()) {
+      return "납품업체명을 입력해 주세요.";
+    }
+    if (isDelivery) {
+      if (!draft.deliveryDate) {
+        return "배달일을 선택해 주세요.";
+      }
+      if (!isDateOnOrAfterToday(draft.deliveryDate)) {
+        return "배달일은 오늘 이후 날짜만 선택할 수 있습니다.";
+      }
+      if (!draft.deliveryAmPm || !isValidTwelveHourClock(draft.deliveryTime)) {
+        return "배달 시간을 선택해 주세요.";
+      }
+      if (!draft.recipientName.trim() || !draft.recipientPhone.trim()) {
+        return "받는 분 성함과 전화번호를 입력해 주세요.";
+      }
+      if (!draft.recipientAddress.trim()) {
+        return "받는 사람 주소를 입력해 주세요.";
+      }
+      return "";
+    }
+    if (!draft.parcelShipDate) {
+      return "택배발송일을 선택해 주세요.";
+    }
+    if (!isDateOnOrAfterToday(draft.parcelShipDate)) {
+      return "택배발송일은 오늘 이후 날짜만 선택할 수 있습니다.";
+    }
+    if (
+      !draft.senderName.trim() ||
+      !draft.senderPhone.trim() ||
+      !draft.senderAddress.trim()
+    ) {
+      return "보내는 사람 정보를 모두 입력해 주세요.";
+    }
+    if (draft.contactMode === "address" && !draft.recipientAddress.trim()) {
+      return "받는 사람 주소를 입력해 주세요.";
+    }
+    return "";
+  };
+
+  const handleSave = () => {
+    const message = validate();
+    if (message) {
+      setError(message);
+      return;
+    }
+    // 배달은 항상 주소로 수취 (이메일/팩스 선택 없음)
+    onSave({
+      ...draft,
+      kind,
+      contactMode: isDelivery ? "address" : draft.contactMode,
+    });
+  };
+
+  const labelClass = "mb-[5px] block text-[12px] font-bold text-[#64748B]";
+  const inputClass =
+    "mb-3 w-full rounded-lg border border-[#E2E8F0] bg-white px-[11px] py-[9px] text-[13px] text-[#1A202C] disabled:bg-[#EDF2F7] disabled:text-[#A0AEC0]";
+  const datePickerClass =
+    "mb-3 flex w-full [&>button]:h-auto [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg [&>button]:border-[#E2E8F0] [&>button]:px-[11px] [&>button]:py-[9px] [&>button]:text-[13px]";
+
+  return (
+    <BottomSheet
+      open={open}
+      title={isDelivery ? "배달정보입력" : "택배정보입력"}
+      subtitle={
+        <>
+          {productName} <span className="font-semibold text-ink">{qty}개</span>{" "}
+          · {lineShipLabel(kind)}
+        </>
+      }
+      onClose={onCancel}
+      footer={
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1 py-3 text-[14.5px] font-bold"
+            onClick={onCancel}
+          >
+            취소
+          </Button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="flex-1 rounded-[10px] bg-[#1A365D] py-3 text-[14.5px] font-bold text-white"
+          >
+            {isDelivery ? "배달정보저장" : "택배정보저장"}
+          </button>
+        </div>
+      }
+    >
+      <div className="px-5 pb-4">
+        {isDelivery ? (
+          <>
+            <label className={labelClass}>배달일 *</label>
+            <MdCalendarPicker
+              valueIso={draft.deliveryDate || null}
+              minIso={minDateIso}
+              placeholder="m/d"
+              title="배달일"
+              disabled={shipDateLocked}
+              className={datePickerClass}
+              onChangeIso={(iso) => {
+                if (iso < minDateIso) return;
+                patch({ deliveryDate: iso });
+              }}
+            />
+            <label className={labelClass}>배달 시간 *</label>
+            <div className="mb-3 flex gap-2">
+              <select
+                value={draft.deliveryAmPm}
+                onChange={(event) =>
+                  patch({
+                    deliveryAmPm:
+                      event.target.value === "오전" ||
+                      event.target.value === "오후"
+                        ? event.target.value
+                        : "",
+                  })
+                }
+                className={cn(inputClass, "mb-0 w-[88px] shrink-0")}
+              >
+                <option value="">선택</option>
+                <option value="오전">오전</option>
+                <option value="오후">오후</option>
+              </select>
+              <select
+                value={hour === "" ? "" : String(hour)}
+                onChange={(event) => {
+                  const nextHour = Number(event.target.value);
+                  const nextMinute = minute === "" ? 0 : Number(minute);
+                  patch({
+                    deliveryTime: event.target.value
+                      ? formatClock(nextHour, nextMinute)
+                      : "",
+                  });
+                }}
+                className={cn(inputClass, "mb-0 min-w-0 flex-1")}
+              >
+                <option value="">시</option>
+                {Array.from({ length: 12 }, (_, index) => index + 1).map(
+                  (value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ),
+                )}
+              </select>
+              <select
+                value={minute === "" ? "" : String(minute)}
+                onChange={(event) => {
+                  const nextMinute = Number(event.target.value);
+                  const nextHour = hour === "" ? 12 : Number(hour);
+                  patch({
+                    deliveryTime: event.target.value
+                      ? formatClock(nextHour, nextMinute)
+                      : "",
+                  });
+                }}
+                className={cn(inputClass, "mb-0 min-w-0 flex-1")}
+              >
+                <option value="">분</option>
+                {Array.from({ length: 60 }, (_, value) => (
+                  <option key={value} value={value}>
+                    {String(value).padStart(2, "0")}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className={labelClass}>납품업체명 *</label>
+            <input
+              type="text"
+              value={draft.companyName}
+              onChange={(event) => patch({ companyName: event.target.value })}
+              placeholder="납품업체명"
+              className={inputClass}
+            />
+            <label className={labelClass}>받는 분 성함 *</label>
+            <input
+              type="text"
+              value={draft.recipientName}
+              onChange={(event) => patch({ recipientName: event.target.value })}
+              className={inputClass}
+            />
+            <label className={labelClass}>받는 분 전화번호 *</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={13}
+              value={draft.recipientPhone}
+              onChange={(event) =>
+                patch({ recipientPhone: formatPhoneInput(event.target.value) })
+              }
+              className={inputClass}
+            />
+            <AddressField
+              id="line-delivery-recipient-address"
+              label="받는 사람 주소"
+              value={draft.recipientAddress}
+              onChange={(value) => patch({ recipientAddress: value })}
+              detailValue={draft.recipientAddressDetail}
+              onDetailChange={(value) =>
+                patch({ recipientAddressDetail: value })
+              }
+            />
+          </>
+        ) : (
+          <>
+            <label className={labelClass}>택배발송일 *</label>
+            <MdCalendarPicker
+              valueIso={draft.parcelShipDate || null}
+              minIso={minDateIso}
+              placeholder="m/d"
+              title="택배발송일"
+              disabled={shipDateLocked}
+              className={datePickerClass}
+              onChangeIso={(iso) => {
+                if (iso < minDateIso) return;
+                patch({ parcelShipDate: iso });
+              }}
+            />
+            <label className={labelClass}>납품업체명 *</label>
+            <input
+              type="text"
+              value={draft.companyName}
+              onChange={(event) => patch({ companyName: event.target.value })}
+              placeholder="납품업체명"
+              className={inputClass}
+            />
+            <label className={labelClass}>보내는 사람 (택배기표지) *</label>
+            <input
+              type="text"
+              value={draft.senderName}
+              onChange={(event) => patch({ senderName: event.target.value })}
+              className={inputClass}
+            />
+            <label className={labelClass}>
+              보내는 사람 전화번호 (택배기표지) *
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={13}
+              value={draft.senderPhone}
+              onChange={(event) =>
+                patch({ senderPhone: formatPhoneInput(event.target.value) })
+              }
+              className={inputClass}
+            />
+            <AddressField
+              id="line-sender-address"
+              label="보내는 사람 주소 (택배기표지)"
+              value={draft.senderAddress}
+              onChange={(value) => patchSenderAddress({ senderAddress: value })}
+              detailValue={draft.senderAddressDetail}
+              onDetailChange={(value) =>
+                patchSenderAddress({ senderAddressDetail: value })
+              }
+            />
+            <RecipientContactChoice
+              mode={draft.contactMode}
+              onModeChange={(mode) => patch({ contactMode: mode })}
+              radioName="line-parcel-recipient-contact"
+              addressId="line-parcel-recipient-address"
+              address={draft.recipientAddress}
+              onAddressChange={(value) => patch({ recipientAddress: value })}
+              addressDetail={draft.recipientAddressDetail}
+              onAddressDetailChange={(value) =>
+                patch({ recipientAddressDetail: value })
+              }
+              addressLocked={draft.sameAsSenderAddress}
+              addressLabelExtra={
+                <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
+                  <input
+                    type="checkbox"
+                    checked={draft.sameAsSenderAddress}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      patch(
+                        checked
+                          ? {
+                              sameAsSenderAddress: true,
+                              recipientAddress: draft.senderAddress,
+                              recipientAddressDetail: draft.senderAddressDetail,
+                            }
+                          : { sameAsSenderAddress: false },
+                      );
+                    }}
+                    className="size-4 accent-[#6B46C1]"
+                  />
+                  보내는 사람 주소와 같음
+                </label>
+              }
+            />
+          </>
+        )}
+
+        {error ? (
+          <p className="mt-1 rounded-lg border border-[#E53E3E]/30 bg-[#FDEEEE] px-3 py-2 text-[13px] text-[#E53E3E]">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </BottomSheet>
+  );
+}
+
 function ProductOrderPanel({
   onGreetingClick,
   blankCustomerFields = false,
@@ -2993,6 +3402,17 @@ function ProductOrderPanel({
   const [isCancelling, setIsCancelling] = useState(false);
   const [orderType, setOrderType] = useState<OrderType | null>(null);
   const [productItems, setProductItems] = useState<ProductLineItem[]>([]);
+  /**
+   * 개인앱: 줄마다 배송방식과 배송정보를 따로 고른다.
+   * 관리자(blankCustomerFields)는 기존 주문 단위 택배/배달 탭을 그대로 쓴다.
+   */
+  const perLineShipping = !blankCustomerFields;
+  /** lineId → 저장된 배송정보 */
+  const [lineShipInfo, setLineShipInfo] = useState<Record<string, LineShipInfo>>(
+    {},
+  );
+  /** 배송정보입력 시트를 연 대상 줄 */
+  const [shipSheetLineId, setShipSheetLineId] = useState<string | null>(null);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productDialogMode, setProductDialogMode] = useState<
     "all" | "box" | "giftUnit"
@@ -3367,26 +3787,35 @@ function ProductOrderPanel({
         setDeliveryCompanyName(parseDeliveryCompanyFromNotes(notes));
         setParcelCompanyName(parseParcelCompanyFromNotes(notes));
 
+        // 줄별 배송정보 복원에도 쓰므로 지역 변수로 받아 둔다 (state 는 아직 갱신 전)
+        let hydratedDeliveryDate = "";
+        let hydratedDeliveryAmPm: "" | "오전" | "오후" = "";
+        let hydratedDeliveryTime = "";
         const deliveryDt = parseDeliveryDateTimeFromNotes(notes).trim();
         if (deliveryDt) {
           const parts = deliveryDt.split(/\s+/).filter(Boolean);
-          setDeliveryDate(parts[0]?.slice(0, 10) ?? "");
+          hydratedDeliveryDate = parts[0]?.slice(0, 10) ?? "";
           if (parts[1] === "오전" || parts[1] === "오후") {
             const clock = normalizeDeliveryClock(parts[1], parts[2]?.slice(0, 5) ?? "");
-            setDeliveryAmPm(clock.ampm);
-            setDeliveryTime(clock.time);
+            hydratedDeliveryAmPm = clock.ampm;
+            hydratedDeliveryTime = clock.time;
           } else {
             const clock = fromTwentyFourHour(parts[1]?.slice(0, 5) ?? "")
               ?? normalizeDeliveryClock("", parts[1]?.slice(0, 5) ?? "");
-            setDeliveryAmPm(clock.ampm);
-            setDeliveryTime(clock.time);
+            hydratedDeliveryAmPm = clock.ampm;
+            hydratedDeliveryTime = clock.time;
           }
         } else if (order.shipment?.estimatedWindow && isDeliveryOrder) {
           const iso = order.shipment.estimatedWindow;
-          setDeliveryDate(iso.slice(0, 10));
+          hydratedDeliveryDate = iso.slice(0, 10);
           const clock = fromTwentyFourHour(iso.slice(11, 16));
-          setDeliveryAmPm(clock?.ampm ?? "");
-          setDeliveryTime(clock?.time ?? "");
+          hydratedDeliveryAmPm = clock?.ampm ?? "";
+          hydratedDeliveryTime = clock?.time ?? "";
+        }
+        if (hydratedDeliveryDate || hydratedDeliveryTime) {
+          setDeliveryDate(hydratedDeliveryDate);
+          setDeliveryAmPm(hydratedDeliveryAmPm);
+          setDeliveryTime(hydratedDeliveryTime);
         }
 
         const shipDate = parseShipDateFromNotes(notes);
@@ -3454,30 +3883,103 @@ function ProductOrderPanel({
         onHydratedGreetings?.(greetingMap);
 
         const orderKind: OrderType = isDeliveryOrder ? "delivery" : "parcel";
-        setProductItems(
-          (order.items ?? []).map((item) => {
-            const matched =
-              greetingMap[item.productName] ??
-              Object.values(greetingMap).find(
-                (draft) => draft.productName === item.productName,
-              );
+        const greetingFor = (productName: string) =>
+          greetingMap[productName] ??
+          Object.values(greetingMap).find(
+            (draft) => draft.productName === productName,
+          );
+
+        // 줄별 배송정보(배송상세 세그먼트)가 있으면 그대로 복원한다.
+        const savedLines = perLineShipping
+          ? parseLineShipmentsFromNotes(notes)
+          : null;
+
+        if (savedLines) {
+          const restoredInfo: Record<string, LineShipInfo> = {};
+          // 같은 품명이 택배/상차로 갈라진 경우 같은 splitGroupId로 묶어준다.
+          const groupByProduct = new Map<string, string>();
+          const rows: ProductLineItem[] = savedLines.map((line) => {
+            const lineId = nextLineId();
+            restoredInfo[lineId] = line.ship;
+            const lineSection =
+              line.lineSection ?? inferLineSection(line.product);
+            let groupId = groupByProduct.get(line.product);
+            if (!groupId) {
+              groupId = lineId;
+              groupByProduct.set(line.product, groupId);
+            }
+            return {
+              lineId,
+              splitGroupId: groupId,
+              product: line.product,
+              orderKind: line.ship.kind,
+              qty: line.qty || 1,
+              baseQty: line.baseQty || line.qty || 1,
+              shipSaved: true,
+              note: line.note ?? "",
+              greeting: greetingFor(line.product)?.id ? "인사장보기" : "",
+              unitPrice: line.unitPrice || 0,
+              // 구버전 payload 는 deliveryOnly 가 없으니 저장된 배송방식으로 판단
+              deliveryOnly: line.deliveryOnly ?? (line.ship.kind === "delivery"),
+              lineSection,
+            };
+          });
+          setLineShipInfo(restoredInfo);
+          setProductItems(rows);
+        } else {
+          // 구주문: 주문 단위 배송정보 1벌을 모든 줄에 복사해 둔다.
+          const legacyInfo: LineShipInfo | null = perLineShipping
+            ? {
+                ...emptyLineShipInfo(orderKind),
+                companyName: isDeliveryOrder
+                  ? parseDeliveryCompanyFromNotes(notes)
+                  : parseParcelCompanyFromNotes(notes),
+                deliveryDate: isDeliveryOrder ? hydratedDeliveryDate : "",
+                deliveryAmPm: isDeliveryOrder ? hydratedDeliveryAmPm : "",
+                deliveryTime: isDeliveryOrder ? hydratedDeliveryTime : "",
+                recipientName: recipient.name,
+                recipientPhone: formatPhoneInput(recipient.phone),
+                recipientAddress: recipientSplit.address,
+                recipientAddressDetail: recipientSplit.detail,
+                parcelShipDate:
+                  !isDeliveryOrder && shipDate ? shipDate.slice(0, 10) : "",
+                senderName: sender.name,
+                senderPhone: formatPhoneInput(sender.phone),
+                senderAddress: senderSplit.address,
+                senderAddressDetail: senderSplit.detail,
+                sameAsSenderAddress: false,
+                contactMode: parcelMode,
+              }
+            : null;
+          const restoredInfo: Record<string, LineShipInfo> = {};
+          const rows: ProductLineItem[] = (order.items ?? []).map((item) => {
+            const lineId = nextLineId();
+            if (legacyInfo) {
+              restoredInfo[lineId] = { ...legacyInfo };
+            }
             const lineSection = inferLineSection(item.productName);
             return {
+              lineId,
+              splitGroupId: lineId,
               product: item.productName,
               orderKind,
               qty: item.quantity || 1,
+              baseQty: item.quantity || 1,
+              shipSaved: Boolean(legacyInfo),
               note: parseItemNoteFromNotes(
                 notes,
                 item.productName,
                 item.quantity,
               ),
-              greeting: matched?.id ? "인사장보기" : "",
+              greeting: greetingFor(item.productName)?.id ? "인사장보기" : "",
               unitPrice: item.price || 0,
               deliveryOnly: lineSection === "box",
               lineSection,
             };
-          }),
-        );
+          });
+          setLineShipInfo(restoredInfo);
+          setProductItems(rows);
+        }
       } catch (err) {
         if (!cancelled) {
           setHydrateError(
@@ -3515,11 +4017,14 @@ function ProductOrderPanel({
   }, [churchQuery, churchId, churches]);
 
   const addProductItems = (items: ProductDialogItem[]) => {
-    if (!orderType) {
+    if (!perLineShipping && !orderType) {
       return;
     }
 
-    const selectedOrderType = orderType;
+    // 개인앱은 전역 주문종류가 없으므로 줄별 배송선택 전까지 ""로 둔다.
+    const selectedOrderType: OrderType | "" = perLineShipping
+      ? ""
+      : (orderType as OrderType);
     const allowedItems =
       selectedOrderType === "parcel"
         ? items.filter((item) => !item.deliveryOnly)
@@ -3533,24 +4038,34 @@ function ProductOrderPanel({
       const next = [...current];
 
       for (const item of allowedItems) {
+        // 이미 배송선택/배송정보가 정해진 줄에는 합치지 않는다 (분할 정보 보호).
         const existingIndex = next.findIndex(
-          (row) => row.product === item.product,
+          (row) =>
+            row.product === item.product &&
+            (!perLineShipping || (!row.shipSaved && row.orderKind === "")),
         );
 
         if (existingIndex >= 0) {
           const existing = next[existingIndex];
+          const mergedQty = existing.qty + item.qty;
           next[existingIndex] = {
             ...existing,
-            qty: existing.qty + item.qty,
+            qty: mergedQty,
+            baseQty: mergedQty,
             unitPrice: item.unitPrice,
             orderKind: selectedOrderType,
             deliveryOnly: existing.deliveryOnly || item.deliveryOnly,
             lineSection: item.lineSection,
           };
         } else {
+          const lineId = nextLineId();
           next.push({
+            lineId,
+            splitGroupId: lineId,
             product: item.product,
             qty: item.qty,
+            baseQty: item.qty,
+            shipSaved: false,
             note: item.note,
             unitPrice: item.unitPrice,
             orderKind: selectedOrderType,
@@ -3565,6 +4080,67 @@ function ProductOrderPanel({
 
       return next;
     });
+  };
+
+  /**
+   * 배송선택 드롭다운 (스크린샷 ③→④).
+   * 수량을 baseQty보다 줄여 놓은 상태에서 방식을 고르면, 남은 수량이
+   * 반대 방식(택배↔상차)으로 자동 복사되어 바로 아래 줄로 들어간다.
+   */
+  const handleLineKindChange = (lineId: string, kind: OrderType | "") => {
+    const index = productItems.findIndex((row) => row.lineId === lineId);
+    if (index < 0) {
+      return;
+    }
+    const target = productItems[index];
+    const next = productItems.map((row) =>
+      row.lineId === lineId ? { ...row, orderKind: kind } : row,
+    );
+
+    const siblingIndex = next.findIndex(
+      (row) => row.lineId !== lineId && row.splitGroupId === target.splitGroupId,
+    );
+    const remainder = target.baseQty - target.qty;
+    // 선물세트 박스는 배달 전용이라 반대 방식(택배)으로 복사할 수 없다.
+    const canSplit = Boolean(kind) && remainder > 0 && !target.deliveryOnly;
+
+    if (!canSplit) {
+      if (siblingIndex >= 0 && !next[siblingIndex].shipSaved) {
+        const removedId = next[siblingIndex].lineId;
+        setProductItems(next.filter((_, rowIndex) => rowIndex !== siblingIndex));
+        setLineShipInfo((info) => {
+          if (!info[removedId]) return info;
+          const rest = { ...info };
+          delete rest[removedId];
+          return rest;
+        });
+        return;
+      }
+      setProductItems(next);
+      return;
+    }
+
+    const opposite = oppositeKind(kind as OrderType);
+    if (siblingIndex >= 0) {
+      next[siblingIndex] = {
+        ...next[siblingIndex],
+        qty: remainder,
+        orderKind: next[siblingIndex].shipSaved
+          ? next[siblingIndex].orderKind
+          : opposite,
+      };
+      setProductItems(next);
+      return;
+    }
+
+    next.splice(index + 1, 0, {
+      ...target,
+      lineId: nextLineId(),
+      orderKind: opposite,
+      qty: remainder,
+      shipSaved: false,
+    });
+    setProductItems(next);
   };
 
   /**
@@ -3590,9 +4166,14 @@ function ProductOrderPanel({
       );
       const nextBox: ProductLineItem[] = items.map((item) => {
         const existing = previousBox.get(item.product);
+        const lineId = existing?.lineId ?? nextLineId();
         return {
+          lineId,
+          splitGroupId: existing?.splitGroupId ?? lineId,
           product: item.product,
           qty: item.qty,
+          baseQty: item.qty,
+          shipSaved: false,
           note: existing?.note ?? item.note,
           unitPrice: item.unitPrice,
           orderKind: selectedOrderType,
@@ -3669,11 +4250,47 @@ function ProductOrderPanel({
   );
 
   const updateProductQty = (rowIndex: number, qty: number) => {
-    setProductItems((current) =>
-      current.map((item, index) =>
-        index === rowIndex ? { ...item, qty: Math.max(1, qty) } : item,
-      ),
-    );
+    setProductItems((current) => {
+      const target = current[rowIndex];
+      if (!target) {
+        return current;
+      }
+
+      if (!perLineShipping) {
+        return current.map((item, index) =>
+          index === rowIndex ? { ...item, qty: Math.max(1, qty) } : item,
+        );
+      }
+
+      const sibling = current.find(
+        (row) =>
+          row.lineId !== target.lineId &&
+          row.splitGroupId === target.splitGroupId,
+      );
+
+      if (!sibling) {
+        // 아직 분할 전: 수량을 줄이면 그만큼이 배송선택 시 반대 방식으로 복사된다.
+        const nextQty = Math.min(Math.max(1, qty), target.baseQty);
+        return current.map((item, index) =>
+          index === rowIndex ? { ...item, qty: nextQty } : item,
+        );
+      }
+
+      // 분할된 그룹은 합이 baseQty로 고정. 형제 줄이 잠겼으면 수량 변경 불가.
+      if (sibling.shipSaved) {
+        return current;
+      }
+      const nextQty = Math.min(Math.max(1, qty), target.baseQty - 1);
+      return current.map((item) => {
+        if (item.lineId === target.lineId) {
+          return { ...item, qty: nextQty };
+        }
+        if (item.lineId === sibling.lineId) {
+          return { ...item, qty: target.baseQty - nextQty };
+        }
+        return item;
+      });
+    });
   };
 
   const joinAddress = (base: string, detail: string) =>
@@ -3699,7 +4316,42 @@ function ProductOrderPanel({
   };
 
   const removeProductItem = (rowIndex: number) => {
-    setProductItems((current) => current.filter((_, index) => index !== rowIndex));
+    const removed = productItems[rowIndex];
+    setProductItems((current) => {
+      const target = current[rowIndex];
+      if (!target) {
+        return current;
+      }
+      const rest = current.filter((_, index) => index !== rowIndex);
+      if (!perLineShipping) {
+        return rest;
+      }
+      // 분할 형제가 남으면 원래 수량 기준을 남은 줄로 되돌린다.
+      return rest.map((row) =>
+        row.splitGroupId === target.splitGroupId
+          ? { ...row, qty: row.qty, baseQty: row.qty }
+          : row,
+      );
+    });
+    if (removed) {
+      setLineShipInfo((info) => {
+        if (!info[removed.lineId]) return info;
+        const rest = { ...info };
+        delete rest[removed.lineId];
+        return rest;
+      });
+    }
+  };
+
+  /** 배송정보입력 시트 저장 */
+  const saveLineShipInfo = (lineId: string, info: LineShipInfo) => {
+    setLineShipInfo((current) => ({ ...current, [lineId]: info }));
+    setProductItems((current) =>
+      current.map((row) =>
+        row.lineId === lineId ? { ...row, shipSaved: true } : row,
+      ),
+    );
+    setShipSheetLineId(null);
   };
 
   const openGreetingForm = (targetProduct: string) => {
@@ -3712,28 +4364,38 @@ function ProductOrderPanel({
       return;
     }
 
-    const targetItem = productItems.find(
+    const matchingLines = productItems.filter(
       (item) => item.product === targetProduct,
     );
-    if (!targetItem) {
+    if (matchingLines.length === 0) {
       setAlertDialog({
         open: true,
         message: "인사장 작성을 위해선 상품이 필요합니다. 상품을 먼저 추가하세요!",
       });
       return;
     }
+    // 택배/상차로 갈라진 줄들을 합친 수량으로 인사장을 연다.
+    const targetQty = matchingLines.reduce((sum, item) => sum + item.qty, 0);
 
     setFormError("");
     onGreetingClick({
-      productNames: [targetItem.product],
-      productSummary: `${targetItem.product} ${targetItem.qty}개`,
-      productLines: [{ product: targetItem.product, qty: targetItem.qty }],
-      targetProduct: targetItem.product,
+      productNames: [targetProduct],
+      productSummary: `${targetProduct} ${targetQty}개`,
+      productLines: [{ product: targetProduct, qty: targetQty }],
+      targetProduct,
       ordererName: displayOrdererName || ordererName.trim(),
       phone: ordererPhone.trim(),
       churchName: churchQuery.trim(),
+      // 개인앱은 보내는 사람이 줄별 택배정보에 있으므로 거기서 먼저 찾는다.
       senderName:
-        (isDelivery ? displayOrdererName || ordererName.trim() : senderName.trim()) ||
+        (perLineShipping
+          ? (matchingLines
+              .map((line) => lineShipInfo[line.lineId])
+              .find((info) => info?.kind === "parcel" && info.senderName.trim())
+              ?.senderName.trim() ?? "")
+          : isDelivery
+            ? displayOrdererName || ordererName.trim()
+            : senderName.trim()) ||
         displayOrdererName ||
         ordererName.trim(),
     });
@@ -3743,7 +4405,7 @@ function ProductOrderPanel({
     if (!branchStore) {
       return "주문 작업 지역(남부/중부/서부)을 선택해 주세요.";
     }
-    if (!orderType) {
+    if (!perLineShipping && !orderType) {
       return "배달 또는 택배를 선택해 주세요.";
     }
     if (!ordererName.trim() || !ordererPhone.trim() || !orderDate || !churchId) {
@@ -3751,6 +4413,23 @@ function ProductOrderPanel({
     }
     if (!isDateOnOrAfterToday(orderDate)) {
       return "주문일자는 오늘 이후 날짜만 선택할 수 있습니다.";
+    }
+
+    if (perLineShipping) {
+      if (productItems.length === 0) {
+        return "상품을 1개 이상 추가해 주세요.";
+      }
+      const noKind = productItems.find((item) => !item.orderKind);
+      if (noKind) {
+        return `'${noKind.product}'의 배송선택(택배/상차)을 골라 주세요.`;
+      }
+      const noShip = productItems.find(
+        (item) => !item.shipSaved || !lineShipInfo[item.lineId],
+      );
+      if (noShip) {
+        return `'${noShip.product}'의 배송정보를 입력해 주세요.`;
+      }
+      return "";
     }
 
     const hasDeliveryItems = isDelivery;
@@ -3822,11 +4501,16 @@ function ProductOrderPanel({
       onUnsavedGreetingResolved?.();
     }
 
-    const giftUnitItems = productItems.filter(
-      (item) => item.lineSection !== "box",
+    // 같은 품명이 택배/상차로 갈라져 여러 줄이 될 수 있어 품명 단위로 센다.
+    const giftUnitItems = Array.from(
+      new Set(
+        productItems
+          .filter((item) => item.lineSection !== "box")
+          .map((item) => item.product),
+      ),
     );
-    const productsWithGreeting = giftUnitItems.filter((item) =>
-      Boolean(savedGreetingsByProduct[item.product]),
+    const productsWithGreeting = giftUnitItems.filter((product) =>
+      Boolean(savedGreetingsByProduct[product]),
     );
     if (
       productsWithGreeting.length > 0 &&
@@ -3852,10 +4536,11 @@ function ProductOrderPanel({
       return;
     }
 
-    if (!orderType) {
+    if (!perLineShipping && !orderType) {
       return;
     }
-    const selectedOrderType = orderType;
+    // 개인앱은 줄마다 배송방식이 달라서 주문 단위 기본값으로만 쓴다.
+    const selectedOrderType: OrderType = orderType ?? "delivery";
 
     setIsSubmitting(true);
 
@@ -3922,8 +4607,95 @@ function ProductOrderPanel({
       const orderNumber =
         editOrderNumber ??
         `ORD-${year}-${String(Date.now()).slice(-6)}`;
-      const hasDeliveryItems = isDelivery;
-      const hasParcelItems = !isDelivery;
+      /*
+       * 개인앱은 줄마다 배송정보를 따로 받는다. Shipment 테이블이 주문당 1행이라
+       * 기존 세그먼트에는 배송방식별 "대표 1벌"(첫 택배 줄 / 첫 배달 줄)을 실어
+       * 관리자·출력·공장·우체국 화면이 지금과 똑같이 동작하게 하고,
+       * 줄 단위 원본은 아래 `배송상세` 세그먼트에 따로 싣는다.
+       */
+      const lineShipments: LineShipment[] = perLineShipping
+        ? productItems.flatMap((item) => {
+            const ship = lineShipInfo[item.lineId];
+            return ship
+              ? [
+                  {
+                    product: item.product,
+                    qty: item.qty,
+                    baseQty: item.baseQty,
+                    note: item.note,
+                    unitPrice: item.unitPrice || 0,
+                    lineSection: item.lineSection,
+                    deliveryOnly: item.deliveryOnly,
+                    ship,
+                  },
+                ]
+              : [];
+          })
+        : [];
+      const firstDeliveryShip =
+        lineShipments.find((line) => line.ship.kind === "delivery")?.ship ??
+        null;
+      const firstParcelShip =
+        lineShipments.find((line) => line.ship.kind === "parcel")?.ship ?? null;
+
+      const hasDeliveryItems = perLineShipping
+        ? Boolean(firstDeliveryShip)
+        : isDelivery;
+      const hasParcelItems = perLineShipping
+        ? Boolean(firstParcelShip)
+        : !isDelivery;
+
+      // 대표 배송정보 (개인앱이 아니면 기존 주문 단위 상태를 그대로 쓴다)
+      const repDeliveryCompany = (
+        firstDeliveryShip?.companyName ?? deliveryCompanyName
+      ).trim();
+      const repParcelCompany = (
+        firstParcelShip?.companyName ?? parcelCompanyName
+      ).trim();
+      const repDeliveryDate = firstDeliveryShip?.deliveryDate ?? deliveryDate;
+      const repDeliveryAmPm = firstDeliveryShip?.deliveryAmPm ?? deliveryAmPm;
+      const repDeliveryTime = firstDeliveryShip?.deliveryTime ?? deliveryTime;
+      const repParcelShipDate =
+        firstParcelShip?.parcelShipDate ?? parcelShipDate;
+      const repDeliveryRecipientName = (
+        firstDeliveryShip?.recipientName ?? recipientName
+      ).trim();
+      const repDeliveryRecipientPhone = (
+        firstDeliveryShip?.recipientPhone ?? recipientPhone
+      ).trim();
+      const repDeliveryRecipientAddress = firstDeliveryShip
+        ? joinAddress(
+            firstDeliveryShip.recipientAddress,
+            firstDeliveryShip.recipientAddressDetail,
+          )
+        : fullRecipientAddress;
+      const repSenderName = (firstParcelShip?.senderName ?? senderName).trim();
+      const repSenderPhone = (
+        firstParcelShip?.senderPhone ?? senderPhone
+      ).trim();
+      const repSenderAddress = firstParcelShip
+        ? joinAddress(
+            firstParcelShip.senderAddress,
+            firstParcelShip.senderAddressDetail,
+          )
+        : fullSenderAddress;
+      const repSenderAddressDetail = (
+        firstParcelShip?.senderAddressDetail ?? senderAddressDetail
+      ).trim();
+      // 택배 수취연락. 택배 줄이 없으면 배달 받는분 주소로 대체한다.
+      const contactSource = perLineShipping
+        ? (firstParcelShip ?? firstDeliveryShip)
+        : null;
+      const repContactAddress = perLineShipping
+        ? joinAddress(
+            contactSource?.recipientAddress ?? "",
+            contactSource?.recipientAddressDetail ?? "",
+          )
+        : fullRecipientAddress;
+      const repContactAddressDetail = perLineShipping
+        ? (contactSource?.recipientAddressDetail ?? "").trim()
+        : recipientAddressDetail.trim();
+
       const attachedGreetingNotes =
         greetingCountForNotes > 0
           ? Object.values(greetingsForSubmit)
@@ -3932,38 +4704,40 @@ function ProductOrderPanel({
               .join(" / ")
           : null;
       // 배달은 항상 주소로 수취. 택배만 주소/이메일/팩스 선택
-      const contactMode: ParcelRecipientContactMode = hasDeliveryItems
-        ? "address"
-        : parcelContactMode;
+      const contactMode: ParcelRecipientContactMode = perLineShipping
+        ? (firstParcelShip?.contactMode ?? "address")
+        : hasDeliveryItems
+          ? "address"
+          : parcelContactMode;
       const notes = [
         `주문자:${displayOrdererName || ordererName.trim()}`,
         `연락처:${ordererPhone.trim()}`,
         `주문일자:${orderDate}`,
         `중앙:${churchQuery.trim()}`,
-        hasDeliveryItems ? `배달업체명:${deliveryCompanyName.trim()}` : null,
-        hasParcelItems ? `택배업체명:${parcelCompanyName.trim()}` : null,
+        hasDeliveryItems ? `배달업체명:${repDeliveryCompany}` : null,
+        hasParcelItems ? `택배업체명:${repParcelCompany}` : null,
         hasDeliveryItems
-          ? `배달일:${deliveryDate} ${deliveryAmPm} ${deliveryTime}`
+          ? `배달일:${repDeliveryDate} ${repDeliveryAmPm} ${repDeliveryTime}`
           : null,
         hasDeliveryItems
-          ? `받는분:${recipientName.trim()} / ${recipientPhone.trim()} / ${
-              fullRecipientAddress || "-"
+          ? `받는분:${repDeliveryRecipientName} / ${repDeliveryRecipientPhone} / ${
+              repDeliveryRecipientAddress || "-"
             }`
           : null,
-        hasParcelItems ? `택배발송일:${parcelShipDate}` : null,
+        hasParcelItems ? `택배발송일:${repParcelShipDate}` : null,
         hasParcelItems
-          ? `보내는사람:${senderName.trim()} / ${senderPhone.trim()} / ${fullSenderAddress}`
+          ? `보내는사람:${repSenderName} / ${repSenderPhone} / ${repSenderAddress}`
           : null,
-        hasParcelItems && senderAddressDetail.trim()
-          ? `보내는분상세주소:${senderAddressDetail.trim()}`
+        hasParcelItems && repSenderAddressDetail
+          ? `보내는분상세주소:${repSenderAddressDetail}`
           : null,
         // 이메일/팩스는 선택 여부만 기록 (값 입력 없음)
         `수취연락:${PARCEL_CONTACT_MODE_LABEL[contactMode]}`,
-        contactMode === "address" && fullRecipientAddress
-          ? `받는분주소:${fullRecipientAddress}`
+        contactMode === "address" && repContactAddress
+          ? `받는분주소:${repContactAddress}`
           : null,
-        contactMode === "address" && recipientAddressDetail.trim()
-          ? `받는분상세주소:${recipientAddressDetail.trim()}`
+        contactMode === "address" && repContactAddressDetail
+          ? `받는분상세주소:${repContactAddressDetail}`
           : null,
         `주문작업지역:${selectedBranch}`,
         `지부매장:${selectedBranch}`,
@@ -3971,16 +4745,18 @@ function ProductOrderPanel({
         attachedGreetingNotes,
         ...productItems.map(
           (item) =>
-            `[${orderKindLabel(selectedOrderType)}] ${item.product} ${item.qty}개${item.note ? `(${item.note})` : ""}`,
+            `[${orderKindLabel(item.orderKind || selectedOrderType)}] ${item.product} ${item.qty}개${item.note ? `(${item.note})` : ""}`,
         ),
+        // 줄별 배송정보 원본 (개인앱 주문서 수정 시 그대로 복원)
+        encodeLineShipments(lineShipments),
       ]
         .filter(Boolean)
         .join(" / ");
 
       const primaryKind = hasDeliveryItems ? "delivery" : "parcel";
       const deliveryWindowTime =
-        hasDeliveryItems && deliveryAmPm
-          ? toTwentyFourHour(deliveryAmPm, deliveryTime)
+        hasDeliveryItems && repDeliveryAmPm
+          ? toTwentyFourHour(repDeliveryAmPm, repDeliveryTime)
           : null;
       if (hasDeliveryItems && !deliveryWindowTime) {
         setFormError("배달 시간은 1~12시로 입력해 주세요.");
@@ -4003,15 +4779,15 @@ function ProductOrderPanel({
         shipment: {
           fulfillmentType: "PARCEL" as const,
           carrier:
-            primaryKind === "delivery"
-              ? deliveryCompanyName.trim()
-              : parcelCompanyName.trim(),
+            primaryKind === "delivery" ? repDeliveryCompany : repParcelCompany,
           deliveryAddress:
-            primaryKind === "delivery" ? fullRecipientAddress : fullSenderAddress,
+            primaryKind === "delivery"
+              ? repDeliveryRecipientAddress
+              : repSenderAddress,
           estimatedWindow:
             primaryKind === "delivery"
-              ? `${deliveryDate}T${deliveryWindowTime}:00.000Z`
-              : `${parcelShipDate}T09:00:00.000Z`,
+              ? `${repDeliveryDate}T${deliveryWindowTime}:00.000Z`
+              : `${repParcelShipDate}T09:00:00.000Z`,
         },
       };
 
@@ -4166,20 +4942,26 @@ function ProductOrderPanel({
             return row.qty;
           }
 
+          const locked = perLineShipping && row.shipSaved;
           return (
             <input
               type="number"
               min={1}
               required
+              readOnly={locked}
               aria-label={`${row.product} 수량`}
               value={row.qty}
               onChange={(event) => {
+                if (locked) return;
                 const nextQty = Number(event.target.value);
                 if (!Number.isNaN(nextQty)) {
                   updateProductQty(rowIndex, nextQty);
                 }
               }}
-              className="mx-auto block h-8 w-16 rounded border border-[#cbd5e1] bg-white px-1 text-center text-sm text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className={cn(
+                "mx-auto block h-8 w-16 rounded border border-[#cbd5e1] px-1 text-center text-sm text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+                locked ? "bg-[#EDF2F7]" : "bg-white",
+              )}
             />
           );
         },
@@ -4190,6 +4972,60 @@ function ProductOrderPanel({
         className: "w-[96px]",
         render: (row) => formatPrice(row.unitPrice || 0),
       },
+      ...(perLineShipping
+        ? [
+            {
+              key: "lineShip",
+              header: "배송선택",
+              className: "w-[180px] px-1",
+              render: (row: ProductLineItem) => {
+                const kindOptions = row.deliveryOnly
+                  ? LINE_SHIP_OPTIONS.filter(
+                      (option) => option.value === "delivery",
+                    )
+                  : LINE_SHIP_OPTIONS;
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      aria-label={`${row.product} 배송선택`}
+                      value={row.orderKind}
+                      disabled={row.shipSaved}
+                      onChange={(event) =>
+                        handleLineKindChange(
+                          row.lineId,
+                          event.target.value as OrderType | "",
+                        )
+                      }
+                      className="h-8 min-w-0 flex-1 rounded border border-[#cbd5e1] bg-white px-1 text-sm text-ink disabled:bg-[#EDF2F7]"
+                    >
+                      <option value="">선택</option>
+                      {kindOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!row.orderKind}
+                      onClick={() => setShipSheetLineId(row.lineId)}
+                      className={cn(
+                        "shrink-0 rounded border px-1.5 py-1 text-[11px] font-bold",
+                        !row.orderKind
+                          ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
+                          : row.shipSaved
+                            ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
+                            : "border-[#1A365D] bg-white text-[#1A365D]",
+                      )}
+                    >
+                      {row.shipSaved ? "배송정보수정" : "배송정보입력"}
+                    </button>
+                  </div>
+                );
+              },
+            },
+          ]
+        : []),
       {
         key: "note",
         header: "요청사항",
@@ -4297,18 +5133,48 @@ function ProductOrderPanel({
   const boxProductItems = productItems.filter(
     (item) => item.lineSection === "box",
   );
-  const boxAddLabel = isEditMode ? "상품목록수정" : "+ 박스상품 추가";
-  const boxQuantitiesByProduct = Object.fromEntries(
-    boxProductItems.map((item) => [item.product, item.qty]),
-  ) as Record<string, number>;
+  // 개인앱은 줄이 택배/상차로 갈라질 수 있어 품명 키 기반 '상품목록수정'을 쓰지 않는다.
+  const boxAddLabel =
+    isEditMode && !perLineShipping ? "상품목록수정" : "+ 박스상품 추가";
+  const boxQuantitiesByProduct = boxProductItems.reduce<Record<string, number>>(
+    (acc, item) => {
+      acc[item.product] = (acc[item.product] ?? 0) + item.qty;
+      return acc;
+    },
+    {},
+  );
   const giftUnitProductItems = productItems.filter(
     (item) => item.lineSection !== "box",
   );
+  // 택배/상차로 갈라진 줄은 한 상품이므로 '총 N건'은 품명 수로 센다.
+  const productLineCount = new Set(productItems.map((item) => item.product))
+    .size;
+  const shipSheetLine =
+    productItems.find((item) => item.lineId === shipSheetLineId) ?? null;
+  /** 저장값이 없으면 달력에서 고른 납품일을 미리 채워 준다. */
+  const shipSheetInitial =
+    shipSheetLine && shipSheetLine.orderKind
+      ? (lineShipInfo[shipSheetLine.lineId] ??
+        (presetShipDate
+          ? {
+              ...emptyLineShipInfo(shipSheetLine.orderKind),
+              deliveryDate:
+                shipSheetLine.orderKind === "delivery" ? presetShipDate : "",
+              parcelShipDate:
+                shipSheetLine.orderKind === "parcel" ? presetShipDate : "",
+            }
+          : null))
+      : null;
 
   const editorName = getAuthUser()?.name?.trim() || getAuthUser()?.username || "—";
-  const greetingTargetProducts = (
-    isDelivery ? giftUnitProductItems : productItems
-  ).map((item) => item.product);
+  const greetingTargetProducts = Array.from(
+    new Set(
+      (isDelivery || perLineShipping
+        ? giftUnitProductItems
+        : productItems
+      ).map((item) => item.product),
+    ),
+  );
   const greetingCountOnProducts = greetingTargetProducts.filter(
     (name) => savedGreetingsByProduct[name],
   ).length;
@@ -4378,6 +5244,116 @@ function ProductOrderPanel({
     setChurchQuery(member.churchName);
     setChurchId(member.churchId);
     setSelectedMemberId(member.id);
+  };
+
+  /**
+   * 상품 카드의 수량 / 단가 / 배송선택 줄 (스크린샷 ③④).
+   * 개인앱만 배송선택 드롭다운과 배송정보입력 버튼을 함께 보여준다.
+   */
+  const renderLineControls = (row: ProductLineItem, rowIndex: number) => {
+    const locked = perLineShipping && row.shipSaved;
+    const kindOptions = row.deliveryOnly
+      ? LINE_SHIP_OPTIONS.filter((option) => option.value === "delivery")
+      : LINE_SHIP_OPTIONS;
+
+    return (
+      <div
+        className={cn(
+          "mt-3 grid gap-2.5",
+          perLineShipping
+            ? "grid-cols-[minmax(56px,1fr)_minmax(0,1fr)] sm:grid-cols-[minmax(56px,0.8fr)_minmax(0,1fr)_minmax(0,1.4fr)]"
+            : "grid-cols-2",
+        )}
+      >
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+            수량
+          </span>
+          <input
+            type="number"
+            min={1}
+            required
+            readOnly={locked}
+            aria-label={`${row.product} 수량`}
+            value={row.qty}
+            onChange={(event) => {
+              if (locked) return;
+              const nextQty = Number(event.target.value);
+              if (!Number.isNaN(nextQty)) {
+                updateProductQty(rowIndex, nextQty);
+              }
+            }}
+            className={cn(
+              "h-9 w-full rounded-md border border-[#E2E8F0] px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+              locked ? "bg-[#EDF2F7]" : "bg-white",
+            )}
+          />
+        </label>
+        <div>
+          <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+            단가
+          </span>
+          <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
+            {formatPrice(row.unitPrice || 0)}
+          </p>
+        </div>
+        {perLineShipping ? (
+          <div className="col-span-2 sm:col-span-1">
+            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+              배송선택
+            </span>
+            <div className="flex items-stretch gap-1.5">
+              <select
+                aria-label={`${row.product} 배송선택`}
+                value={row.orderKind}
+                disabled={locked}
+                onChange={(event) =>
+                  handleLineKindChange(
+                    row.lineId,
+                    event.target.value as OrderType | "",
+                  )
+                }
+                className="h-9 min-w-0 flex-1 rounded-md border border-[#E2E8F0] bg-white px-1.5 text-[12.5px] text-[#1A202C] disabled:bg-[#EDF2F7] disabled:text-[#64748B]"
+              >
+                <option value="">선택</option>
+                {kindOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!row.orderKind}
+                onClick={() => setShipSheetLineId(row.lineId)}
+                className={cn(
+                  "shrink-0 rounded-md border px-2 py-1 text-[11px] font-bold leading-tight",
+                  !row.orderKind
+                    ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
+                    : row.shipSaved
+                      ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
+                      : "border-[#1A365D] bg-white text-[#1A365D]",
+                )}
+              >
+                {row.shipSaved ? (
+                  <>
+                    배송정보
+                    <br />
+                    수정
+                  </>
+                ) : (
+                  <>
+                    배송정보
+                    <br />
+                    입력
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
   };
 
   const omInputClass =
@@ -4624,6 +5600,12 @@ function ProductOrderPanel({
         ) : null}
       </div>
 
+      {/*
+        개인앱은 주문 단위 택배/배달 선택 대신 상품 줄마다 배송선택을 고른다.
+        (관리자 대리작성은 기존 탭 + 주문 단위 배송정보 유지)
+      */}
+      {perLineShipping ? null : (
+        <>
       {/* Delivery / parcel */}
       <div className="mb-4">
         <OrderTypePicker
@@ -4841,11 +5823,13 @@ function ProductOrderPanel({
           />
         </div>
       )}
+        </>
+      )}
 
-      {/* Products — only after 배달/택배 selected (avoids showing parcel UI before choice) */}
-      {orderType ? (
+      {/* Products — 개인앱은 항상, 관리자는 배달/택배 선택 후 표시 */}
+      {perLineShipping || orderType ? (
       <div className="mb-4 space-y-3">
-        {isDelivery ? (
+        {isDelivery || perLineShipping ? (
           <>
             {/* ① 박스상품 */}
             <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
@@ -4857,7 +5841,8 @@ function ProductOrderPanel({
                   type="button"
                   onClick={() => {
                     setProductDialogMode("box");
-                    setIsProductListEdit(isEditMode);
+                    // 개인앱은 줄이 갈라질 수 있어 품명 키 기반 목록교체를 쓰지 않는다.
+                    setIsProductListEdit(isEditMode && !perLineShipping);
                     setIsProductDialogOpen(true);
                   }}
                   className="rounded-lg border border-[#CBD5E0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1A365D]"
@@ -4887,7 +5872,7 @@ function ProductOrderPanel({
                     const rowIndex = productItems.indexOf(row);
                     return (
                       <li
-                        key={`box-${row.product}-${rowIndex}`}
+                        key={`box-${row.lineId}`}
                         className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -4903,35 +5888,7 @@ function ProductOrderPanel({
                             <Trash2 className="size-4" />
                           </button>
                         </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2.5">
-                          <label className="block">
-                            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-                              수량
-                            </span>
-                            <input
-                              type="number"
-                              min={1}
-                              required
-                              aria-label={`${row.product} 수량`}
-                              value={row.qty}
-                              onChange={(event) => {
-                                const nextQty = Number(event.target.value);
-                                if (!Number.isNaN(nextQty)) {
-                                  updateProductQty(rowIndex, nextQty);
-                                }
-                              }}
-                              className="h-9 w-full rounded-md border border-[#E2E8F0] bg-white px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                          </label>
-                          <div>
-                            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-                              단가
-                            </span>
-                            <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
-                              {formatPrice(row.unitPrice || 0)}
-                            </p>
-                          </div>
-                        </div>
+                        {renderLineControls(row, rowIndex)}
                         {row.note ? (
                           <p className="mt-2 text-[12px] leading-relaxed text-[#475569]">
                             <span className="font-semibold text-[#64748B]">
@@ -5004,7 +5961,7 @@ function ProductOrderPanel({
                     const isSaved = Boolean(draft);
                     return (
                       <li
-                        key={`gift-${row.product}-${rowIndex}`}
+                        key={`gift-${row.lineId}`}
                         className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -5020,35 +5977,7 @@ function ProductOrderPanel({
                             <Trash2 className="size-4" />
                           </button>
                         </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2.5">
-                          <label className="block">
-                            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-                              수량
-                            </span>
-                            <input
-                              type="number"
-                              min={1}
-                              required
-                              aria-label={`${row.product} 수량`}
-                              value={row.qty}
-                              onChange={(event) => {
-                                const nextQty = Number(event.target.value);
-                                if (!Number.isNaN(nextQty)) {
-                                  updateProductQty(rowIndex, nextQty);
-                                }
-                              }}
-                              className="h-9 w-full rounded-md border border-[#E2E8F0] bg-white px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                          </label>
-                          <div>
-                            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-                              단가
-                            </span>
-                            <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
-                              {formatPrice(row.unitPrice || 0)}
-                            </p>
-                          </div>
-                        </div>
+                        {renderLineControls(row, rowIndex)}
                         <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
                           <span className="text-[11px] font-bold text-[#64748B]">
                             인사장
@@ -5102,7 +6031,7 @@ function ProductOrderPanel({
 
             {productItems.length > 0 ? (
               <p className="text-[11px] text-[#64748B]">
-                총 {productItems.length}건 · 수량{" "}
+                총 {productLineCount}건 · 수량{" "}
                 {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
                 <span className="font-bold text-[#1A202C]">
                   {formatPrice(productListTotal)}
@@ -5140,7 +6069,7 @@ function ProductOrderPanel({
             </div>
             {productItems.length > 0 ? (
               <p className="mb-2 text-[11px] text-[#64748B]">
-                총 {productItems.length}건 · 수량{" "}
+                총 {productLineCount}건 · 수량{" "}
                 {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
                 <span className="font-bold text-[#1A202C]">
                   {formatPrice(productListTotal)}
@@ -5171,7 +6100,7 @@ function ProductOrderPanel({
 
                   return (
                     <li
-                      key={`${row.product}-${rowIndex}`}
+                      key={row.lineId}
                       className="rounded-[10px] border border-[#E2E8F0] bg-white p-3"
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -5188,35 +6117,7 @@ function ProductOrderPanel({
                         </button>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-2 gap-2.5">
-                        <label className="block">
-                          <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-                            수량
-                          </span>
-                          <input
-                            type="number"
-                            min={1}
-                            required
-                            aria-label={`${row.product} 수량`}
-                            value={row.qty}
-                            onChange={(event) => {
-                              const nextQty = Number(event.target.value);
-                              if (!Number.isNaN(nextQty)) {
-                                updateProductQty(rowIndex, nextQty);
-                              }
-                            }}
-                            className="h-9 w-full rounded-md border border-[#E2E8F0] bg-white px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                          />
-                        </label>
-                        <div>
-                          <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-                            단가
-                          </span>
-                          <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
-                            {formatPrice(row.unitPrice || 0)}
-                          </p>
-                        </div>
-                      </div>
+                      {renderLineControls(row, rowIndex)}
 
                       <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
                         <span className="text-[11px] font-bold text-[#64748B]">
@@ -5273,7 +6174,7 @@ function ProductOrderPanel({
       </div>
       ) : null}
 
-      {orderType ? (
+      {(perLineShipping ? productItems.length > 0 : Boolean(orderType)) ? (
         <div className="mb-4">
           <label htmlFor="order-extra-note" className={omLabelClass}>
             특이사항
@@ -5357,8 +6258,10 @@ function ProductOrderPanel({
       </div>
 
       <ProductAddDialog
-        open={isProductDialogOpen && orderType !== null}
+        open={isProductDialogOpen && (perLineShipping || orderType !== null)}
         defaultOrderKind={orderType ?? "delivery"}
+        // 개인앱은 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다.
+        showOrderKind={!perLineShipping}
         openStockOnly={openStockOnly}
         presentation={productDialogPresentation}
         mode={productDialogMode}
@@ -5368,6 +6271,22 @@ function ProductOrderPanel({
         onClose={() => setIsProductDialogOpen(false)}
         onAddItems={addProductItems}
       />
+
+      {/* 줄별 배송정보 입력 (스크린샷 ⑤⑥) */}
+      {shipSheetLine && shipSheetLine.orderKind ? (
+        <LineShipSheet
+          key={shipSheetLine.lineId}
+          open
+          kind={shipSheetLine.orderKind}
+          productName={shipSheetLine.product}
+          qty={shipSheetLine.qty}
+          initial={shipSheetInitial}
+          minDateIso={todayDateValue()}
+          shipDateLocked={shipDateLocked}
+          onCancel={() => setShipSheetLineId(null)}
+          onSave={(info) => saveLineShipInfo(shipSheetLine.lineId, info)}
+        />
+      ) : null}
 
       <GreetingViewModal
         open={isGreetingViewOpen}
