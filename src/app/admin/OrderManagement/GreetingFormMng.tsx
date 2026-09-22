@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { CircleCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { StandaloneGreetingForm } from "@/app/admin/OrderManagement/StandaloneGreetingForm";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
+import { getAuthUser } from "@/lib/auth";
 import { formatMonthDayTime } from "@/lib/date-format";
 import { API_BASE_URL } from "@/lib/env";
 import { cn } from "@/lib/utils";
@@ -33,6 +35,9 @@ type GreetingFormRow = {
   imageUrl: string;
   createdAt: string;
   createdDate: string;
+  /** 완료 처리 시각 표시용 ("" = 미완료) */
+  completedAt: string;
+  completedBy: string;
 };
 
 type ApiGreetingForm = {
@@ -53,6 +58,8 @@ type ApiGreetingForm = {
   phone?: string | null;
   linkedToOrder: boolean;
   submitted: boolean;
+  completedAt?: string | null;
+  completedBy?: string | null;
   createdAt: string;
   order?: { orderNumber?: string | null } | null;
 };
@@ -97,12 +104,54 @@ function Panel({
   );
 }
 
-function AdminMobileGreetingCard({
+/** "완료" 버튼 + 완료 시 초록 체크 (데스크톱 표/모바일 카드 공용) */
+function GreetingCompleteControl({
   row,
-  onView,
+  canComplete,
+  isCompleting,
+  onComplete,
+  size = "sm",
 }: {
   row: GreetingFormRow;
+  canComplete: boolean;
+  isCompleting: boolean;
+  onComplete: () => void;
+  size?: "sm" | "default";
+}) {
+  const done = Boolean(row.completedAt);
+  return (
+    <div className="flex items-center justify-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size={size}
+        disabled={!canComplete || done || isCompleting}
+        onClick={onComplete}
+      >
+        {isCompleting ? "처리 중..." : "완료"}
+      </Button>
+      {done ? (
+        <CircleCheck
+          className="size-5 shrink-0 text-[#2F855A]"
+          aria-label={`완료됨 ${row.completedAt}`}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AdminMobileGreetingCard({
+  row,
+  canComplete,
+  isCompleting,
+  onView,
+  onComplete,
+}: {
+  row: GreetingFormRow;
+  canComplete: boolean;
+  isCompleting: boolean;
   onView: () => void;
+  onComplete: () => void;
 }) {
   return (
     <article className="rounded-xl border border-[#d8e0ea] bg-white px-3.5 py-3">
@@ -118,15 +167,23 @@ function AdminMobileGreetingCard({
             {row.receivePlace ? ` · ${row.receivePlace}` : ""}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 border-[#93c5fd] bg-[#eff6ff] text-base text-brand hover:bg-[#dbeafe]"
-          onClick={onView}
-        >
-          보기
-        </Button>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-[#93c5fd] bg-[#eff6ff] text-base text-brand hover:bg-[#dbeafe]"
+            onClick={onView}
+          >
+            보기
+          </Button>
+          <GreetingCompleteControl
+            row={row}
+            canComplete={canComplete}
+            isCompleting={isCompleting}
+            onComplete={onComplete}
+          />
+        </div>
       </div>
     </article>
   );
@@ -202,6 +259,12 @@ function GreetingDetailDialog({
           <dd className="font-medium text-ink">{row.specialNote}</dd>
           <dt className="text-[#64748b]">등록일시</dt>
           <dd className="font-medium text-ink">{row.createdAt}</dd>
+          <dt className="text-[#64748b]">완료</dt>
+          <dd className="font-medium text-ink">
+            {row.completedAt
+              ? `${row.completedAt}${row.completedBy ? ` (${row.completedBy})` : ""}`
+              : "-"}
+          </dd>
         </dl>
         <div className="flex justify-end pt-1">
           <Button type="button" variant="outline" onClick={onClose}>
@@ -220,6 +283,56 @@ export function GreetingFormMng() {
   const [reloadKey, setReloadKey] = useState(0);
   const [view, setView] = useState<"list" | "create">("list");
   const [viewingRow, setViewingRow] = useState<GreetingFormRow | null>(null);
+  const [completingId, setCompletingId] = useState<number | null>(null);
+  /** 완료 처리: 공장 계정(인사장 승인 + 공장관리자)만 */
+  const canComplete = getAuthUser()?.role === "factory";
+
+  const handleComplete = async (row: GreetingFormRow) => {
+    if (!canComplete || row.completedAt || completingId !== null) {
+      return;
+    }
+    setCompletingId(row.id);
+    try {
+      const response = await apiFetch(`/api/greeting-forms/${row.id}/complete`, {
+        method: "PATCH",
+      });
+      const data = (await response.json()) as
+        | { completedAt?: string | null; completedBy?: string | null }
+        | { message?: string | string[] };
+      if (!response.ok) {
+        const message =
+          "message" in data && data.message
+            ? Array.isArray(data.message)
+              ? data.message.join(", ")
+              : data.message
+            : "완료 처리에 실패했습니다.";
+        window.alert(message);
+        return;
+      }
+      const completed = data as {
+        completedAt?: string | null;
+        completedBy?: string | null;
+      };
+      const completedAt = completed.completedAt
+        ? formatMonthDayTime(completed.completedAt)
+        : formatMonthDayTime(new Date());
+      const completedBy = completed.completedBy ?? "";
+      setRows((current) =>
+        current.map((item) =>
+          item.id === row.id ? { ...item, completedAt, completedBy } : item,
+        ),
+      );
+      setViewingRow((current) =>
+        current && current.id === row.id
+          ? { ...current, completedAt, completedBy }
+          : current,
+      );
+    } catch {
+      window.alert("완료 처리에 실패했습니다.");
+    } finally {
+      setCompletingId(null);
+    }
+  };
 
   useEffect(() => {
     if (view !== "list") {
@@ -279,6 +392,10 @@ export function GreetingFormMng() {
               imageUrl: item.imageUrl,
               createdAt: formatMonthDayTime(item.createdAt),
               createdDate: formatDate(item.createdAt),
+              completedAt: item.completedAt
+                ? formatMonthDayTime(item.completedAt)
+                : "",
+              completedBy: item.completedBy?.trim() || "",
             };
           }),
         );
@@ -303,14 +420,21 @@ export function GreetingFormMng() {
     };
   }, [reloadKey, view]);
 
-  const columns: TableColumn<GreetingFormRow>[] = useMemo(
-    () => [
-      {
-        key: "imageUrl",
-        header: "이미지",
-        className: "w-[72px]",
-        render: (row) =>
-          row.imageUrl ? (
+  const columns: TableColumn<GreetingFormRow>[] = [
+    {
+      key: "imageUrl",
+      header: "이미지",
+      className: "w-[72px]",
+      render: (row) => (
+        // 썸네일 클릭 → 인사장 상세 다이얼로그
+        <button
+          type="button"
+          title="인사장 보기"
+          aria-label="인사장 보기"
+          className="rounded hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+          onClick={() => setViewingRow(row)}
+        >
+          {row.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={resolveImageUrl(String(row.imageUrl))}
@@ -318,51 +442,53 @@ export function GreetingFormMng() {
               className="h-12 w-12 rounded border border-line object-cover"
             />
           ) : (
-            "-"
-          ),
-      },
-      { key: "id", header: "번호", className: "w-[64px] text-center" },
-      { key: "type", header: "구분" },
-      { key: "ordererName", header: "성명(주문자)" },
-      { key: "churchName", header: "중앙" },
-      { key: "phone", header: "연락처" },
-      { key: "greetingNumber", header: "인사장번호", className: "text-center" },
-      {
-        key: "businessCard",
-        header: "명함",
-        className: "text-center",
-        render: (row) =>
-          row.businessCard === "동봉"
-            ? "동봉 ✓"
-            : row.businessCard === "미동봉"
-              ? "미동봉"
-              : row.businessCard,
-      },
-      { key: "content", header: "인사장내용" },
-      { key: "quantity", header: "수량", className: "text-right" },
-      { key: "size", header: "크기", className: "text-center" },
-      { key: "productName", header: "제품명" },
-      { key: "receivePlace", header: "받을 곳" },
-      { key: "specialNote", header: "특이사항" },
-      { key: "createdAt", header: "등록일시" },
-      {
-        key: "action",
-        header: "보기",
-        className: "text-center",
-        render: (row) => (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setViewingRow(row)}
-          >
-            보기
-          </Button>
-        ),
-      },
-    ],
-    [],
-  );
+            <span className="flex h-12 w-12 items-center justify-center rounded border border-line text-[#64748b]">
+              -
+            </span>
+          )}
+        </button>
+      ),
+    },
+    { key: "id", header: "번호", className: "w-[64px] text-center" },
+    { key: "type", header: "구분" },
+    { key: "ordererName", header: "성명(주문자)" },
+    { key: "churchName", header: "중앙" },
+    { key: "phone", header: "연락처" },
+    { key: "greetingNumber", header: "인사장번호", className: "text-center" },
+    {
+      key: "businessCard",
+      header: "명함",
+      className: "text-center",
+      render: (row) =>
+        row.businessCard === "동봉"
+          ? "동봉 ✓"
+          : row.businessCard === "미동봉"
+            ? "미동봉"
+            : row.businessCard,
+    },
+    { key: "content", header: "인사장내용" },
+    { key: "quantity", header: "수량", className: "text-right" },
+    { key: "size", header: "크기", className: "text-center" },
+    { key: "productName", header: "제품명" },
+    { key: "receivePlace", header: "받을 곳" },
+    { key: "specialNote", header: "특이사항" },
+    { key: "createdAt", header: "등록일시" },
+    {
+      key: "action",
+      header: "완료",
+      className: "text-center",
+      render: (row) => (
+        <GreetingCompleteControl
+          row={row}
+          canComplete={canComplete}
+          isCompleting={completingId === row.id}
+          onComplete={() => {
+            void handleComplete(row);
+          }}
+        />
+      ),
+    },
+  ];
 
   if (view === "create") {
     return (
@@ -473,7 +599,12 @@ export function GreetingFormMng() {
             <AdminMobileGreetingCard
               key={row.id}
               row={row}
+              canComplete={canComplete}
+              isCompleting={completingId === row.id}
               onView={() => setViewingRow(row)}
+              onComplete={() => {
+                void handleComplete(row);
+              }}
             />
           ))
         )}

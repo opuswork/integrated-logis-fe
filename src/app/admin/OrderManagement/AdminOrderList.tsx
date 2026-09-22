@@ -857,7 +857,6 @@ export function AdminOrderList({
                   <th className="px-2 py-2 font-semibold">인사장완료</th>
                   <th className="px-2 py-2 font-semibold">기표지완료</th>
                   <th className="px-2 py-2 font-semibold">출력</th>
-                  <th className="px-2 py-2 font-semibold">보기</th>
                 </tr>
               </thead>
               <tbody>
@@ -1279,18 +1278,9 @@ export function AdminOrderList({
                       <td className="px-2 py-2 align-middle">
                         <CellBtn
                           variant="ghost"
-                          disabled
-                          onClick={() => undefined}
-                        >
-                          출력
-                        </CellBtn>
-                      </td>
-                      <td className="px-2 py-2 align-middle">
-                        <CellBtn
-                          variant="ghost"
                           onClick={() => setViewingOrderNumber(row.orderNumber)}
                         >
-                          보기
+                          출력
                         </CellBtn>
                       </td>
                     </tr>
