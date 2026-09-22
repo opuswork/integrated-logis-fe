@@ -3407,6 +3407,11 @@ function ProductOrderPanel({
    * 관리자(blankCustomerFields)는 기존 주문 단위 택배/배달 탭을 그대로 쓴다.
    */
   const perLineShipping = !blankCustomerFields;
+  /**
+   * 줄 자동분할(택배↔상차)은 신규작성에서만.
+   * 접수 후에는 주문 1건 = 배송 1건이라, 수정화면에서 쪼개면 주문번호 규칙이 깨진다.
+   */
+  const canSplitLines = perLineShipping && !isEditMode;
   /** lineId → 저장된 배송정보 */
   const [lineShipInfo, setLineShipInfo] = useState<Record<string, LineShipInfo>>(
     {},
@@ -3503,6 +3508,8 @@ function ProductOrderPanel({
   const [acceptedOrderNumber, setAcceptedOrderNumber] = useState<string | null>(
     null,
   );
+  /** 줄 단위로 쪼개 접수된 주문번호들 (접수완료 안내 문구용) */
+  const [acceptedOrderNumbers, setAcceptedOrderNumbers] = useState<string[]>([]);
   const isDesktop = useMinWidth(1040);
   const isWideProductList = useMinWidth(500);
   const isDelivery = orderType === "delivery";
@@ -4097,6 +4104,12 @@ function ProductOrderPanel({
       row.lineId === lineId ? { ...row, orderKind: kind } : row,
     );
 
+    // 수정 모드: 이미 주문 1건 = 배송 1건이므로 줄을 더 쪼개지 않는다.
+    if (!canSplitLines) {
+      setProductItems(next);
+      return;
+    }
+
     const siblingIndex = next.findIndex(
       (row) => row.lineId !== lineId && row.splitGroupId === target.splitGroupId,
     );
@@ -4256,9 +4269,13 @@ function ProductOrderPanel({
         return current;
       }
 
-      if (!perLineShipping) {
+      if (!perLineShipping || !canSplitLines) {
+        // 관리자 / 수정 모드: 분할 없이 수량만 바꾼다 (baseQty 도 함께 따라감)
+        const nextQty = Math.max(1, qty);
         return current.map((item, index) =>
-          index === rowIndex ? { ...item, qty: Math.max(1, qty) } : item,
+          index === rowIndex
+            ? { ...item, qty: nextQty, baseQty: nextQty }
+            : item,
         );
       }
 
@@ -4309,6 +4326,7 @@ function ProductOrderPanel({
     if (wasSuccess) {
       onOrderAccepted?.(orderNo ?? undefined);
       setAcceptedOrderNumber(null);
+      setAcceptedOrderNumbers([]);
     } else {
       // Modal already showed the error — clear so it does not reappear inline.
       setFormError("");
@@ -4574,27 +4592,38 @@ function ProductOrderPanel({
         greetingsForSubmit = resolved;
       }
 
-      const greetingIdsForSubmit = Object.values(greetingsForSubmit)
-        .map((draft) => draft?.id)
-        .filter((id): id is number => typeof id === "number");
-      const greetingCountForNotes = greetingIdsForSubmit.length;
-      const greetingDraftsForNotes = Object.values(greetingsForSubmit).filter(
-        (draft): draft is GreetingDraft => Boolean(draft),
-      );
-      const hasCatalogGreeting = greetingDraftsForNotes.some((draft) =>
-        isGreetingCatalogNumber(draft.greetingNumber),
-      );
-      const hasSelfOrCardGreeting = greetingDraftsForNotes.some(
-        (draft) =>
-          draft.includeSelf || draft.businessCard === BUSINESS_CARD_INCLUDED,
-      );
-      const greetingKindNote = hasCatalogGreeting
-        ? "본사"
-        : hasSelfOrCardGreeting
-          ? "자체"
-          : greetingCountForNotes > 0
-            ? "본사"
-            : "없음";
+      /**
+       * 주문 한 건에 실릴 인사장 = 그 주문에 담긴 품명들의 인사장.
+       * (인사장은 선물세트에만 붙으므로 박스만 담긴 주문은 "없음"이 된다)
+       */
+      const greetingsForLines = (lines: ProductLineItem[]) => {
+        const seen = new Set<string>();
+        const drafts: GreetingDraft[] = [];
+        for (const line of lines) {
+          if (seen.has(line.product)) continue;
+          seen.add(line.product);
+          const draft = greetingsForSubmit[line.product];
+          if (draft) {
+            drafts.push(draft);
+          }
+        }
+        return drafts;
+      };
+
+      const greetingKindNoteFor = (drafts: GreetingDraft[]) => {
+        if (drafts.some((draft) => isGreetingCatalogNumber(draft.greetingNumber))) {
+          return "본사";
+        }
+        if (
+          drafts.some(
+            (draft) =>
+              draft.includeSelf || draft.businessCard === BUSINESS_CARD_INCLUDED,
+          )
+        ) {
+          return "자체";
+        }
+        return drafts.some((draft) => draft.id) ? "본사" : "없음";
+      };
 
       const selectedBranch =
         BRANCH_STORES.find((store) => store.id === branchStore)?.name ?? "";
@@ -4604,264 +4633,373 @@ function ProductOrderPanel({
         return;
       }
       const year = new Date().getFullYear();
-      const orderNumber =
+      const baseOrderNumber =
         editOrderNumber ??
         `ORD-${year}-${String(Date.now()).slice(-6)}`;
+
       /*
-       * 개인앱은 줄마다 배송정보를 따로 받는다. Shipment 테이블이 주문당 1행이라
-       * 기존 세그먼트에는 배송방식별 "대표 1벌"(첫 택배 줄 / 첫 배달 줄)을 실어
-       * 관리자·출력·공장·우체국 화면이 지금과 똑같이 동작하게 하고,
-       * 줄 단위 원본은 아래 `배송상세` 세그먼트에 따로 싣는다.
+       * 개인앱 신규작성은 배송정보가 줄마다 달라서 주문을 줄 단위로 쪼개 접수한다.
+       * (Shipment 는 주문당 1행이고 notes 도 배송방식 블록이 한 벌뿐이라,
+       *  한 주문에 여러 배송지를 담으면 관리자·출력·공장·우체국 화면이 전부 틀어진다)
+       * 줄이 2개 이상이면 주문번호에 -1, -2 … 접미사가 붙는다.
        */
-      const lineShipments: LineShipment[] = perLineShipping
-        ? productItems.flatMap((item) => {
-            const ship = lineShipInfo[item.lineId];
-            return ship
-              ? [
-                  {
-                    product: item.product,
-                    qty: item.qty,
-                    baseQty: item.baseQty,
-                    note: item.note,
-                    unitPrice: item.unitPrice || 0,
-                    lineSection: item.lineSection,
-                    deliveryOnly: item.deliveryOnly,
-                    ship,
-                  },
-                ]
-              : [];
-          })
-        : [];
-      const firstDeliveryShip =
-        lineShipments.find((line) => line.ship.kind === "delivery")?.ship ??
-        null;
-      const firstParcelShip =
-        lineShipments.find((line) => line.ship.kind === "parcel")?.ship ?? null;
+      const orderGroups: ProductLineItem[][] =
+        perLineShipping && !isEditMode
+          ? productItems.map((item) => [item])
+          : [productItems];
 
-      const hasDeliveryItems = perLineShipping
-        ? Boolean(firstDeliveryShip)
-        : isDelivery;
-      const hasParcelItems = perLineShipping
-        ? Boolean(firstParcelShip)
-        : !isDelivery;
+      /** 줄 묶음 하나 → notes + payload 한 벌 */
+      const buildOrderBody = (lines: ProductLineItem[]) => {
+        const lineShipments: LineShipment[] = perLineShipping
+          ? lines.flatMap((item) => {
+              const ship = lineShipInfo[item.lineId];
+              return ship
+                ? [
+                    {
+                      product: item.product,
+                      qty: item.qty,
+                      baseQty: item.baseQty,
+                      note: item.note,
+                      unitPrice: item.unitPrice || 0,
+                      lineSection: item.lineSection,
+                      deliveryOnly: item.deliveryOnly,
+                      ship,
+                    },
+                  ]
+                : [];
+            })
+          : [];
+        const firstDeliveryShip =
+          lineShipments.find((line) => line.ship.kind === "delivery")?.ship ??
+          null;
+        const firstParcelShip =
+          lineShipments.find((line) => line.ship.kind === "parcel")?.ship ??
+          null;
 
-      // 대표 배송정보 (개인앱이 아니면 기존 주문 단위 상태를 그대로 쓴다)
-      const repDeliveryCompany = (
-        firstDeliveryShip?.companyName ?? deliveryCompanyName
-      ).trim();
-      const repParcelCompany = (
-        firstParcelShip?.companyName ?? parcelCompanyName
-      ).trim();
-      const repDeliveryDate = firstDeliveryShip?.deliveryDate ?? deliveryDate;
-      const repDeliveryAmPm = firstDeliveryShip?.deliveryAmPm ?? deliveryAmPm;
-      const repDeliveryTime = firstDeliveryShip?.deliveryTime ?? deliveryTime;
-      const repParcelShipDate =
-        firstParcelShip?.parcelShipDate ?? parcelShipDate;
-      const repDeliveryRecipientName = (
-        firstDeliveryShip?.recipientName ?? recipientName
-      ).trim();
-      const repDeliveryRecipientPhone = (
-        firstDeliveryShip?.recipientPhone ?? recipientPhone
-      ).trim();
-      const repDeliveryRecipientAddress = firstDeliveryShip
-        ? joinAddress(
-            firstDeliveryShip.recipientAddress,
-            firstDeliveryShip.recipientAddressDetail,
-          )
-        : fullRecipientAddress;
-      const repSenderName = (firstParcelShip?.senderName ?? senderName).trim();
-      const repSenderPhone = (
-        firstParcelShip?.senderPhone ?? senderPhone
-      ).trim();
-      const repSenderAddress = firstParcelShip
-        ? joinAddress(
-            firstParcelShip.senderAddress,
-            firstParcelShip.senderAddressDetail,
-          )
-        : fullSenderAddress;
-      const repSenderAddressDetail = (
-        firstParcelShip?.senderAddressDetail ?? senderAddressDetail
-      ).trim();
-      // 택배 수취연락. 택배 줄이 없으면 배달 받는분 주소로 대체한다.
-      const contactSource = perLineShipping
-        ? (firstParcelShip ?? firstDeliveryShip)
-        : null;
-      const repContactAddress = perLineShipping
-        ? joinAddress(
-            contactSource?.recipientAddress ?? "",
-            contactSource?.recipientAddressDetail ?? "",
-          )
-        : fullRecipientAddress;
-      const repContactAddressDetail = perLineShipping
-        ? (contactSource?.recipientAddressDetail ?? "").trim()
-        : recipientAddressDetail.trim();
+        const hasDeliveryItems = perLineShipping
+          ? Boolean(firstDeliveryShip)
+          : isDelivery;
+        const hasParcelItems = perLineShipping
+          ? Boolean(firstParcelShip)
+          : !isDelivery;
 
-      const attachedGreetingNotes =
-        greetingCountForNotes > 0
-          ? Object.values(greetingsForSubmit)
-              .filter((draft) => draft?.id)
-              .map((draft) => formatGreetingDraftNotes(draft!))
-              .join(" / ")
+        // 줄 단위로 쪼갠 주문은 배송정보가 딱 한 벌이라 아래 값들이 곧 정확한 값이다.
+        const shipCompany = (
+          firstDeliveryShip?.companyName ?? deliveryCompanyName
+        ).trim();
+        const parcelCompany = (
+          firstParcelShip?.companyName ?? parcelCompanyName
+        ).trim();
+        const shipDeliveryDate = firstDeliveryShip?.deliveryDate ?? deliveryDate;
+        const shipDeliveryAmPm = firstDeliveryShip?.deliveryAmPm ?? deliveryAmPm;
+        const shipDeliveryTime = firstDeliveryShip?.deliveryTime ?? deliveryTime;
+        const shipParcelDate =
+          firstParcelShip?.parcelShipDate ?? parcelShipDate;
+        const shipRecipientName = (
+          firstDeliveryShip?.recipientName ?? recipientName
+        ).trim();
+        const shipRecipientPhone = (
+          firstDeliveryShip?.recipientPhone ?? recipientPhone
+        ).trim();
+        const shipRecipientAddress = firstDeliveryShip
+          ? joinAddress(
+              firstDeliveryShip.recipientAddress,
+              firstDeliveryShip.recipientAddressDetail,
+            )
+          : fullRecipientAddress;
+        const shipSenderName = (
+          firstParcelShip?.senderName ?? senderName
+        ).trim();
+        const shipSenderPhone = (
+          firstParcelShip?.senderPhone ?? senderPhone
+        ).trim();
+        const shipSenderAddress = firstParcelShip
+          ? joinAddress(
+              firstParcelShip.senderAddress,
+              firstParcelShip.senderAddressDetail,
+            )
+          : fullSenderAddress;
+        const shipSenderAddressDetail = (
+          firstParcelShip?.senderAddressDetail ?? senderAddressDetail
+        ).trim();
+        const contactSource = perLineShipping
+          ? (firstParcelShip ?? firstDeliveryShip)
           : null;
-      // 배달은 항상 주소로 수취. 택배만 주소/이메일/팩스 선택
-      const contactMode: ParcelRecipientContactMode = perLineShipping
-        ? (firstParcelShip?.contactMode ?? "address")
-        : hasDeliveryItems
-          ? "address"
-          : parcelContactMode;
-      const notes = [
-        `주문자:${displayOrdererName || ordererName.trim()}`,
-        `연락처:${ordererPhone.trim()}`,
-        `주문일자:${orderDate}`,
-        `중앙:${churchQuery.trim()}`,
-        hasDeliveryItems ? `배달업체명:${repDeliveryCompany}` : null,
-        hasParcelItems ? `택배업체명:${repParcelCompany}` : null,
-        hasDeliveryItems
-          ? `배달일:${repDeliveryDate} ${repDeliveryAmPm} ${repDeliveryTime}`
-          : null,
-        hasDeliveryItems
-          ? `받는분:${repDeliveryRecipientName} / ${repDeliveryRecipientPhone} / ${
-              repDeliveryRecipientAddress || "-"
-            }`
-          : null,
-        hasParcelItems ? `택배발송일:${repParcelShipDate}` : null,
-        hasParcelItems
-          ? `보내는사람:${repSenderName} / ${repSenderPhone} / ${repSenderAddress}`
-          : null,
-        hasParcelItems && repSenderAddressDetail
-          ? `보내는분상세주소:${repSenderAddressDetail}`
-          : null,
-        // 이메일/팩스는 선택 여부만 기록 (값 입력 없음)
-        `수취연락:${PARCEL_CONTACT_MODE_LABEL[contactMode]}`,
-        contactMode === "address" && repContactAddress
-          ? `받는분주소:${repContactAddress}`
-          : null,
-        contactMode === "address" && repContactAddressDetail
-          ? `받는분상세주소:${repContactAddressDetail}`
-          : null,
-        `주문작업지역:${selectedBranch}`,
-        `지부매장:${selectedBranch}`,
-        `인사장종류:${greetingKindNote}`,
-        attachedGreetingNotes,
-        ...productItems.map(
-          (item) =>
-            `[${orderKindLabel(item.orderKind || selectedOrderType)}] ${item.product} ${item.qty}개${item.note ? `(${item.note})` : ""}`,
-        ),
-        // 줄별 배송정보 원본 (개인앱 주문서 수정 시 그대로 복원)
-        encodeLineShipments(lineShipments),
-      ]
-        .filter(Boolean)
-        .join(" / ");
+        const contactAddress = perLineShipping
+          ? joinAddress(
+              contactSource?.recipientAddress ?? "",
+              contactSource?.recipientAddressDetail ?? "",
+            )
+          : fullRecipientAddress;
+        const contactAddressDetail = perLineShipping
+          ? (contactSource?.recipientAddressDetail ?? "").trim()
+          : recipientAddressDetail.trim();
+        // 배달은 항상 주소로 수취. 택배만 주소/이메일/팩스 선택
+        const contactMode: ParcelRecipientContactMode = perLineShipping
+          ? (firstParcelShip?.contactMode ?? "address")
+          : hasDeliveryItems
+            ? "address"
+            : parcelContactMode;
 
-      const primaryKind = hasDeliveryItems ? "delivery" : "parcel";
-      const deliveryWindowTime =
-        hasDeliveryItems && repDeliveryAmPm
-          ? toTwentyFourHour(repDeliveryAmPm, repDeliveryTime)
-          : null;
-      if (hasDeliveryItems && !deliveryWindowTime) {
-        setFormError("배달 시간은 1~12시로 입력해 주세요.");
-        setResultDialog({ open: true, success: false, kind: "fail" });
-        return;
-      }
+        const drafts = greetingsForLines(lines);
+        const attachedGreetingNotes =
+          drafts.filter((draft) => draft.id).length > 0
+            ? drafts
+                .filter((draft) => draft.id)
+                .map((draft) => formatGreetingDraftNotes(draft))
+                .join(" / ")
+            : null;
 
-      const payload = {
-        totalAmount: productItems.reduce(
-          (sum, item) => sum + item.qty * (item.unitPrice || 0),
-          0,
-        ),
-        notes,
-        extraNote: extraNote.trim(),
-        items: productItems.map((item) => ({
-          productName: item.product,
-          quantity: item.qty,
-          price: item.unitPrice || 0,
-        })),
-        shipment: {
-          fulfillmentType: "PARCEL" as const,
-          carrier:
-            primaryKind === "delivery" ? repDeliveryCompany : repParcelCompany,
-          deliveryAddress:
-            primaryKind === "delivery"
-              ? repDeliveryRecipientAddress
-              : repSenderAddress,
-          estimatedWindow:
-            primaryKind === "delivery"
-              ? `${repDeliveryDate}T${deliveryWindowTime}:00.000Z`
-              : `${repParcelShipDate}T09:00:00.000Z`,
-        },
+        const notes = [
+          `주문자:${displayOrdererName || ordererName.trim()}`,
+          `연락처:${ordererPhone.trim()}`,
+          `주문일자:${orderDate}`,
+          `중앙:${churchQuery.trim()}`,
+          hasDeliveryItems ? `배달업체명:${shipCompany}` : null,
+          hasParcelItems ? `택배업체명:${parcelCompany}` : null,
+          hasDeliveryItems
+            ? `배달일:${shipDeliveryDate} ${shipDeliveryAmPm} ${shipDeliveryTime}`
+            : null,
+          hasDeliveryItems
+            ? `받는분:${shipRecipientName} / ${shipRecipientPhone} / ${
+                shipRecipientAddress || "-"
+              }`
+            : null,
+          hasParcelItems ? `택배발송일:${shipParcelDate}` : null,
+          hasParcelItems
+            ? `보내는사람:${shipSenderName} / ${shipSenderPhone} / ${shipSenderAddress}`
+            : null,
+          hasParcelItems && shipSenderAddressDetail
+            ? `보내는분상세주소:${shipSenderAddressDetail}`
+            : null,
+          // 이메일/팩스는 선택 여부만 기록 (값 입력 없음)
+          `수취연락:${PARCEL_CONTACT_MODE_LABEL[contactMode]}`,
+          contactMode === "address" && contactAddress
+            ? `받는분주소:${contactAddress}`
+            : null,
+          contactMode === "address" && contactAddressDetail
+            ? `받는분상세주소:${contactAddressDetail}`
+            : null,
+          `주문작업지역:${selectedBranch}`,
+          `지부매장:${selectedBranch}`,
+          `인사장종류:${greetingKindNoteFor(drafts)}`,
+          attachedGreetingNotes,
+          ...lines.map(
+            (item) =>
+              `[${orderKindLabel(item.orderKind || selectedOrderType)}] ${item.product} ${item.qty}개${item.note ? `(${item.note})` : ""}`,
+          ),
+          // 줄별 배송정보 원본 (주문서 수정 시 그대로 복원)
+          encodeLineShipments(lineShipments),
+        ]
+          .filter(Boolean)
+          .join(" / ");
+
+        const primaryKind = hasDeliveryItems ? "delivery" : "parcel";
+        const deliveryWindowTime =
+          hasDeliveryItems && shipDeliveryAmPm
+            ? toTwentyFourHour(shipDeliveryAmPm, shipDeliveryTime)
+            : null;
+        if (hasDeliveryItems && !deliveryWindowTime) {
+          return {
+            ok: false as const,
+            error: "배달 시간은 1~12시로 입력해 주세요.",
+          };
+        }
+
+        return {
+          ok: true as const,
+          payload: {
+            totalAmount: lines.reduce(
+              (sum, item) => sum + item.qty * (item.unitPrice || 0),
+              0,
+            ),
+            notes,
+            extraNote: extraNote.trim(),
+            items: lines.map((item) => ({
+              productName: item.product,
+              quantity: item.qty,
+              price: item.unitPrice || 0,
+            })),
+            shipment: {
+              fulfillmentType: "PARCEL" as const,
+              carrier:
+                primaryKind === "delivery" ? shipCompany : parcelCompany,
+              deliveryAddress:
+                primaryKind === "delivery"
+                  ? shipRecipientAddress
+                  : shipSenderAddress,
+              estimatedWindow:
+                primaryKind === "delivery"
+                  ? `${shipDeliveryDate}T${deliveryWindowTime}:00.000Z`
+                  : `${shipParcelDate}T09:00:00.000Z`,
+            },
+          },
+        } as const;
       };
 
-      const response = isEditMode && editOrderId
-        ? await apiFetch(`/api/orders/${editOrderId}`, {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-          })
-        : await apiFetch("/api/orders", {
-            method: "POST",
-            body: JSON.stringify({
-              orderNumber,
-              userId: selectedMemberId ?? auth.id,
-              status: "PLACED",
-              // 자동완성으로 회원을 고르지 않았으면 주문자 정보를 넘겨
-              // 기존 회원 연결 또는 신규 계정 생성을 서버가 처리합니다.
-              ...(ordererAutocomplete && !selectedMemberId
-                ? {
-                    ordererProfile: {
-                      // 계정 이름에는 '관장님' 표기를 붙이지 않습니다.
-                      fullname: ordererName.trim() || displayOrdererName,
-                      phone: ordererPhone.trim(),
-                      ...(churchId != null ? { churchId } : {}),
-                    },
-                  }
-                : {}),
-              ...payload,
-            }),
-          });
+      const bodies: Array<{
+        orderNumber: string;
+        lines: ProductLineItem[];
+        payload: Extract<
+          ReturnType<typeof buildOrderBody>,
+          { ok: true }
+        >["payload"];
+      }> = [];
+      for (const [index, lines] of orderGroups.entries()) {
+        const built = buildOrderBody(lines);
+        if (!built.ok) {
+          setFormError(built.error);
+          setResultDialog({ open: true, success: false, kind: "fail" });
+          return;
+        }
+        bodies.push({
+          orderNumber:
+            orderGroups.length === 1
+              ? baseOrderNumber
+              : `${baseOrderNumber}-${index + 1}`,
+          lines,
+          payload: built.payload,
+        });
+      }
 
-      setResultDialog({
-        open: true,
-        success: response.ok,
-        kind: response.ok ? "accept" : "fail",
-      });
-      if (!response.ok) {
-        const errBody = (await response.json().catch(() => null)) as {
-          message?: string | string[];
-        } | null;
-        const raw = errBody?.message;
-        const message = Array.isArray(raw) ? raw[0] : raw;
-        setFormError(
-          message ||
-            (isEditMode
-              ? "주문서 변경 접수에 실패하였습니다."
-              : "제품주문서 접수에 실패하였습니다."),
+      /** 부분 실패 시 이미 만들어진 주문을 되돌린다 */
+      const rollbackCreated = async (ids: number[]) => {
+        await Promise.all(
+          ids.map((id) =>
+            apiFetch(`/api/orders/${id}/delivery-action`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "CANCEL_ORDER" }),
+            }).catch(() => null),
+          ),
         );
-      } else {
-        setAcceptedOrderNumber(orderNumber);
+      };
+
+      const createdOrders: Array<{
+        id: number | null;
+        orderNumber: string;
+        lines: ProductLineItem[];
+      }> = [];
+
+      for (const body of bodies) {
+        const response =
+          isEditMode && editOrderId
+            ? await apiFetch(`/api/orders/${editOrderId}`, {
+                method: "PATCH",
+                body: JSON.stringify(body.payload),
+              })
+            : await apiFetch("/api/orders", {
+                method: "POST",
+                body: JSON.stringify({
+                  orderNumber: body.orderNumber,
+                  userId: selectedMemberId ?? auth.id,
+                  status: "PLACED",
+                  // 자동완성으로 회원을 고르지 않았으면 주문자 정보를 넘겨
+                  // 기존 회원 연결 또는 신규 계정 생성을 서버가 처리합니다.
+                  ...(ordererAutocomplete && !selectedMemberId
+                    ? {
+                        ordererProfile: {
+                          // 계정 이름에는 '관장님' 표기를 붙이지 않습니다.
+                          fullname: ordererName.trim() || displayOrdererName,
+                          phone: ordererPhone.trim(),
+                          ...(churchId != null ? { churchId } : {}),
+                        },
+                      }
+                    : {}),
+                  ...body.payload,
+                }),
+              });
+
+        if (!response.ok) {
+          const errBody = (await response.json().catch(() => null)) as {
+            message?: string | string[];
+          } | null;
+          const raw = errBody?.message;
+          const message = Array.isArray(raw) ? raw[0] : raw;
+          const rollbackIds = createdOrders
+            .map((order) => order.id)
+            .filter((id): id is number => typeof id === "number");
+          if (rollbackIds.length > 0) {
+            await rollbackCreated(rollbackIds);
+          }
+          setFormError(
+            (message ||
+              (isEditMode
+                ? "주문서 변경 접수에 실패하였습니다."
+                : "제품주문서 접수에 실패하였습니다.")) +
+              (rollbackIds.length > 0
+                ? ` 먼저 접수된 ${rollbackIds.length}건은 취소했습니다.`
+                : ""),
+          );
+          setResultDialog({ open: true, success: false, kind: "fail" });
+          return;
+        }
+
         const created = (await response.json().catch(() => null)) as {
           id?: number;
         } | null;
-        const orderId =
-          created?.id ??
-          (isEditMode ? editOrderId : null);
-        if (orderId && greetingIdsForSubmit.length > 0) {
-          const linkResults = await Promise.all(
-            greetingIdsForSubmit.map(async (id) => {
-              const linkRes = await apiFetch(
-                `/api/greeting-forms/${id}/link-order`,
+        createdOrders.push({
+          id: created?.id ?? (isEditMode ? editOrderId : null),
+          orderNumber: body.orderNumber,
+          lines: body.lines,
+        });
+      }
+
+      setResultDialog({ open: true, success: true, kind: "accept" });
+      setAcceptedOrderNumber(createdOrders[0]?.orderNumber ?? baseOrderNumber);
+      setAcceptedOrderNumbers(createdOrders.map((order) => order.orderNumber));
+
+      /*
+       * 인사장 연결. 인사장은 선물세트에만 붙고 GreetingForm.orderId 는 1개뿐이라,
+       * 같은 선물세트가 택배/상차로 갈려 두 주문이 된 경우 두 번째부터는 사본을 만든다.
+       */
+      const linkedProducts = new Set<string>();
+      const linkFailures: string[] = [];
+      for (const order of createdOrders) {
+        if (!order.id) continue;
+        const seen = new Set<string>();
+        for (const line of order.lines) {
+          if (seen.has(line.product)) continue;
+          seen.add(line.product);
+          const draft = greetingsForSubmit[line.product];
+          if (!draft) continue;
+          try {
+            let greetingId = draft.id;
+            if (linkedProducts.has(line.product)) {
+              // 이미 다른 주문에 붙은 인사장 → 이 주문용 사본 생성
+              const copy = await createGreetingFormFromDraft(
+                draft,
+                line.product,
                 {
-                  method: "PATCH",
-                  body: JSON.stringify({ orderId }),
+                  ordererName: displayOrdererName || ordererName.trim(),
+                  churchName: churchQuery.trim(),
+                  phone: ordererPhone.trim(),
                 },
               );
-              return linkRes.ok;
-            }),
-          );
-          if (linkResults.some((ok) => !ok)) {
-            setFormError(
-              "주문은 접수되었으나 일부 인사장 연결에 실패했습니다. 인사장관리에서 확인해 주세요.",
+              greetingId = copy.id;
+            }
+            if (!greetingId) continue;
+            const linkRes = await apiFetch(
+              `/api/greeting-forms/${greetingId}/link-order`,
+              {
+                method: "PATCH",
+                body: JSON.stringify({ orderId: order.id }),
+              },
             );
+            if (!linkRes.ok) {
+              linkFailures.push(line.product);
+            } else {
+              linkedProducts.add(line.product);
+            }
+          } catch {
+            linkFailures.push(line.product);
           }
         }
+      }
+      if (linkFailures.length > 0) {
+        setFormError(
+          "주문은 접수되었으나 일부 인사장 연결에 실패했습니다. 인사장관리에서 확인해 주세요.",
+        );
       }
     } catch {
       setFormError(
@@ -5829,6 +5967,12 @@ function ProductOrderPanel({
       {/* Products — 개인앱은 항상, 관리자는 배달/택배 선택 후 표시 */}
       {perLineShipping || orderType ? (
       <div className="mb-4 space-y-3">
+        {perLineShipping && isEditMode ? (
+          <p className="rounded-lg border border-[#F6AD55] bg-[#FFFAF0] px-3 py-2 text-[12px] leading-relaxed text-[#9C4221]">
+            이 주문서는 배송 1건입니다. 배송방식과 배송정보는 바꿀 수 있지만,
+            택배·상차로 나누시려면 주문서를 새로 작성해 주세요.
+          </p>
+        ) : null}
         {isDelivery || perLineShipping ? (
           <>
             {/* ① 박스상품 */}
@@ -6370,12 +6514,24 @@ function ProductOrderPanel({
             : resultDialog.success
               ? isEditMode
                 ? "주문서가 처리되었습니다."
-                : "제품주문서가 접수되었습니다."
+                : acceptedOrderNumbers.length > 1
+                  ? // 배송방식이 다른 줄은 주문이 따로 접수된다
+                    `배송 건별로 제품주문서 ${acceptedOrderNumbers.length}건이 접수되었습니다.`
+                  : "제품주문서가 접수되었습니다."
               : formError ||
                 (isEditMode
                   ? "주문서 처리에 실패하였습니다."
                   : "제품주문서 접수에 실패하였습니다.")}
         </p>
+        {resultDialog.success &&
+        resultDialog.kind === "accept" &&
+        acceptedOrderNumbers.length > 1 ? (
+          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-[#475569]">
+            {acceptedOrderNumbers.map((number) => (
+              <li key={number}>{number}</li>
+            ))}
+          </ul>
+        ) : null}
         <div className="mt-5 flex justify-end">
           <Button
             type="button"

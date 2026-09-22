@@ -25,6 +25,9 @@ import {
   parseRecipientPartsFromNotes,
   parcelRecipientContactDisplay,
   parseShipDateFromNotes,
+  parseLineShipmentsFromNotes,
+  PARCEL_CONTACT_MODE_LABEL,
+  type LineShipInfo,
 } from "@/lib/order-notes";
 import { cn } from "@/lib/utils";
 import {
@@ -365,6 +368,14 @@ function mapOrderToPrintPages(
     ];
   }
 
+  /*
+   * 신규 주문은 줄 단위로 쪼개 접수되므로 1주문 1품목이고 위 값들이 곧 정답이다.
+   * 다만 이 변경 전에 접수된 "택배+상차 섞인 한 건"은 주문 단위 값이 한쪽으로만
+   * 채워져 있으므로, notes 의 `배송상세`가 있으면 품목별 배송정보로 덮어쓴다.
+   */
+  const savedLines = parseLineShipmentsFromNotes(notes);
+  const remainingLines = savedLines ? [...savedLines] : null;
+
   return items.map((item, index) => {
     const itemNote = parseItemNoteFromNotes(
       notes,
@@ -376,8 +387,27 @@ function mapOrderToPrintPages(
       .filter(Boolean)
       .filter((value, index, list) => list.indexOf(value) === index)
       .join(" / ");
+
+    // 같은 품명이 택배/상차로 갈린 경우가 있어 품명+수량으로 짝을 찾고 소비한다.
+    let lineOverride: ReturnType<typeof lineShipOverride> | null = null;
+    if (remainingLines) {
+      let matchIndex = remainingLines.findIndex(
+        (line) => line.product === item.productName && line.qty === item.quantity,
+      );
+      if (matchIndex < 0) {
+        matchIndex = remainingLines.findIndex(
+          (line) => line.product === item.productName,
+        );
+      }
+      if (matchIndex >= 0) {
+        const [matched] = remainingLines.splice(matchIndex, 1);
+        lineOverride = lineShipOverride(matched.ship);
+      }
+    }
+
     return {
       ...basePageFields,
+      ...(lineOverride ?? {}),
       pageNo:
         items.length === 1
           ? order.orderNumber
@@ -390,6 +420,38 @@ function mapOrderToPrintPages(
       specialNote,
     };
   });
+}
+
+/** 줄별 배송정보 → 주문서 미리보기에서 품목별로 덮어쓸 값들 */
+function lineShipOverride(ship: LineShipInfo) {
+  const isDelivery = ship.kind === "delivery";
+  const type: OrderShipType = isDelivery ? "배달" : "택배";
+  const joinAddress = (base: string, detail: string) =>
+    [base.trim(), detail.trim()].filter(Boolean).join(" ");
+  const recipientAddress = joinAddress(
+    ship.recipientAddress,
+    ship.recipientAddressDetail,
+  );
+
+  return {
+    type,
+    shipMethod: isDelivery ? "상차" : "택배",
+    companyName: ship.companyName.trim(),
+    shipDate: formatKoreanDate(
+      isDelivery ? ship.deliveryDate : ship.parcelShipDate,
+    ),
+    labelPresence: isDelivery ? "없음" : "유",
+    recipientName: ship.recipientName.trim(),
+    recipientPhone: ship.recipientPhone.trim(),
+    recipientAddress:
+      !isDelivery && ship.contactMode !== "address"
+        ? "-"
+        : recipientAddress || "-",
+    recipientContactLabel:
+      isDelivery || ship.contactMode === "address"
+        ? "받는 사람 주소"
+        : PARCEL_CONTACT_MODE_LABEL[ship.contactMode],
+  };
 }
 
 function SheetCell({
