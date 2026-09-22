@@ -2356,6 +2356,14 @@ function formatMemberTypeLabel(value?: string | null) {
   return MEMBER_TYPE_LABEL[trimmed] ?? trimmed;
 }
 
+type OrdererTitle = "" | "관장" | "총무";
+
+/** 관장·총무만 이름 뒤 '관' 접미사 + readonly 체크박스 표시 대상 */
+function ordererTitleFromMemberType(value?: string | null): OrdererTitle {
+  const label = formatMemberTypeLabel(value);
+  return label === "관장" || label === "총무" ? label : "";
+}
+
 /** 관리자 대리작성 전용: 이름 일부로 기존 회원을 찾아 연락처·중앙까지 채웁니다. */
 function OrdererNameField({
   value,
@@ -3044,7 +3052,10 @@ function ProductOrderPanel({
     useState<ParcelRecipientContactMode>("address");
   const [branchStore, setBranchStore] = useState<BranchStoreId | null>(null);
   const [extraNote, setExtraNote] = useState("");
+  /** true면 이름 뒤에 '관' 접미사. 회원 직분(관장·총무)으로만 결정 */
   const [isDirector, setIsDirector] = useState<boolean>(false);
+  /** readonly 체크박스 라벨용 직분 ("관장" → "관장님") */
+  const [ordererTitle, setOrdererTitle] = useState<OrdererTitle>("");
   const [proxyOrder, setProxyOrder] = useState(false);
   const [loggedInMemberType, setLoggedInMemberType] = useState("");
   /** 대신 주문서 넣기 시 표시용: 로그인한 관장 이름 / 소속 중앙 */
@@ -3215,6 +3226,12 @@ function ProductOrderPanel({
 
         setLoggedInMemberType(data.user.memberType ?? "");
         setLoggedInChurchName(data.user.church?.name ?? "");
+        // 개인앱 본인 주문: 직분이 관장·총무면 이름 뒤 '관' 접미사 (성명 칸은 숨김)
+        if (!blankCustomerFields && !isEditMode && !proxyOrderRef.current) {
+          const title = ordererTitleFromMemberType(data.user.memberType);
+          setOrdererTitle(title);
+          setIsDirector(Boolean(title));
+        }
         if (data.user.name) {
           selfOrdererRef.current.name = data.user.name;
           setLoggedInName(data.user.name);
@@ -3273,6 +3290,7 @@ function ProductOrderPanel({
               status: string;
               notes?: string | null;
               extraNote?: string | null;
+              user?: { memberType?: string | null } | null;
               items?: Array<{
                 productName: string;
                 quantity: number;
@@ -3334,13 +3352,17 @@ function ProductOrderPanel({
         setChurchQuery(parseChurchFromNotes(notes));
 
         const parsedOrderer = parseOrdererFromNotes(notes).trim();
-        if (parsedOrderer.endsWith("관")) {
-          setIsDirector(true);
-          setOrdererName(parsedOrderer.slice(0, -1));
-        } else {
-          setIsDirector(false);
-          setOrdererName(parsedOrderer);
-        }
+        // 직분은 회원 정보 우선, 없으면 구주문 notes의 '관' 접미사로 판정
+        const hydratedTitle =
+          ordererTitleFromMemberType(order.user?.memberType) ||
+          (parsedOrderer.endsWith("관") ? "관장" : "");
+        setOrdererTitle(hydratedTitle);
+        setIsDirector(Boolean(hydratedTitle));
+        setOrdererName(
+          parsedOrderer.endsWith("관")
+            ? parsedOrderer.slice(0, -1)
+            : parsedOrderer,
+        );
 
         setDeliveryCompanyName(parseDeliveryCompanyFromNotes(notes));
         setParcelCompanyName(parseParcelCompanyFromNotes(notes));
@@ -4345,10 +4367,13 @@ function ProductOrderPanel({
 
   const handleSelectOrdererMember = (member: MemberSuggest) => {
     const trimmed = member.fullname.trim();
-    const directorName =
-      isGwanjangMemberType(member.memberType) || trimmed.endsWith("관");
-    setIsDirector(directorName);
-    setOrdererName(directorName && trimmed.endsWith("관") ? trimmed.slice(0, -1) : trimmed);
+    // 직분(관장·총무)으로 체크 여부 결정. 구계정의 '관' 접미사 이름은 관장으로 간주
+    const title =
+      ordererTitleFromMemberType(member.memberType) ||
+      (trimmed.endsWith("관") ? "관장" : "");
+    setOrdererTitle(title);
+    setIsDirector(Boolean(title));
+    setOrdererName(trimmed.endsWith("관") ? trimmed.slice(0, -1) : trimmed);
     setOrdererPhone(formatPhoneInput(member.phone));
     setChurchQuery(member.churchName);
     setChurchId(member.churchId);
@@ -4404,8 +4429,10 @@ function ProductOrderPanel({
                 const checked = event.target.checked;
                 proxyOrderRef.current = checked;
                 setProxyOrder(checked);
-                setIsDirector(false);
                 if (checked) {
+                  // 타인 주문: 직분 접미사 없음
+                  setIsDirector(false);
+                  setOrdererTitle("");
                   selfOrdererRef.current = {
                     name: ordererName,
                     phone: ordererPhone,
@@ -4413,6 +4440,10 @@ function ProductOrderPanel({
                   setOrdererName("");
                   setOrdererPhone("");
                 } else {
+                  // 본인으로 복귀: 로그인 회원 직분으로 복원
+                  const selfTitle = ordererTitleFromMemberType(loggedInMemberType);
+                  setOrdererTitle(selfTitle);
+                  setIsDirector(Boolean(selfTitle));
                   setOrdererName(selfOrdererRef.current.name);
                   setOrdererPhone(selfOrdererRef.current.phone);
                 }
@@ -4432,7 +4463,14 @@ function ProductOrderPanel({
                   <OrdererNameField
                     value={isDirector === true ? displayOrdererName : ordererName}
                     onChange={(next) => {
-                      setSelectedMemberId(null);
+                      if (selectedMemberId !== null) {
+                        // 연결된 회원 이름을 수정/삭제하면 성명 칸을 비우고 직분 체크박스 제거
+                        setSelectedMemberId(null);
+                        setIsDirector(false);
+                        setOrdererTitle("");
+                        setOrdererName("");
+                        return;
+                      }
                       handleOrdererNameInput(next);
                     }}
                     onSelectMember={handleSelectOrdererMember}
@@ -4466,16 +4504,19 @@ function ProductOrderPanel({
                   />
                 )}
               </div>
-              {showDirectorCheckbox ? (
+              {showDirectorCheckbox && isDirector ? (
+                // 회원 직분(관장·총무)으로만 결정되는 readonly 표시. 일반은 렌더하지 않음
                 <div className="flex items-center gap-1.5 pt-6 text-[12.5px] font-semibold whitespace-nowrap text-[#1A202C]">
-                  <label className="inline-flex cursor-pointer items-center gap-1.5">
+                  <label className="inline-flex cursor-default items-center gap-1.5">
                     <input
                       type="checkbox"
-                      checked={isDirector === true}
-                      onChange={(e) => setIsDirector(e.target.checked)}
+                      checked
+                      readOnly
+                      disabled
+                      aria-readonly="true"
                       className="size-4 accent-[#3182CE]"
                     />
-                    관장님
+                    {ordererTitle || "관장"}님
                   </label>
                 </div>
               ) : null}
