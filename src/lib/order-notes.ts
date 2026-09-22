@@ -136,7 +136,7 @@ export function parseSenderPartsFromNotes(notes: string | null | undefined): {
     return { name: "", phone: "", address: "" };
   }
   const match =
-    /보내는사람:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:보내는분상세주소|수취연락|받는분이메일|받는분팩스|받는분주소|주문작업지역|지부매장|인사장종류|인사장번호|\[)|$)/.exec(
+    /보내는사람:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:보내는분상세주소|수취연락|받는분이메일|받는분팩스|받는분주소|주문작업지역|지부매장|인사장종류|인사장번호|배송상세|\[)|$)/.exec(
       notes,
     );
   if (!match) {
@@ -163,7 +163,7 @@ export function parseRecipientPartsFromNotes(notes: string | null | undefined): 
     return { name: "", phone: "", address: "" };
   }
   const match =
-    /받는분:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:수취연락|받는분이메일|받는분팩스|택배발송일|보내는사람|주문작업지역|지부매장|인사장종류|\[)|$)/.exec(
+    /받는분:\s*([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*(.+?)(?=\s*\/\s*(?:수취연락|받는분이메일|받는분팩스|택배발송일|보내는사람|주문작업지역|지부매장|인사장종류|배송상세|\[)|$)/.exec(
       notes,
     );
   if (!match) {
@@ -523,4 +523,138 @@ export function normalizeDeliveryClock(
     ampm: ampm === "오전" || ampm === "오후" ? ampm : "",
     time: formatClock(parts.hour, parts.minute),
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * 줄별 배송정보 (개인앱 제품주문서)
+ *
+ * Shipment 테이블은 주문당 1행이라 줄마다 다른 배송지를 담을 수 없다.
+ * 기존 세그먼트(배달업체명/받는분/택배발송일/보내는사람…)에는 배송방식별
+ * 대표 1벌을 그대로 유지해 관리자·출력·공장 화면을 건드리지 않고,
+ * 줄 단위 원본은 `배송상세:<base64url(JSON)>` 세그먼트에 따로 싣는다.
+ * parseOrderNoteField 가 `[^/]+` 로 끊으므로 '/' 없는 base64url 을 쓴다.
+ * ------------------------------------------------------------------ */
+
+export const LINE_SHIPMENTS_NOTE_FIELD = "배송상세";
+
+export type LineShipKind = "parcel" | "delivery";
+
+export type LineShipInfo = {
+  kind: LineShipKind;
+  /** 납품업체명 (배달/택배 공통) */
+  companyName: string;
+  /** 배달 */
+  deliveryDate: string;
+  deliveryAmPm: "" | DeliveryAmPm;
+  deliveryTime: string;
+  recipientName: string;
+  recipientPhone: string;
+  recipientAddress: string;
+  recipientAddressDetail: string;
+  /** 택배 */
+  parcelShipDate: string;
+  senderName: string;
+  senderPhone: string;
+  senderAddress: string;
+  senderAddressDetail: string;
+  sameAsSenderAddress: boolean;
+  contactMode: ParcelRecipientContactMode;
+};
+
+export type LineShipment = {
+  product: string;
+  qty: number;
+  /** 같은 상품이 택배/상차로 갈라졌을 때 원래 수량 */
+  baseQty: number;
+  note: string;
+  unitPrice: number;
+  lineSection: "box" | "giftUnit";
+  /** 배달 전용 상품(선물세트 박스) 여부 — 복원 시 재추론하지 않도록 함께 싣는다 */
+  deliveryOnly?: boolean;
+  ship: LineShipInfo;
+};
+
+export function emptyLineShipInfo(kind: LineShipKind): LineShipInfo {
+  return {
+    kind,
+    companyName: "",
+    deliveryDate: "",
+    deliveryAmPm: "",
+    deliveryTime: "",
+    recipientName: "",
+    recipientPhone: "",
+    recipientAddress: "",
+    recipientAddressDetail: "",
+    parcelShipDate: "",
+    senderName: "",
+    senderPhone: "",
+    senderAddress: "",
+    senderAddressDetail: "",
+    sameAsSenderAddress: false,
+    contactMode: "address",
+  };
+}
+
+function toBase64Url(bytes: Uint8Array) {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromBase64Url(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "=",
+  );
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+/** 줄별 배송정보를 notes 세그먼트 문자열로. 빈 배열이면 null(세그먼트 생략) */
+export function encodeLineShipments(lines: LineShipment[]): string | null {
+  if (lines.length === 0) {
+    return null;
+  }
+  try {
+    const json = JSON.stringify({ v: 1, lines });
+    const encoded = toBase64Url(new TextEncoder().encode(json));
+    return `${LINE_SHIPMENTS_NOTE_FIELD}:${encoded}`;
+  } catch {
+    return null;
+  }
+}
+
+/** notes 에서 줄별 배송정보 복원. 없거나 깨졌으면 null */
+export function parseLineShipmentsFromNotes(
+  notes: string | null | undefined,
+): LineShipment[] | null {
+  const raw = parseOrderNoteField(notes, LINE_SHIPMENTS_NOTE_FIELD);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const json = new TextDecoder().decode(fromBase64Url(raw.trim()));
+    const parsed = JSON.parse(json) as { v?: number; lines?: unknown };
+    if (!Array.isArray(parsed.lines)) {
+      return null;
+    }
+    const lines = parsed.lines.filter(
+      (line): line is LineShipment =>
+        Boolean(line) &&
+        typeof line === "object" &&
+        typeof (line as LineShipment).product === "string" &&
+        typeof (line as LineShipment).qty === "number" &&
+        Boolean((line as LineShipment).ship),
+    );
+    return lines.length > 0 ? lines : null;
+  } catch {
+    return null;
+  }
 }
