@@ -17,7 +17,6 @@ import {
   greetingMaterialFromNotes,
   isSelfOrCardOnlyGreeting,
   mergeGreetingSelections,
-  parseGreetingSpecialNoteFromNotes,
   parseItemNoteFromNotes,
   parseOrderDateFromNotes,
   parseOrdererFromNotes,
@@ -73,6 +72,8 @@ type ApiOrder = {
   orderConfirmedAt?: string | null;
   createdAt: string;
   notes?: string | null;
+  /** 제품주문서 특이사항 */
+  extraNote?: string | null;
   factoryAlert?: string | null;
   items?: Array<{ productName: string; quantity: number }>;
   shipment?: {
@@ -323,10 +324,8 @@ function mapOrderToPrintPages(
         : greetingMaterialRaw;
   const greetingLocation =
     greetingMaterial === "없음" ? "-" : "박스외부";
-  const greetingSpecialNote =
-    order.greetingForms?.find((form) => form.specialNote?.trim())?.specialNote
-      ?.trim() ||
-    parseGreetingSpecialNoteFromNotes(notes);
+  // 특이사항 칸은 제품주문서 특이사항(Order.extraNote). 인사장 특이사항은 인사장관리에서 확인
+  const orderExtraNote = order.extraNote?.trim() || "";
   const workRegion = parseBranchStoreFromNotes(notes);
   const recipient = parseRecipientPartsFromNotes(notes);
   const parcelContact = parcelRecipientContactDisplay(notes);
@@ -361,7 +360,7 @@ function mapOrderToPrintPages(
         sheetTitle: "제품주문서",
         productImageUrl: null,
         quantityLabel: "0세트",
-        specialNote: greetingSpecialNote,
+        specialNote: orderExtraNote,
       },
     ];
   }
@@ -372,7 +371,8 @@ function mapOrderToPrintPages(
       item.productName,
       item.quantity,
     );
-    const specialNote = [greetingSpecialNote, itemNote]
+    // 제품주문서 특이사항 + 해당 상품의 요청사항(있을 때만)
+    const specialNote = [orderExtraNote, itemNote]
       .filter(Boolean)
       .filter((value, index, list) => list.indexOf(value) === index)
       .join(" / ");
