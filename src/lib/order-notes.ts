@@ -217,16 +217,17 @@ export function parcelRecipientContactDisplay(
   notes: string | null | undefined,
 ): { label: string; value: string } {
   const mode = parseParcelRecipientContactMode(notes);
+  // 신규 주문은 이메일/팩스 선택만 기록하므로 값이 없으면 선택 방식만 표시
   if (mode === "email") {
     return {
       label: "받는 분 이메일",
-      value: parseParcelRecipientEmail(notes),
+      value: parseParcelRecipientEmail(notes) || "이메일",
     };
   }
   if (mode === "fax") {
     return {
       label: "받는 분 팩스",
-      value: parseParcelRecipientFax(notes),
+      value: parseParcelRecipientFax(notes) || "팩스",
     };
   }
   return {

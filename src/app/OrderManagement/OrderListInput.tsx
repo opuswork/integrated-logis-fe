@@ -66,8 +66,6 @@ import {
   parseOrderTypeFromNotes,
   parseParcelCompanyFromNotes,
   parseParcelRecipientContactMode,
-  parseParcelRecipientEmail,
-  parseParcelRecipientFax,
   parseRecipientPartsFromNotes,
   parseSenderPartsFromNotes,
   parseShipDateFromNotes,
@@ -188,55 +186,6 @@ function formatPhoneInput(value: string) {
     return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   }
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-}
-
-const EMAIL_DOMAIN_PRESETS = [
-  "naver.com",
-  "gmail.com",
-  "hotmail.com",
-  "hanmail.net",
-  "daum.net",
-  "nate.com",
-] as const;
-const EMAIL_DOMAIN_CUSTOM = "__custom__";
-
-function formatFaxInput(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  if (!digits) return "";
-  if (digits.startsWith("02")) {
-    const rest = digits.slice(2);
-    if (rest.length === 0) return "(02)";
-    if (rest.length <= 3) return `(02) ${rest}`;
-    if (rest.length <= 7) return `(02) ${rest.slice(0, 3)}-${rest.slice(3)}`;
-    return `(02) ${rest.slice(0, 4)}-${rest.slice(4, 8)}`;
-  }
-  if (digits.length <= 3) return `(${digits}`;
-  const area = digits.slice(0, 3);
-  const rest = digits.slice(3);
-  if (rest.length <= 3) return `(${area}) ${rest}`;
-  return `(${area}) ${rest.slice(0, 3)}-${rest.slice(3, 7)}`;
-}
-
-function faxDigitCount(value: string) {
-  return value.replace(/\D/g, "").length;
-}
-
-function splitSavedEmail(email: string): {
-  local: string;
-  domainSelect: string;
-  domainCustom: string;
-} {
-  const trimmed = email.trim();
-  const at = trimmed.lastIndexOf("@");
-  if (at < 1) {
-    return { local: trimmed, domainSelect: "naver.com", domainCustom: "" };
-  }
-  const local = trimmed.slice(0, at);
-  const domain = trimmed.slice(at + 1);
-  if ((EMAIL_DOMAIN_PRESETS as readonly string[]).includes(domain)) {
-    return { local, domainSelect: domain, domainCustom: "" };
-  }
-  return { local, domainSelect: EMAIL_DOMAIN_CUSTOM, domainCustom: domain };
 }
 
 type MemberNav = (typeof MEMBER_NAV)[number] | "새 주문서 작성";
@@ -2674,6 +2623,7 @@ function AddressField({
   );
 }
 
+/** 택배 받는 사람 연락 방식. 이메일/팩스는 선택만 기록하고 별도 입력은 받지 않는다. */
 function RecipientContactChoice({
   mode,
   onModeChange,
@@ -2685,16 +2635,6 @@ function RecipientContactChoice({
   onAddressDetailChange,
   addressLocked = false,
   addressLabelExtra,
-  fax,
-  onFaxChange,
-  emailLocal,
-  onEmailLocalChange,
-  emailDomain,
-  onEmailDomainChange,
-  emailDomainCustom,
-  onEmailDomainCustomChange,
-  inputClassName,
-  labelClassName,
 }: {
   mode: ParcelRecipientContactMode;
   onModeChange: (mode: ParcelRecipientContactMode) => void;
@@ -2706,16 +2646,6 @@ function RecipientContactChoice({
   onAddressDetailChange: (value: string) => void;
   addressLocked?: boolean;
   addressLabelExtra?: ReactNode;
-  fax: string;
-  onFaxChange: (value: string) => void;
-  emailLocal: string;
-  onEmailLocalChange: (value: string) => void;
-  emailDomain: string;
-  onEmailDomainChange: (value: string) => void;
-  emailDomainCustom: string;
-  onEmailDomainCustomChange: (value: string) => void;
-  inputClassName: string;
-  labelClassName: string;
 }) {
   return (
     <>
@@ -2758,74 +2688,6 @@ function RecipientContactChoice({
           locked={addressLocked}
           labelExtra={addressLabelExtra}
         />
-      ) : null}
-      {mode === "fax" ? (
-        <div>
-          <label className={labelClassName} htmlFor={`${radioName}-fax`}>
-            팩스(FAX)
-          </label>
-          <input
-            id={`${radioName}-fax`}
-            type="text"
-            inputMode="numeric"
-            value={fax}
-            onChange={(event) => onFaxChange(formatFaxInput(event.target.value))}
-            placeholder="(   )  _ _ - _ _ _ _"
-            className={inputClassName}
-          />
-        </div>
-      ) : null}
-      {mode === "email" ? (
-        <div>
-          <label className={labelClassName} htmlFor={`${radioName}-email`}>
-            받는 사람 이메일
-          </label>
-          <div className="mb-3 flex min-w-0 items-center gap-1.5">
-            <input
-              id={`${radioName}-email`}
-              type="text"
-              value={emailLocal}
-              onChange={(event) =>
-                onEmailLocalChange(event.target.value.replace(/@/g, ""))
-              }
-              placeholder="아이디"
-              className={cn(inputClassName, "mb-0 min-w-0 flex-1")}
-            />
-            <span className="shrink-0 text-[13px] font-semibold text-[#1A202C]">
-              @
-            </span>
-            <select
-              aria-label="이메일 도메인"
-              value={emailDomain}
-              onChange={(event) => onEmailDomainChange(event.target.value)}
-              className={cn(
-                inputClassName,
-                "mb-0 min-w-0 flex-1 appearance-none bg-[length:1rem] bg-[position:right_0.5rem_center] bg-no-repeat pr-8",
-                'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23334155\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'m6 9 6 6 6-6\'/%3E%3C/svg%3E")]',
-              )}
-            >
-              {EMAIL_DOMAIN_PRESETS.map((domain) => (
-                <option key={domain} value={domain}>
-                  {domain}
-                </option>
-              ))}
-              <option value={EMAIL_DOMAIN_CUSTOM}>직접입력</option>
-            </select>
-          </div>
-          {emailDomain === EMAIL_DOMAIN_CUSTOM ? (
-            <input
-              type="text"
-              value={emailDomainCustom}
-              onChange={(event) =>
-                onEmailDomainCustomChange(
-                  event.target.value.replace(/@/g, "").replace(/\s/g, ""),
-                )
-              }
-              placeholder="도메인 직접입력 (예: company.co.kr)"
-              className={inputClassName}
-            />
-          ) : null}
-        </div>
       ) : null}
     </>
   );
@@ -3180,13 +3042,6 @@ function ProductOrderPanel({
   const [sameAsSenderAddress, setSameAsSenderAddress] = useState(false);
   const [parcelContactMode, setParcelContactMode] =
     useState<ParcelRecipientContactMode>("address");
-  const [recipientEmailLocal, setRecipientEmailLocal] = useState("");
-  const [recipientEmailDomain, setRecipientEmailDomain] = useState<string>(
-    "naver.com",
-  );
-  const [recipientEmailDomainCustom, setRecipientEmailDomainCustom] =
-    useState("");
-  const [recipientFax, setRecipientFax] = useState("");
   const [branchStore, setBranchStore] = useState<BranchStoreId | null>(null);
   const [extraNote, setExtraNote] = useState("");
   const [isDirector, setIsDirector] = useState<boolean>(false);
@@ -3267,9 +3122,6 @@ function ProductOrderPanel({
       Boolean(senderPhone.trim()) ||
       Boolean(senderAddress.trim()) ||
       Boolean(senderAddressDetail.trim()) ||
-      Boolean(recipientEmailLocal.trim()) ||
-      Boolean(recipientEmailDomainCustom.trim()) ||
-      Boolean(recipientFax.trim()) ||
       parcelContactMode !== "address" ||
       Boolean(branchStore) ||
       Boolean(extraNote.trim()) ||
@@ -3298,9 +3150,6 @@ function ProductOrderPanel({
     senderPhone,
     senderAddress,
     senderAddressDetail,
-    recipientEmailLocal,
-    recipientEmailDomainCustom,
-    recipientFax,
     parcelContactMode,
     branchStore,
     extraNote,
@@ -3523,13 +3372,11 @@ function ProductOrderPanel({
           setParcelShipDate(shipDate.slice(0, 10));
         }
 
-        const parcelMode = parseParcelRecipientContactMode(notes);
+        // 배달은 항상 주소. 택배는 저장된 수취연락(주소/이메일/팩스) 복원
+        const parcelMode = isDeliveryOrder
+          ? "address"
+          : parseParcelRecipientContactMode(notes);
         setParcelContactMode(parcelMode);
-        const emailParts = splitSavedEmail(parseParcelRecipientEmail(notes));
-        setRecipientEmailLocal(emailParts.local);
-        setRecipientEmailDomain(emailParts.domainSelect);
-        setRecipientEmailDomainCustom(emailParts.domainCustom);
-        setRecipientFax(formatFaxInput(parseParcelRecipientFax(notes)));
 
         const recipient = parseRecipientPartsFromNotes(notes);
         const recipientAddressValue =
@@ -3759,6 +3606,10 @@ function ProductOrderPanel({
       return;
     }
     setOrderType(nextType);
+    if (nextType === "delivery") {
+      // 배달은 받는 사람 주소로만 수취
+      setParcelContactMode("address");
+    }
   };
 
   const resetOrderTypeForm = () => {
@@ -3780,10 +3631,6 @@ function ProductOrderPanel({
     setSenderAddressDetail("");
     setSameAsSenderAddress(false);
     setParcelContactMode("address");
-    setRecipientEmailLocal("");
-    setRecipientEmailDomain("naver.com");
-    setRecipientEmailDomainCustom("");
-    setRecipientFax("");
   };
 
   useEffect(() => {
@@ -3814,14 +3661,6 @@ function ProductOrderPanel({
     recipientAddress,
     recipientAddressDetail,
   );
-  const recipientEmailDomainValue =
-    recipientEmailDomain === EMAIL_DOMAIN_CUSTOM
-      ? recipientEmailDomainCustom.trim()
-      : recipientEmailDomain.trim();
-  const fullRecipientEmail =
-    recipientEmailLocal.trim() && recipientEmailDomainValue
-      ? `${recipientEmailLocal.trim()}@${recipientEmailDomainValue}`
-      : "";
   const fullSenderAddress = joinAddress(senderAddress, senderAddressDetail);
 
   const closeResultDialog = () => {
@@ -3908,18 +3747,8 @@ function ProductOrderPanel({
       ) {
         return "배달 정보를 모두 입력해 주세요.";
       }
-      if (parcelContactMode === "email") {
-        if (
-          !fullRecipientEmail ||
-          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fullRecipientEmail)
-        ) {
-          return "받는 사람 이메일을 입력해 주세요.";
-        }
-      } else if (parcelContactMode === "fax") {
-        if (faxDigitCount(recipientFax) < 9) {
-          return "받는 사람 팩스 번호를 입력해 주세요.";
-        }
-      } else if (!recipientAddress.trim()) {
+      // 배달은 받는 사람 주소 필수
+      if (!recipientAddress.trim()) {
         return "받는 사람 주소를 입력해 주세요.";
       }
       if (!isDateOnOrAfterToday(deliveryDate)) {
@@ -3942,18 +3771,8 @@ function ProductOrderPanel({
       if (!isDateOnOrAfterToday(parcelShipDate)) {
         return "택배발송일은 오늘 이후 날짜만 선택할 수 있습니다.";
       }
-      if (parcelContactMode === "email") {
-        if (
-          !fullRecipientEmail ||
-          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fullRecipientEmail)
-        ) {
-          return "받는 사람 이메일을 입력해 주세요.";
-        }
-      } else if (parcelContactMode === "fax") {
-        if (faxDigitCount(recipientFax) < 9) {
-          return "받는 사람 팩스 번호를 입력해 주세요.";
-        }
-      } else if (!recipientAddress.trim()) {
+      // 택배: 주소 선택 시에만 주소 필수. 이메일/팩스는 선택 여부만 기록
+      if (parcelContactMode === "address" && !recipientAddress.trim()) {
         return "받는 사람 주소를 입력해 주세요.";
       }
     }
@@ -4090,6 +3909,10 @@ function ProductOrderPanel({
               .map((draft) => formatGreetingDraftNotes(draft!))
               .join(" / ")
           : null;
+      // 배달은 항상 주소로 수취. 택배만 주소/이메일/팩스 선택
+      const contactMode: ParcelRecipientContactMode = hasDeliveryItems
+        ? "address"
+        : parcelContactMode;
       const notes = [
         `주문자:${displayOrdererName || ordererName.trim()}`,
         `연락처:${ordererPhone.trim()}`,
@@ -4102,9 +3925,7 @@ function ProductOrderPanel({
           : null,
         hasDeliveryItems
           ? `받는분:${recipientName.trim()} / ${recipientPhone.trim()} / ${
-              parcelContactMode === "address" && fullRecipientAddress
-                ? fullRecipientAddress
-                : "-"
+              fullRecipientAddress || "-"
             }`
           : null,
         hasParcelItems ? `택배발송일:${parcelShipDate}` : null,
@@ -4114,18 +3935,13 @@ function ProductOrderPanel({
         hasParcelItems && senderAddressDetail.trim()
           ? `보내는분상세주소:${senderAddressDetail.trim()}`
           : null,
-        `수취연락:${PARCEL_CONTACT_MODE_LABEL[parcelContactMode]}`,
-        parcelContactMode === "address" && fullRecipientAddress
+        // 이메일/팩스는 선택 여부만 기록 (값 입력 없음)
+        `수취연락:${PARCEL_CONTACT_MODE_LABEL[contactMode]}`,
+        contactMode === "address" && fullRecipientAddress
           ? `받는분주소:${fullRecipientAddress}`
           : null,
-        parcelContactMode === "address" && recipientAddressDetail.trim()
+        contactMode === "address" && recipientAddressDetail.trim()
           ? `받는분상세주소:${recipientAddressDetail.trim()}`
-          : null,
-        parcelContactMode === "email" && fullRecipientEmail
-          ? `받는분이메일:${fullRecipientEmail}`
-          : null,
-        parcelContactMode === "fax" && recipientFax.trim()
-          ? `받는분팩스:${recipientFax.trim()}`
           : null,
         `주문작업지역:${selectedBranch}`,
         `지부매장:${selectedBranch}`,
@@ -4169,13 +3985,7 @@ function ProductOrderPanel({
               ? deliveryCompanyName.trim()
               : parcelCompanyName.trim(),
           deliveryAddress:
-            primaryKind === "delivery"
-              ? parcelContactMode === "address"
-                ? fullRecipientAddress
-                : parcelContactMode === "email"
-                  ? fullRecipientEmail
-                  : recipientFax.trim()
-              : fullSenderAddress,
+            primaryKind === "delivery" ? fullRecipientAddress : fullSenderAddress,
           estimatedWindow:
             primaryKind === "delivery"
               ? `${deliveryDate}T${deliveryWindowTime}:00.000Z`
@@ -4895,25 +4705,14 @@ function ProductOrderPanel({
             required
             className={omInputClass}
           />
-          <RecipientContactChoice
-            mode={parcelContactMode}
-            onModeChange={setParcelContactMode}
-            radioName="delivery-recipient-contact"
-            addressId="recipient-address"
-            address={recipientAddress}
-            onAddressChange={setRecipientAddress}
-            addressDetail={recipientAddressDetail}
-            onAddressDetailChange={setRecipientAddressDetail}
-            fax={recipientFax}
-            onFaxChange={setRecipientFax}
-            emailLocal={recipientEmailLocal}
-            onEmailLocalChange={setRecipientEmailLocal}
-            emailDomain={recipientEmailDomain}
-            onEmailDomainChange={setRecipientEmailDomain}
-            emailDomainCustom={recipientEmailDomainCustom}
-            onEmailDomainCustomChange={setRecipientEmailDomainCustom}
-            inputClassName={omInputClass}
-            labelClassName={omLabelClass}
+          {/* 배달은 받는 사람 주소만 (이메일/팩스 선택 없음) */}
+          <AddressField
+            id="recipient-address"
+            label="받는 사람 주소"
+            value={recipientAddress}
+            onChange={setRecipientAddress}
+            detailValue={recipientAddressDetail}
+            onDetailChange={setRecipientAddressDetail}
           />
         </div>
       ) : (
@@ -4998,16 +4797,6 @@ function ProductOrderPanel({
                 보내는 사람 주소와 같음
               </label>
             }
-            fax={recipientFax}
-            onFaxChange={setRecipientFax}
-            emailLocal={recipientEmailLocal}
-            onEmailLocalChange={setRecipientEmailLocal}
-            emailDomain={recipientEmailDomain}
-            onEmailDomainChange={setRecipientEmailDomain}
-            emailDomainCustom={recipientEmailDomainCustom}
-            onEmailDomainCustomChange={setRecipientEmailDomainCustom}
-            inputClassName={omInputClass}
-            labelClassName={omLabelClass}
           />
         </div>
       )}
