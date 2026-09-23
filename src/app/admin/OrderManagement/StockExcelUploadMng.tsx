@@ -1,6 +1,6 @@
 "use client";
 
-import { FileSpreadsheet, Upload, X } from "lucide-react";
+import { FileSpreadsheet, Image as ImageIcon, Upload, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -19,6 +19,8 @@ const TEMPLATE_FILENAME = "재고관리_일괄업로드_양식.xlsx";
 
 type PreviewStatus = "CREATE" | "UPDATE" | "INVALID";
 
+type ImageStatus = "NONE" | "NEW" | "CHANGED" | "SAME" | "REMOVE" | "URL";
+
 type PreviewRow = {
   rowNumber: number;
   status: PreviewStatus;
@@ -33,11 +35,20 @@ type PreviewRow = {
   nextStock: number | null;
   effectiveDate: string | null;
   wholesalePrice: number | null;
+  imageStatus: ImageStatus;
+  /** data URI. 응답 크기 때문에 앞쪽 행·작은 이미지만 채워진다 */
+  imageThumbnail: string | null;
   error?: string;
 };
 
 type PreviewResponse = {
-  summary: { total: number; create: number; update: number; invalid: number };
+  summary: {
+    total: number;
+    create: number;
+    update: number;
+    invalid: number;
+    imageChanged: number;
+  };
   rows: PreviewRow[];
 };
 
@@ -49,6 +60,7 @@ type ImportResult = {
     updated: number;
     skipped: number;
     failed: number;
+    imageUpdated: number;
   };
   createdCodes?: string[];
   updatedCodes?: string[];
@@ -93,6 +105,47 @@ const STATUS_BADGE: Record<PreviewStatus, { label: string; className: string }> 
     UPDATE: { label: "수정", className: "bg-[#E9F8EF] text-[#2F855A]" },
     INVALID: { label: "오류", className: "bg-[#FDEEEE] text-[#C53030]" },
   };
+
+const IMAGE_BADGE: Record<ImageStatus, { label: string; className: string }> = {
+  NEW: { label: "신규", className: "bg-[#EBF4FD] text-[#3182CE]" },
+  CHANGED: { label: "변경", className: "bg-[#E9F8EF] text-[#2F855A]" },
+  SAME: { label: "동일", className: "bg-[#F1F5F9] text-[#64748B]" },
+  REMOVE: { label: "삭제", className: "bg-[#FDEEEE] text-[#C53030]" },
+  URL: { label: "주소", className: "bg-[#FFF7ED] text-[#9C4221]" },
+  NONE: { label: "없음", className: "bg-transparent text-[#CBD5E1]" },
+};
+
+/** 미리보기 표의 사진 칸 — 썸네일과 처리 상태를 같이 보여준다. */
+function ImageCell({ row }: { row: PreviewRow }) {
+  const badge = IMAGE_BADGE[row.imageStatus];
+  return (
+    <div className="flex items-center gap-2">
+      {row.imageThumbnail ? (
+        // eslint-disable-next-line @next/next/no-img-element -- data URI 미리보기라 next/image 부적합
+        <img
+          src={row.imageThumbnail}
+          alt=""
+          className="size-10 shrink-0 rounded border border-[#E2E8F0] object-cover"
+        />
+      ) : (
+        <span
+          aria-hidden
+          className="flex size-10 shrink-0 items-center justify-center rounded border border-dashed border-[#E2E8F0] bg-[#F8FAFC]"
+        >
+          <ImageIcon className="size-4 text-[#CBD5E1]" strokeWidth={1.75} />
+        </span>
+      )}
+      <span
+        className={cn(
+          "shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-bold",
+          badge.className,
+        )}
+      >
+        {badge.label}
+      </span>
+    </div>
+  );
+}
 
 function StatusBadge({ status }: { status: PreviewStatus }) {
   const { label, className } = STATUS_BADGE[status];
@@ -300,6 +353,11 @@ export function StockExcelUploadMng({
                 label="실패"
                 value={result.summary.failed}
                 className="bg-[#FDEEEE] text-[#C53030]"
+              />
+              <ResultChip
+                label="사진 교체"
+                value={result.summary.imageUpdated ?? 0}
+                className="bg-[#FFF7ED] text-[#9C4221]"
               />
             </div>
             {result.failed && result.failed.length > 0 ? (
@@ -539,6 +597,13 @@ function PreviewPanel({
           value={summary.invalid}
           className="bg-[#FDEEEE] text-[#C53030]"
         />
+        {summary.imageChanged > 0 ? (
+          <ResultChip
+            label="사진 교체"
+            value={summary.imageChanged}
+            className="bg-[#FFF7ED] text-[#9C4221]"
+          />
+        ) : null}
       </div>
 
       {validRows === 0 ? (
@@ -567,6 +632,7 @@ function PreviewPanel({
               <th className="px-3 py-2.5">행</th>
               <th className="px-3 py-2.5">상태</th>
               <th className="px-3 py-2.5">코드</th>
+              <th className="px-3 py-2.5">사진</th>
               <th className="px-3 py-2.5">품명</th>
               <th className="px-3 py-2.5">규격</th>
               <th className="px-3 py-2.5">단위</th>
@@ -596,6 +662,9 @@ function PreviewPanel({
                 </td>
                 <td className="px-3 py-2 font-semibold text-[#1A202C]">
                   {row.code || "—"}
+                </td>
+                <td className="px-3 py-2">
+                  <ImageCell row={row} />
                 </td>
                 <td className="px-3 py-2">{row.productName || "—"}</td>
                 <td className="px-3 py-2 text-[#64748B]">{row.spec || "—"}</td>
