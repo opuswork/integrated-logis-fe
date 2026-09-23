@@ -316,6 +316,8 @@ interface OrderRow {
   [key: string]: string | number | boolean;
   id: number;
   orderNumber: string;
+  /** 분할 형제가 공유하는 키(접미사 없는 번호). 수정은 이 키로 연다 */
+  orderGroupKey: string;
   name: string;
   type: string;
   greeting: string;
@@ -3770,24 +3772,32 @@ function ProductOrderPanel({
           );
         }
 
-        const order = data.find((row) => row.orderNumber === editOrderNumber);
+        /*
+         * 수정은 그룹키(접미사 없는 번호)로 연다. 분할 접수된 주문서는 SYN…-1 을
+         * 누르든 -2 를 누르든 같은 주문서 하나가 열려야 하고, 화면에도 접미사 없이
+         * SYN… 으로 보여야 한다. 거기서 형제를 줄로 나란히 놓고 상품·수량·배송방식을
+         * 함께 고친다. 수량을 한쪽만 고치면 다른 쪽과 어긋나기 때문이다.
+         *
+         * 구 주문(ORD-…)과 단일 주문은 그룹키가 곧 주문번호라 형제가 자기 하나뿐이고,
+         * 아래 로직이 기존 단일 주문 경로와 똑같이 동작한다.
+         */
+        const siblingOrders = data
+          .filter(
+            (row) => (row.orderGroupKey || row.orderNumber) === editOrderNumber,
+          )
+          .sort((a, b) => (a.splitIndex ?? 1) - (b.splitIndex ?? 1));
+        const order = siblingOrders[0];
         if (!order) {
           throw new Error("주문서를 찾을 수 없습니다.");
         }
-        if (!canEditOrderStatus(order.status)) {
+        /*
+         * 형제 중 하나라도 고칠 수 있으면 연다. 분할 주문은 한쪽만 먼저 발송되는 일이
+         * 있는데, 그때 남은 쪽까지 막아버리면 고칠 방법이 없어진다.
+         * 잠긴 줄은 아래 originOf 가 줄별로 표시하고 저장 대상에서도 빠진다.
+         */
+        if (!siblingOrders.some((row) => canEditOrderStatus(row.status))) {
           throw new Error("배송중 이후 주문은 수정할 수 없습니다.");
         }
-
-        /*
-         * 분할 접수된 형제 주문(-1, -2 …)을 함께 불러온다.
-         * 한 주문서를 줄 단위로 쪼개 접수하므로, 수량을 한쪽만 고치면 다른 쪽과
-         * 어긋난다. 한 모달에서 같이 보여 주고 같이 저장한다.
-         * 형제가 1건이면 아래 로직이 기존 단일 주문 경로와 똑같이 동작한다.
-         */
-        const siblingKey = order.orderGroupKey || order.orderNumber;
-        const siblingOrders = data
-          .filter((row) => (row.orderGroupKey || row.orderNumber) === siblingKey)
-          .sort((a, b) => (a.splitIndex ?? 1) - (b.splitIndex ?? 1));
         if (cancelled) {
           return;
         }
@@ -6390,6 +6400,7 @@ function OrderStatusPanel({
     data: Array<{
       id: number;
       orderNumber: string;
+      orderGroupKey?: string | null;
       status: string;
       createdAt: string;
       notes?: string | null;
@@ -6428,6 +6439,8 @@ function OrderStatusPanel({
       return {
         id: order.id,
         orderNumber: order.orderNumber,
+        // 구 주문(ORD-…)과 단일 주문은 그룹키가 곧 주문번호다.
+        orderGroupKey: order.orderGroupKey || order.orderNumber,
         name: parseOrdererFromNotes(order.notes) || order.user?.fullname || "-",
         type,
         greeting: greetingLabel,
@@ -6584,7 +6597,7 @@ function OrderStatusPanel({
               <button
                 type="button"
                 className="font-medium text-brand underline-offset-2 hover:underline"
-                onClick={() => onEditOrder(row.orderNumber)}
+                onClick={() => onEditOrder(row.orderGroupKey)}
               >
                 {row.orderNumber}
               </button>
@@ -6688,7 +6701,7 @@ function OrderStatusPanel({
           onEditOrder
             ? () => {
                 closeDayModal();
-                onEditOrder(order.orderNumber);
+                onEditOrder(order.orderGroupKey);
               }
             : undefined
         }
@@ -6813,7 +6826,7 @@ function OrderStatusPanel({
                       onView={() => setViewingOrderNumber(order.orderNumber)}
                       onEdit={
                         onEditOrder
-                          ? () => onEditOrder(order.orderNumber)
+                          ? () => onEditOrder(order.orderGroupKey)
                           : undefined
                       }
                     />
