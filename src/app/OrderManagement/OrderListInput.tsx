@@ -83,10 +83,7 @@ import {
 import {
   canEditOrderStatus,
   describeOrderEditLock,
-  isSiblingOrderNumber,
   memberFacingStatusLabel,
-  orderNumberBase,
-  orderNumberSuffix,
 } from "@/lib/order-delivery";
 import { usePwaInstalled } from "@/lib/pwa-install";
 import { cn } from "@/lib/utils";
@@ -3713,6 +3710,10 @@ function ProductOrderPanel({
           | Array<{
               id: number;
               orderNumber: string;
+              /** 분할 주문 형제가 공유하는 키 */
+              orderGroupKey?: string | null;
+              /** 분할 순번 (형제 정렬용) */
+              splitIndex?: number | null;
               status: string;
               notes?: string | null;
               extraNote?: string | null;
@@ -3772,14 +3773,10 @@ function ProductOrderPanel({
          * 어긋난다. 한 모달에서 같이 보여 주고 같이 저장한다.
          * 형제가 1건이면 아래 로직이 기존 단일 주문 경로와 똑같이 동작한다.
          */
-        const siblingBase = orderNumberBase(order.orderNumber);
+        const siblingKey = order.orderGroupKey || order.orderNumber;
         const siblingOrders = data
-          .filter((row) => isSiblingOrderNumber(row.orderNumber, siblingBase))
-          .sort(
-            (a, b) =>
-              orderNumberSuffix(a.orderNumber) -
-              orderNumberSuffix(b.orderNumber),
-          );
+          .filter((row) => (row.orderGroupKey || row.orderNumber) === siblingKey)
+          .sort((a, b) => (a.splitIndex ?? 1) - (b.splitIndex ?? 1));
         if (cancelled) {
           return;
         }
@@ -4566,9 +4563,6 @@ function ProductOrderPanel({
         setResultDialog({ open: true, success: false, kind: "fail" });
         return;
       }
-      const year = new Date().getFullYear();
-      const baseOrderNumber =
-        editOrderNumber ?? `ORD-${year}-${String(Date.now()).slice(-6)}`;
 
       /*
        * 신규작성은 배송정보가 줄마다 달라서 주문을 줄 단위로 쪼개 접수한다.
@@ -4783,7 +4777,10 @@ function ProductOrderPanel({
       };
 
       const bodies: Array<{
-        orderNumber: string;
+        /** 분할 순번 (1부터). 접수 후 서버가 이 번호로 SYN…-N 을 만든다 */
+        splitIndex: number;
+        /** 수정 모드에서 화면·결과창에 보여 줄 기존 주문번호 */
+        displayOrderNumber: string;
         /** 수정 모드에서 이 묶음을 PATCH 할 주문 id */
         targetOrderId: number | null;
         lines: ProductLineItem[];
@@ -4802,11 +4799,8 @@ function ProductOrderPanel({
         // 수정 묶음은 줄에 찍힌 출처 주문번호를 그대로 쓴다.
         const sourceNumber = lines[0]?.sourceOrderNumber ?? "";
         bodies.push({
-          orderNumber: canSplitLines
-            ? orderGroups.length === 1
-              ? baseOrderNumber
-              : `${baseOrderNumber}-${index + 1}`
-            : sourceNumber || baseOrderNumber,
+          splitIndex: index + 1,
+          displayOrderNumber: sourceNumber || editOrderNumber || '',
           targetOrderId: canSplitLines ? null : (lines[0]?.sourceOrderId ?? null),
           lines,
           payload: built.payload,
@@ -4832,6 +4826,25 @@ function ProductOrderPanel({
         lines: ProductLineItem[];
       }> = [];
 
+      /*
+       * 주문번호 채번은 서버가 한다. 난수라 충돌이 가능한데 orderNumber 가 unique 라,
+       * 재시도할 수 있는 쪽은 서버뿐이다. 신규 접수는 형제가 공유할 그룹키를 여기서
+       * 한 번만 받아 두고 각 형제에 순번만 실어 보낸다.
+       */
+      let orderGroupKey = '';
+      if (canSplitLines) {
+        const keyResponse = await apiFetch('/api/orders/new-group-key');
+        const issued = (await keyResponse.json().catch(() => null)) as {
+          orderGroupKey?: string;
+        } | null;
+        if (!keyResponse.ok || !issued?.orderGroupKey) {
+          setFormError('주문번호를 발급하지 못했습니다. 다시 시도해 주세요.');
+          setResultDialog({ open: true, success: false, kind: 'fail' });
+          return;
+        }
+        orderGroupKey = issued.orderGroupKey;
+      }
+
       for (const body of bodies) {
         // 분할 접수된 주문서는 묶음마다 대상 주문이 다르다.
         const patchOrderId = body.targetOrderId || editOrderId;
@@ -4844,7 +4857,9 @@ function ProductOrderPanel({
             : await apiFetch("/api/orders", {
                 method: "POST",
                 body: JSON.stringify({
-                  orderNumber: body.orderNumber,
+                  orderGroupKey,
+                  splitIndex: body.splitIndex,
+                  splitCount: bodies.length,
                   userId: selectedMemberId ?? auth.id,
                   status: "PLACED",
                   // 자동완성으로 회원을 고르지 않았으면 주문자 정보를 넘겨
@@ -4890,16 +4905,18 @@ function ProductOrderPanel({
 
         const created = (await response.json().catch(() => null)) as {
           id?: number;
+          orderNumber?: string;
         } | null;
         createdOrders.push({
           id: created?.id ?? (isEditMode ? editOrderId : null),
-          orderNumber: body.orderNumber,
+          // 번호는 서버가 붙인다. 응답을 못 읽은 경우에만 화면용 번호로 떨어진다.
+          orderNumber: created?.orderNumber ?? body.displayOrderNumber,
           lines: body.lines,
         });
       }
 
       setResultDialog({ open: true, success: true, kind: "accept" });
-      setAcceptedOrderNumber(createdOrders[0]?.orderNumber ?? baseOrderNumber);
+      setAcceptedOrderNumber(createdOrders[0]?.orderNumber ?? '');
       setAcceptedOrderNumbers(createdOrders.map((order) => order.orderNumber));
 
       /*
