@@ -3419,6 +3419,13 @@ function ProductOrderPanel({
   const [orderType, setOrderType] = useState<OrderType | null>(null);
   const [productItems, setProductItems] = useState<ProductLineItem[]>([]);
   /**
+   * 수정 화면에 처음 불러온 줄별 수량. 분할 주문은 줄 수량의 합이 원래 수량과
+   * 같아야 하므로, 저장할 때 이 값과 맞춰 보고 어긋나면 되돌린다.
+   */
+  const [hydratedQtyByLine, setHydratedQtyByLine] = useState<
+    Record<string, number>
+  >({});
+  /**
    * 개인앱·관리자 모두 줄마다 배송방식과 배송정보를 따로 고른다.
    * 줄 자동분할(택배↔상차)은 신규작성에서만.
    * 접수 후에는 주문 1건 = 배송 1건이라, 수정화면에서 쪼개면 주문번호 규칙이 깨진다.
@@ -4021,6 +4028,9 @@ function ProductOrderPanel({
           }
           setLineShipInfo(mergedInfo);
           setProductItems(mergedRows);
+          setHydratedQtyByLine(
+            Object.fromEntries(mergedRows.map((row) => [row.lineId, row.qty])),
+          );
         } else {
           // 구주문: 주문 단위 배송정보 1벌을 모든 줄에 복사해 둔다.
           const legacyInfo: LineShipInfo = {
@@ -4071,6 +4081,9 @@ function ProductOrderPanel({
           });
           setLineShipInfo(restoredInfo);
           setProductItems(rows);
+          setHydratedQtyByLine(
+            Object.fromEntries(rows.map((row) => [row.lineId, row.qty])),
+          );
         }
       } catch (err) {
         if (!cancelled) {
@@ -4283,8 +4296,12 @@ function ProductOrderPanel({
       }
 
       if (!canSplitLines) {
-        // 관리자 / 수정 모드: 분할 없이 수량만 바꾼다 (baseQty 도 함께 따라감)
-        const nextQty = Math.max(1, qty);
+        /*
+         * 관리자 / 수정 모드: 분할 없이 수량만 바꾼다 (baseQty 도 함께 따라감).
+         * 0 을 허용해야 입력칸을 비우고 다시 칠 수 있다. 1 로 끌어올리면 지운
+         * 자리에 1 이 남아 지워지지 않는 것처럼 보인다. 빈 값은 저장할 때 막는다.
+         */
+        const nextQty = Math.max(0, qty);
         return current.map((item, index) =>
           index === rowIndex
             ? { ...item, qty: nextQty, baseQty: nextQty }
@@ -4501,6 +4518,57 @@ function ProductOrderPanel({
     const shouldAttachGreetings = Object.values(savedGreetingsByProduct).some(
       (draft) => Boolean(draft?.id || draft?.greetingContent?.trim()),
     );
+
+    /*
+     * 수정 화면의 수량 검증.
+     *
+     * 분할 접수된 주문서는 한 상품이 여러 줄로 갈라져 있고(100 = 택배 45 + 상차 55),
+     * 줄 사이에 수량을 옮기는 것만 허용한다. 한 줄만 고치고 나머지를 그대로 두면
+     * 합이 어긋나 원래 주문과 맞지 않는다. 상품이나 전체 수량을 바꾸려면 주문서를
+     * 지우고 새로 써야 한다 — 여기서 고치면 이미 나간 출력물·재고와 틀어진다.
+     *
+     * 어긋나면 되돌린다. 어디를 잘못 고쳤는지 찾게 하는 것보다 원래 수량에서 다시
+     * 시작하는 편이 낫다.
+     */
+    if (isEditMode) {
+      const sumByProduct = (pick: (row: ProductLineItem) => number) => {
+        const totals = new Map<string, number>();
+        for (const row of productItems) {
+          if (hydratedQtyByLine[row.lineId] === undefined) {
+            continue;
+          }
+          totals.set(row.product, (totals.get(row.product) ?? 0) + pick(row));
+        }
+        return totals;
+      };
+      const originalTotals = sumByProduct(
+        (row) => hydratedQtyByLine[row.lineId] ?? 0,
+      );
+      const currentTotals = sumByProduct((row) => row.qty);
+      const totalChanged = [...originalTotals].some(
+        ([product, total]) => (currentTotals.get(product) ?? 0) !== total,
+      );
+      const hasEmptyQty = productItems.some((row) => row.qty < 1);
+
+      if (totalChanged || hasEmptyQty) {
+        setProductItems((current) =>
+          current.map((row) => {
+            const original = hydratedQtyByLine[row.lineId];
+            return original === undefined
+              ? row
+              : { ...row, qty: original, baseQty: original };
+          }),
+        );
+        setAlertDialog({
+          open: true,
+          message:
+            "수량이 올바르지 않습니다. 나뉘어 있는 줄의 수량 합계는 원래 수량과 "
+            + "같아야 합니다. 원래 수량으로 되돌렸습니다. 상품이나 전체 수량을 "
+            + "바꾸려면 이 주문서를 삭제하고 새로 작성해 주세요.",
+        });
+        return;
+      }
+    }
 
     setFormError("");
     const validationError = validateRequired();
@@ -5080,11 +5148,12 @@ function ProductOrderPanel({
           return (
             <input
               type="number"
-              min={1}
+              min={0}
               required
               readOnly={locked}
               aria-label={`${row.product} 수량`}
-              value={row.qty}
+              // 0 은 "비어 있음". 지우는 중에 1 이 끼어들지 않게 빈 칸으로 보인다.
+              value={row.qty === 0 ? "" : row.qty}
               onChange={(event) => {
                 if (locked) return;
                 const nextQty = Number(event.target.value);
@@ -5384,11 +5453,12 @@ function ProductOrderPanel({
           </span>
           <input
             type="number"
-            min={1}
+            min={0}
             required
             readOnly={locked}
             aria-label={`${row.product} 수량`}
-            value={row.qty}
+            // 0 은 "비어 있음". 지우는 중에 1 이 끼어들지 않게 빈 칸으로 보인다.
+            value={row.qty === 0 ? "" : row.qty}
             onChange={(event) => {
               if (locked) return;
               const nextQty = Number(event.target.value);
@@ -6083,7 +6153,9 @@ function ProductOrderPanel({
         title="알림"
         onClose={() => setAlertDialog({ open: false, message: "" })}
       >
-        <p className="text-sm leading-6 text-ink">{alertDialog.message}</p>
+        <p className="whitespace-pre-line text-sm leading-6 text-ink">
+          {alertDialog.message}
+        </p>
         <div className="mt-5 flex justify-end">
           <Button
             type="button"
