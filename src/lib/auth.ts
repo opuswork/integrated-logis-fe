@@ -138,6 +138,21 @@ export function canWriteShipmentOps(
 }
 
 /**
+ * 출고요청일 변경: 공장(비-G) + 최고관리자 + 관할 매장관리자.
+ *
+ * 포장·출고와 달리 현장 작업이 아니라 "언제까지 내보내 달라"는 요청이라
+ * 주문을 받은 매장이 직접 잡는다. 관할 밖 주문은 여전히 막힌다.
+ */
+export function canWriteShipDate(
+  user: AuthUser | null | undefined,
+  storeRegion: AdminRegion | null,
+): boolean {
+  return (
+    canWriteShipmentOps(user) || canPressShipmentFinalActions(user, storeRegion)
+  );
+}
+
+/**
  * 배송관리 최종완료·최종확인:
  * 관할 매장관리자 + 최고관리자 (공장·Factory-G 불가)
  */

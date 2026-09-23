@@ -11,7 +11,11 @@ import { MdCalendarPicker } from "@/components/ui/md-calendar-picker";
 import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
-import { canPressShipmentFinalActions, canWriteShipmentOps, getAuthUser } from "@/lib/auth";
+import {
+  canPressShipmentFinalActions,
+  canWriteShipDate,
+  getAuthUser,
+} from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
   expandShipmentOpsRows,
@@ -90,7 +94,6 @@ function isUrgent(row: ShipmentOpsOrder) {
 
 export function AdminShipmentMng() {
   const auth = getAuthUser();
-  const canOperate = canWriteShipmentOps(auth);
   const isFactory = auth?.role === "factory";
   const [rows, setRows] = useState<ShipmentOpsOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -339,6 +342,8 @@ export function AdminShipmentMng() {
                     auth,
                     row.storeRegion,
                   );
+                  // 출고요청일은 관할 매장관리자도 잡을 수 있다.
+                  const canSetShipDate = canWriteShipDate(auth, row.storeRegion);
                   // 공장+택배는 출고관리 「택배픽업」으로 이미 배송완료 → 최종완료 비활성
                   const finalCompleteEnabled =
                     canFinal &&
@@ -400,7 +405,9 @@ export function AdminShipmentMng() {
                           valueIso={row.requestedShipDate}
                           yearHint={row.requestedShipDate}
                           minIso={todayIsoDate()}
-                          disabled={!canOperate || savingId === `d-${row.id}`}
+                          disabled={
+                            !canSetShipDate || savingId === `d-${row.id}`
+                          }
                           title="출고요청일 (m/d)"
                           inputClassName="rounded border border-[#E2E8F0] px-1.5 py-1 text-[12px] disabled:opacity-50"
                           onChangeIso={(v) => {
@@ -540,7 +547,8 @@ export function AdminShipmentMng() {
 
       <p className="mt-3 text-[11px] leading-relaxed text-[#64748B]">
         출고요청일은 오늘 이후 날짜만 선택 가능하며 선택 즉시 저장됩니다.
-        포장·출고·출고요청일은 공장관리자(및 최고관리자)가 처리합니다.
+        출고요청일은 공장관리자·최고관리자와 관할 매장관리자가 잡을 수 있습니다.
+        포장·출고는 공장관리자(및 최고관리자)가 처리합니다.
         공장·택배 건은 출고관리 「택배픽업」으로 배송완료되며 이 화면의
         최종완료는 쓰지 않습니다. 상차 건의 최종완료·최종확인은 관할
         매장관리자(및 최고관리자)만 누를 수 있으며, 공장관리자는
