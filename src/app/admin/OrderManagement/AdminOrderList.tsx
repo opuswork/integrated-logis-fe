@@ -58,6 +58,8 @@ function isFactoryAssignmentLocked(row: {
 type AdminOrderRow = {
   id: number;
   orderNumber: string;
+  /** 분할 형제가 공유하는 키(접미사 없는 번호). 수정은 이 키로 연다 */
+  orderGroupKey: string;
   name: string;
   type: string;
   status: DeliveryOrderStatus;
@@ -328,6 +330,7 @@ export function AdminOrderList({
     (order: {
       id: number;
       orderNumber: string;
+      orderGroupKey?: string | null;
       status: DeliveryOrderStatus;
       createdAt: string;
       notes?: string | null;
@@ -358,6 +361,8 @@ export function AdminOrderList({
       return {
         id: order.id,
         orderNumber: order.orderNumber,
+        // 구 주문(ORD-…)과 단일 주문은 그룹키가 곧 주문번호다.
+        orderGroupKey: order.orderGroupKey || order.orderNumber,
         name:
           parseOrdererFromNotes(order.notes) || order.user?.fullname || "-",
         type,
@@ -1057,7 +1062,7 @@ export function AdminOrderList({
                           <button
                             type="button"
                             className="text-left text-brand underline-offset-2 hover:underline"
-                            onClick={() => onEditOrder(row.orderNumber)}
+                            onClick={() => onEditOrder(row.orderGroupKey)}
                           >
                             {row.orderNumber}
                           </button>
