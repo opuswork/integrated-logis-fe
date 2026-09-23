@@ -16,7 +16,6 @@ import { apiFetch } from "@/lib/api";
 import { canWriteShipmentOps, getAuthUser } from "@/lib/auth";
 import { formatMonthDay } from "@/lib/date-format";
 import {
-  SaveCancelledError,
   canvasToPngBlob,
   copyPngBlobToClipboard,
   packagingCaptureFilename,
@@ -130,12 +129,10 @@ export function AdminPackagingMng() {
       });
       const blob = await canvasToPngBlob(canvas);
       const filename = packagingCaptureFilename();
-      await savePngBlob(blob, filename);
+      // 저장 위치를 묻지 않고 브라우저 다운로드 폴더로 바로 내려받는다
+      savePngBlob(blob, filename);
       await copyPngBlobToClipboard(blob);
     } catch (error) {
-      if (error instanceof SaveCancelledError) {
-        return;
-      }
       setAlertDialog({
         open: true,
         message:
