@@ -1958,24 +1958,35 @@ function ProductAddDialog({
               }}
               onFocus={() => setActiveIndex(index)}
               onKeyDown={(event) => {
-                if (event.key === "Tab") {
+                /*
+                 * 이 입력칸은 목록(listbox) 안에 있고, 목록도 같은 키를 처리한다.
+                 * 여기서 멈추지 않으면 한 번 누른 키가 두 번 처리된다.
+                 * 모바일 숫자 키패드의 '확인'이 Enter 라, 담기가 두 번 실행되어
+                 * 같은 품목이 병합되며 수량이 2배로 들어갔다(100 → 200).
+                 */
+                if (
+                  event.key === "Tab" ||
+                  event.key === "Enter" ||
+                  event.key === "ArrowDown" ||
+                  event.key === "ArrowUp"
+                ) {
                   event.preventDefault();
+                  event.stopPropagation();
+                }
+                if (event.key === "Tab") {
                   focusList();
                   return;
                 }
                 if (event.key === "Enter") {
-                  event.preventDefault();
                   handleAdd();
                   return;
                 }
                 if (event.key === "ArrowDown") {
-                  event.preventDefault();
                   moveActive(1);
                   focusList();
                   return;
                 }
                 if (event.key === "ArrowUp") {
-                  event.preventDefault();
                   moveActive(-1);
                   focusList();
                 }
