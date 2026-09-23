@@ -103,6 +103,41 @@ export function canEditOrderStatus(status: string) {
   );
 }
 
+/**
+ * 수량·배송방식을 고칠 수 있는지 판정한다. 막아야 하면 사유, 고칠 수 있으면 null.
+ *
+ * 현장 작업이 시작되면 잠근다.
+ * - 포장관리에서 '완료'(packDone) → 이미 포장된 수량
+ * - 배송관리 '최종확인'의 '발송완료'(finalConfirmDone) → 이미 나간 건
+ *
+ * 서버의 be/src/orders/order-edit-guard.ts 와 같은 규칙이다. 한쪽만 고치지 말 것.
+ */
+export function describeOrderEditLock(order: {
+  status: string;
+  packDone?: boolean | null;
+  finalConfirmDone?: boolean | null;
+}): string | null {
+  if (!canEditOrderStatus(order.status)) {
+    return "배송중 이후 주문은 수정할 수 없습니다.";
+  }
+  if (order.packDone) {
+    return "포장완료된 주문은 수량·배송방식을 수정할 수 없습니다.";
+  }
+  if (order.finalConfirmDone) {
+    return "발송완료된 주문은 수량·배송방식을 수정할 수 없습니다.";
+  }
+  return null;
+}
+
+/** 포장완료·발송완료 전까지만 주문 내용을 고칠 수 있다 */
+export function canEditOrderContent(order: {
+  status: string;
+  packDone?: boolean | null;
+  finalConfirmDone?: boolean | null;
+}) {
+  return describeOrderEditLock(order) === null;
+}
+
 /** 배송중 이전: 주문서 취소 가능 (수정 가능 구간과 동일) */
 export function canCancelOrderStatus(status: string) {
   return canEditOrderStatus(status);

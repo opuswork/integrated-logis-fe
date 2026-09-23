@@ -82,6 +82,7 @@ import {
 } from "@/lib/order-notes";
 import {
   canEditOrderStatus,
+  describeOrderEditLock,
   memberFacingStatusLabel,
 } from "@/lib/order-delivery";
 import { usePwaInstalled } from "@/lib/pwa-install";
@@ -206,8 +207,19 @@ interface ProductLineItem {
   baseQty: number;
   /** 같은 상품에서 갈라진 줄끼리 공유하는 그룹 id */
   splitGroupId: string;
-  /** 배송정보 저장 완료 → 수량·배송선택 잠김 */
+  /** 배송정보 입력 완료 (제출 전 검증용). 잠금은 statusLocked 로 따로 본다 */
   shipSaved: boolean;
+  /**
+   * 이 줄이 속한 실제 주문 id. 분할 접수된 주문서는 줄마다 주문이 다르다.
+   * 신규작성은 아직 주문이 없으므로 0.
+   */
+  sourceOrderId: number;
+  /** 표시용 주문번호 (ORD-2026-567480-1) */
+  sourceOrderNumber: string;
+  /** 포장완료·발송완료되어 수량·배송선택을 고칠 수 없는 줄 */
+  statusLocked: boolean;
+  /** statusLocked 인 이유 (화면 안내용) */
+  lockReason: string;
   note: string;
   greeting: string;
   unitPrice: number;
@@ -221,6 +233,31 @@ let lineIdCounter = 0;
 function nextLineId() {
   lineIdCounter += 1;
   return `line-${Date.now().toString(36)}-${lineIdCounter}`;
+}
+
+/**
+ * 줄이 어느 주문에서 왔는지와, 잠겼다면 그 이유를 보여준다.
+ * 분할 접수된 주문서는 한 화면에 여러 주문의 줄이 섞여 있어 표시가 필요하다.
+ */
+function LineOriginNote({ row }: { row: ProductLineItem }) {
+  if (!row.sourceOrderNumber) {
+    return null;
+  }
+  return (
+    <span className="mt-0.5 flex flex-wrap items-center gap-1">
+      <span className="rounded bg-[#EDF2F7] px-1.5 py-0.5 text-[10.5px] font-bold text-[#64748B]">
+        {row.sourceOrderNumber}
+      </span>
+      {row.statusLocked ? (
+        <span
+          title={row.lockReason}
+          className="rounded bg-[#FDEEEE] px-1.5 py-0.5 text-[10.5px] font-bold text-[#C53030]"
+        >
+          수정불가
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 /** 줄별 배송방식 드롭다운 라벨 (스크린샷 ③④) */
@@ -3673,9 +3710,18 @@ function ProductOrderPanel({
           | Array<{
               id: number;
               orderNumber: string;
+              /** 분할 주문 형제가 공유하는 키 */
+              orderGroupKey?: string | null;
+              /** 분할 순번 (형제 정렬용) */
+              splitIndex?: number | null;
               status: string;
               notes?: string | null;
               extraNote?: string | null;
+              /** 포장관리 '완료' → 수량·배송방식 잠금 */
+              packDone?: boolean | null;
+              /** 배송관리 '발송완료' → 수량·배송방식 잠금 */
+              finalConfirmDone?: boolean | null;
+              packagingWorker?: string | null;
               user?: { memberType?: string | null } | null;
               items?: Array<{
                 productName: string;
@@ -3720,6 +3766,17 @@ function ProductOrderPanel({
         if (!canEditOrderStatus(order.status)) {
           throw new Error("배송중 이후 주문은 수정할 수 없습니다.");
         }
+
+        /*
+         * 분할 접수된 형제 주문(-1, -2 …)을 함께 불러온다.
+         * 한 주문서를 줄 단위로 쪼개 접수하므로, 수량을 한쪽만 고치면 다른 쪽과
+         * 어긋난다. 한 모달에서 같이 보여 주고 같이 저장한다.
+         * 형제가 1건이면 아래 로직이 기존 단일 주문 경로와 똑같이 동작한다.
+         */
+        const siblingKey = order.orderGroupKey || order.orderNumber;
+        const siblingOrders = data
+          .filter((row) => (row.orderGroupKey || row.orderNumber) === siblingKey)
+          .sort((a, b) => (a.splitIndex ?? 1) - (b.splitIndex ?? 1));
         if (cancelled) {
           return;
         }
@@ -3838,17 +3895,20 @@ function ProductOrderPanel({
           ) ?? null;
         setBranchStore(branch?.id ?? null);
 
+        // 인사장은 형제 주문마다 따로 달려 있어 모두 모아 둔다.
         const greetingMap: Record<string, GreetingDraft> = {};
-        for (const form of order.greetingForms ?? []) {
-          const draft = greetingDraftFromApi(form);
-          if (!draft) {
-            continue;
+        for (const sibling of siblingOrders) {
+          for (const form of sibling.greetingForms ?? []) {
+            const draft = greetingDraftFromApi(form);
+            if (!draft) {
+              continue;
+            }
+            const key =
+              draft.productName.trim() ||
+              form.productName?.trim() ||
+              `greeting-${draft.id ?? form.id}`;
+            greetingMap[key] = draft;
           }
-          const key =
-            draft.productName.trim() ||
-            form.productName?.trim() ||
-            `greeting-${draft.id ?? form.id}`;
-          greetingMap[key] = draft;
         }
         onHydratedGreetings?.(greetingMap);
 
@@ -3862,13 +3922,37 @@ function ProductOrderPanel({
         // 줄별 배송정보(배송상세 세그먼트)가 있으면 그대로 복원한다.
         const savedLines = parseLineShipmentsFromNotes(notes);
 
-        if (savedLines) {
-          const restoredInfo: Record<string, LineShipInfo> = {};
+        /** 줄에 찍어 둘 출처 주문 + 잠금 상태. 저장할 때 어느 주문에 보낼지 이걸로 안다. */
+        const originOf = (src: (typeof siblingOrders)[number]) => {
+          const lockReason =
+            describeOrderEditLock({
+              status: src.status,
+              packDone: src.packDone,
+              finalConfirmDone: src.finalConfirmDone,
+            }) ?? "";
+          return {
+            sourceOrderId: src.id,
+            sourceOrderNumber: src.orderNumber,
+            statusLocked: lockReason !== "",
+            lockReason,
+          };
+        };
+
+        /**
+         * 형제 주문 한 건을 화면 줄로 복원한다.
+         * 줄별 배송정보를 쓰는 주문에만 쓴다(분할 접수된 주문은 항상 여기 해당).
+         */
+        const buildSavedRows = (
+          src: (typeof siblingOrders)[number],
+          lines: NonNullable<ReturnType<typeof parseLineShipmentsFromNotes>>,
+        ) => {
+          const info: Record<string, LineShipInfo> = {};
+          const origin = originOf(src);
           // 같은 품명이 택배/상차로 갈라진 경우 같은 splitGroupId로 묶어준다.
           const groupByProduct = new Map<string, string>();
-          const rows: ProductLineItem[] = savedLines.map((line) => {
+          const rows: ProductLineItem[] = lines.map((line) => {
             const lineId = nextLineId();
-            restoredInfo[lineId] = line.ship;
+            info[lineId] = line.ship;
             const lineSection =
               line.lineSection ?? inferLineSection(line.product);
             let groupId = groupByProduct.get(line.product);
@@ -3890,10 +3974,32 @@ function ProductOrderPanel({
               // 구버전 payload 는 deliveryOnly 가 없으니 저장된 배송방식으로 판단
               deliveryOnly: line.deliveryOnly ?? line.ship.kind === "delivery",
               lineSection,
+              ...origin,
             };
           });
-          setLineShipInfo(restoredInfo);
-          setProductItems(rows);
+          return { rows, info };
+        };
+
+        // 형제가 모두 줄별 배송정보를 가진 경우에만 함께 편집한다.
+        // 하나라도 구주문이면 아래 단일 주문 경로로 떨어뜨려 회귀를 막는다.
+        const siblingSavedLines = siblingOrders.map((src) => ({
+          src,
+          lines: parseLineShipmentsFromNotes(src.notes ?? ""),
+        }));
+        const allHaveSavedLines = siblingSavedLines.every(
+          (entry) => entry.lines !== null && entry.lines.length > 0,
+        );
+
+        if (savedLines && allHaveSavedLines) {
+          const mergedInfo: Record<string, LineShipInfo> = {};
+          const mergedRows: ProductLineItem[] = [];
+          for (const entry of siblingSavedLines) {
+            const built = buildSavedRows(entry.src, entry.lines!);
+            Object.assign(mergedInfo, built.info);
+            mergedRows.push(...built.rows);
+          }
+          setLineShipInfo(mergedInfo);
+          setProductItems(mergedRows);
         } else {
           // 구주문: 주문 단위 배송정보 1벌을 모든 줄에 복사해 둔다.
           const legacyInfo: LineShipInfo = {
@@ -3939,6 +4045,7 @@ function ProductOrderPanel({
               unitPrice: item.price || 0,
               deliveryOnly: lineSection === "box",
               lineSection,
+              ...originOf(order),
             };
           });
           setLineShipInfo(restoredInfo);
@@ -4030,6 +4137,11 @@ function ProductOrderPanel({
               : "",
             deliveryOnly: item.deliveryOnly,
             lineSection: item.lineSection,
+            // 새로 담은 줄은 아직 주문이 없다. 접수 후 주문번호가 정해진다.
+            sourceOrderId: 0,
+            sourceOrderNumber: "",
+            statusLocked: false,
+            lockReason: "",
           });
         }
       }
@@ -4049,9 +4161,29 @@ function ProductOrderPanel({
       return;
     }
     const target = productItems[index];
+    /*
+     * 배송방식이 바뀌면 배송정보를 다시 받아야 한다.
+     * 택배는 받는분 주소·발송일, 상차는 배송일시처럼 필요한 항목이 서로 달라서
+     * 이전 방식의 값을 그대로 두면 반쪽짜리 데이터가 저장된다.
+     */
+    const kindChanged = Boolean(target.orderKind) && target.orderKind !== kind;
     const next = productItems.map((row) =>
-      row.lineId === lineId ? { ...row, orderKind: kind } : row,
+      row.lineId === lineId
+        ? {
+            ...row,
+            orderKind: kind,
+            shipSaved: kindChanged ? false : row.shipSaved,
+          }
+        : row,
     );
+    if (kindChanged) {
+      setLineShipInfo((info) => {
+        if (!info[lineId]) return info;
+        const rest = { ...info };
+        delete rest[lineId];
+        return rest;
+      });
+    }
 
     // 수정 모드: 이미 주문 1건 = 배송 1건이므로 줄을 더 쪼개지 않는다.
     if (!canSplitLines) {
@@ -4431,9 +4563,6 @@ function ProductOrderPanel({
         setResultDialog({ open: true, success: false, kind: "fail" });
         return;
       }
-      const year = new Date().getFullYear();
-      const baseOrderNumber =
-        editOrderNumber ?? `ORD-${year}-${String(Date.now()).slice(-6)}`;
 
       /*
        * 신규작성은 배송정보가 줄마다 달라서 주문을 줄 단위로 쪼개 접수한다.
@@ -4441,9 +4570,33 @@ function ProductOrderPanel({
        *  한 주문에 여러 배송지를 담으면 관리자·출력·공장·우체국 화면이 전부 틀어진다)
        * 줄이 2개 이상이면 주문번호에 -1, -2 … 접미사가 붙는다.
        */
+      /*
+       * 신규작성은 줄마다 새 주문을 만든다.
+       * 수정은 줄이 어느 주문에서 왔는지(sourceOrderId)로 묶는다. 분할 접수된
+       * 주문서는 형제 주문을 한 모달에서 같이 고치므로 묶음이 여럿일 수 있다.
+       * 포장완료·발송완료된 묶음은 저장 대상에서 아예 뺀다.
+       */
       const orderGroups: ProductLineItem[][] = canSplitLines
         ? productItems.map((item) => [item])
-        : [productItems];
+        : (() => {
+            const byOrder = new Map<number, ProductLineItem[]>();
+            for (const item of productItems) {
+              if (item.statusLocked) continue;
+              const key = item.sourceOrderId;
+              const bucket = byOrder.get(key);
+              if (bucket) bucket.push(item);
+              else byOrder.set(key, [item]);
+            }
+            return [...byOrder.values()];
+          })();
+
+      if (!canSplitLines && orderGroups.length === 0) {
+        setFormError(
+          "포장완료·발송완료되어 수정할 수 있는 항목이 없습니다.",
+        );
+        setResultDialog({ open: true, success: false, kind: "fail" });
+        return;
+      }
 
       /** 줄 묶음 하나 → notes + payload 한 벌 */
       const buildOrderBody = (lines: ProductLineItem[]) => {
@@ -4624,7 +4777,12 @@ function ProductOrderPanel({
       };
 
       const bodies: Array<{
-        orderNumber: string;
+        /** 분할 순번 (1부터). 접수 후 서버가 이 번호로 SYN…-N 을 만든다 */
+        splitIndex: number;
+        /** 수정 모드에서 화면·결과창에 보여 줄 기존 주문번호 */
+        displayOrderNumber: string;
+        /** 수정 모드에서 이 묶음을 PATCH 할 주문 id */
+        targetOrderId: number | null;
         lines: ProductLineItem[];
         payload: Extract<
           ReturnType<typeof buildOrderBody>,
@@ -4638,11 +4796,12 @@ function ProductOrderPanel({
           setResultDialog({ open: true, success: false, kind: "fail" });
           return;
         }
+        // 수정 묶음은 줄에 찍힌 출처 주문번호를 그대로 쓴다.
+        const sourceNumber = lines[0]?.sourceOrderNumber ?? "";
         bodies.push({
-          orderNumber:
-            orderGroups.length === 1
-              ? baseOrderNumber
-              : `${baseOrderNumber}-${index + 1}`,
+          splitIndex: index + 1,
+          displayOrderNumber: sourceNumber || editOrderNumber || '',
+          targetOrderId: canSplitLines ? null : (lines[0]?.sourceOrderId ?? null),
           lines,
           payload: built.payload,
         });
@@ -4667,17 +4826,40 @@ function ProductOrderPanel({
         lines: ProductLineItem[];
       }> = [];
 
+      /*
+       * 주문번호 채번은 서버가 한다. 난수라 충돌이 가능한데 orderNumber 가 unique 라,
+       * 재시도할 수 있는 쪽은 서버뿐이다. 신규 접수는 형제가 공유할 그룹키를 여기서
+       * 한 번만 받아 두고 각 형제에 순번만 실어 보낸다.
+       */
+      let orderGroupKey = '';
+      if (canSplitLines) {
+        const keyResponse = await apiFetch('/api/orders/new-group-key');
+        const issued = (await keyResponse.json().catch(() => null)) as {
+          orderGroupKey?: string;
+        } | null;
+        if (!keyResponse.ok || !issued?.orderGroupKey) {
+          setFormError('주문번호를 발급하지 못했습니다. 다시 시도해 주세요.');
+          setResultDialog({ open: true, success: false, kind: 'fail' });
+          return;
+        }
+        orderGroupKey = issued.orderGroupKey;
+      }
+
       for (const body of bodies) {
+        // 분할 접수된 주문서는 묶음마다 대상 주문이 다르다.
+        const patchOrderId = body.targetOrderId || editOrderId;
         const response =
-          isEditMode && editOrderId
-            ? await apiFetch(`/api/orders/${editOrderId}`, {
+          isEditMode && patchOrderId
+            ? await apiFetch(`/api/orders/${patchOrderId}`, {
                 method: "PATCH",
                 body: JSON.stringify(body.payload),
               })
             : await apiFetch("/api/orders", {
                 method: "POST",
                 body: JSON.stringify({
-                  orderNumber: body.orderNumber,
+                  orderGroupKey,
+                  splitIndex: body.splitIndex,
+                  splitCount: bodies.length,
                   userId: selectedMemberId ?? auth.id,
                   status: "PLACED",
                   // 자동완성으로 회원을 고르지 않았으면 주문자 정보를 넘겨
@@ -4723,16 +4905,18 @@ function ProductOrderPanel({
 
         const created = (await response.json().catch(() => null)) as {
           id?: number;
+          orderNumber?: string;
         } | null;
         createdOrders.push({
           id: created?.id ?? (isEditMode ? editOrderId : null),
-          orderNumber: body.orderNumber,
+          // 번호는 서버가 붙인다. 응답을 못 읽은 경우에만 화면용 번호로 떨어진다.
+          orderNumber: created?.orderNumber ?? body.displayOrderNumber,
           lines: body.lines,
         });
       }
 
       setResultDialog({ open: true, success: true, kind: "accept" });
-      setAcceptedOrderNumber(createdOrders[0]?.orderNumber ?? baseOrderNumber);
+      setAcceptedOrderNumber(createdOrders[0]?.orderNumber ?? '');
       setAcceptedOrderNumbers(createdOrders.map((order) => order.orderNumber));
 
       /*
@@ -4853,7 +5037,10 @@ function ProductOrderPanel({
         key: "product",
         header: "상품명",
         render: (row) => (
-          <span className="font-medium text-ink">{row.product}</span>
+          <div className="min-w-0">
+            <span className="font-medium text-ink">{row.product}</span>
+            <LineOriginNote row={row} />
+          </div>
         ),
       },
       {
@@ -4866,7 +5053,9 @@ function ProductOrderPanel({
             return row.qty;
           }
 
-          const locked = row.shipSaved;
+          // 포장완료·발송완료 전까지는 수량·배송선택을 고칠 수 있다.
+          // (배송정보 입력 여부(shipSaved)로 잠그던 예전 규칙을 대체한다)
+          const locked = row.statusLocked;
           return (
             <input
               type="number"
@@ -4909,7 +5098,7 @@ function ProductOrderPanel({
               <select
                 aria-label={`${row.product} 배송선택`}
                 value={row.orderKind}
-                disabled={row.shipSaved}
+                disabled={row.statusLocked}
                 onChange={(event) =>
                   handleLineKindChange(
                     row.lineId,
@@ -5155,7 +5344,8 @@ function ProductOrderPanel({
    * 배송선택 드롭다운과 배송정보입력 버튼을 함께 보여준다.
    */
   const renderLineControls = (row: ProductLineItem, rowIndex: number) => {
-    const locked = row.shipSaved;
+    // 포장완료·발송완료 전까지는 수량·배송선택을 고칠 수 있다.
+    const locked = row.statusLocked;
     const kindOptions = row.deliveryOnly
       ? LINE_SHIP_OPTIONS.filter((option) => option.value === "delivery")
       : LINE_SHIP_OPTIONS;
@@ -5552,6 +5742,7 @@ function ProductOrderPanel({
                     <div className="flex items-start justify-between gap-2">
                       <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
                         {row.product}
+                        <LineOriginNote row={row} />
                       </p>
                       <button
                         type="button"
@@ -5640,6 +5831,7 @@ function ProductOrderPanel({
                     <div className="flex items-start justify-between gap-2">
                       <p className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#1A202C] break-keep">
                         {row.product}
+                        <LineOriginNote row={row} />
                       </p>
                       <button
                         type="button"
