@@ -103,6 +103,72 @@ export function canEditOrderStatus(status: string) {
   );
 }
 
+/**
+ * 수량·배송방식을 고칠 수 있는지 판정한다. 막아야 하면 사유, 고칠 수 있으면 null.
+ *
+ * 현장 작업이 시작되면 잠근다.
+ * - 포장관리에서 '완료'(packDone) → 이미 포장된 수량
+ * - 배송관리 '최종확인'의 '발송완료'(finalConfirmDone) → 이미 나간 건
+ *
+ * 서버의 be/src/orders/order-edit-guard.ts 와 같은 규칙이다. 한쪽만 고치지 말 것.
+ */
+export function describeOrderEditLock(order: {
+  status: string;
+  packDone?: boolean | null;
+  finalConfirmDone?: boolean | null;
+}): string | null {
+  if (!canEditOrderStatus(order.status)) {
+    return "배송중 이후 주문은 수정할 수 없습니다.";
+  }
+  if (order.packDone) {
+    return "포장완료된 주문은 수량·배송방식을 수정할 수 없습니다.";
+  }
+  if (order.finalConfirmDone) {
+    return "발송완료된 주문은 수량·배송방식을 수정할 수 없습니다.";
+  }
+  return null;
+}
+
+/** 포장완료·발송완료 전까지만 주문 내용을 고칠 수 있다 */
+export function canEditOrderContent(order: {
+  status: string;
+  packDone?: boolean | null;
+  finalConfirmDone?: boolean | null;
+}) {
+  return describeOrderEditLock(order) === null;
+}
+
+/**
+ * 분할 접수된 형제 주문을 묶는 기준 번호.
+ * 신규작성에서 줄이 2개 이상이면 `ORD-2026-567480-1`, `-2` 로 쪼개 접수하므로
+ * 꼬리 번호를 떼면 한 주문서에서 나온 형제들을 찾을 수 있다.
+ *
+ * 주의: 주문번호 자체가 `ORD-2026-567480` 처럼 숫자로 끝난다. 무조건 끝의 `-숫자`를
+ * 떼면 기준이 `ORD-2026` 이 되어 같은 해 주문이 전부 형제로 잡힌다.
+ * 조각이 4개 이상일 때만 마지막을 분할 접미사로 본다.
+ */
+export function orderNumberBase(orderNumber: string) {
+  const parts = orderNumber.split("-");
+  if (parts.length >= 4 && /^\d+$/.test(parts[parts.length - 1])) {
+    return parts.slice(0, -1).join("-");
+  }
+  return orderNumber;
+}
+
+/** `base` 또는 `base-<숫자>` 만 형제로 인정한다 (ORD-…-5674801 오검출 방지) */
+export function isSiblingOrderNumber(orderNumber: string, base: string) {
+  if (orderNumber === base) return true;
+  if (!orderNumber.startsWith(`${base}-`)) return false;
+  return /^\d+$/.test(orderNumber.slice(base.length + 1));
+}
+
+/** 형제 정렬용 꼬리 번호. 접미사가 없으면 0 (기준 번호 판정과 같은 규칙을 쓴다) */
+export function orderNumberSuffix(orderNumber: string) {
+  const base = orderNumberBase(orderNumber);
+  if (base === orderNumber) return 0;
+  return Number(orderNumber.slice(base.length + 1));
+}
+
 /** 배송중 이전: 주문서 취소 가능 (수정 가능 구간과 동일) */
 export function canCancelOrderStatus(status: string) {
   return canEditOrderStatus(status);
