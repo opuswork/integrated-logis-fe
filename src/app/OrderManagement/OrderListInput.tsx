@@ -3788,10 +3788,17 @@ function ProductOrderPanel({
          * 구 주문(ORD-…)과 단일 주문은 그룹키가 곧 주문번호라 형제가 자기 하나뿐이고,
          * 아래 로직이 기존 단일 주문 경로와 똑같이 동작한다.
          */
+        const groupKeyOf = (row: { orderGroupKey?: string | null; orderNumber: string }) =>
+          row.orderGroupKey || row.orderNumber;
+        /*
+         * 보통은 그룹키를 받는다. 다만 주문번호(SYN…-2)를 그대로 넘기는 화면이
+         * 남아 있을 수 있어, 그 번호의 주문을 찾아 그쪽 그룹으로 다시 모은다.
+         * 단일 주문은 그룹키와 주문번호가 같아 어느 쪽으로 와도 결과가 같다.
+         */
+        const clicked = data.find((row) => row.orderNumber === editOrderNumber);
+        const targetKey = clicked ? groupKeyOf(clicked) : editOrderNumber;
         const siblingOrders = data
-          .filter(
-            (row) => (row.orderGroupKey || row.orderNumber) === editOrderNumber,
-          )
+          .filter((row) => groupKeyOf(row) === targetKey)
           .sort((a, b) => (a.splitIndex ?? 1) - (b.splitIndex ?? 1));
         const order = siblingOrders[0];
         if (!order) {
