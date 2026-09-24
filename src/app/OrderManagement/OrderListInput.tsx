@@ -4238,7 +4238,9 @@ function ProductOrderPanel({
     );
     const remainder = target.baseQty - target.qty;
     // 선물세트 박스는 배달 전용이라 반대 방식(택배)으로 복사할 수 없다.
-    const canSplit = Boolean(kind) && remainder > 0 && !target.deliveryOnly;
+    // 수량칸이 비어 있으면(0) 나누지 않는다 — 0짜리 줄과 전체수량 복사 줄이 생긴다.
+    const canSplit =
+      Boolean(kind) && target.qty > 0 && remainder > 0 && !target.deliveryOnly;
 
     if (!canSplit) {
       if (siblingIndex >= 0 && !next[siblingIndex].shipSaved) {
@@ -4324,7 +4326,8 @@ function ProductOrderPanel({
 
       if (!sibling) {
         // 아직 분할 전: 수량을 줄이면 그만큼이 배송선택 시 반대 방식으로 복사된다.
-        const nextQty = Math.min(Math.max(1, qty), target.baseQty);
+        // 0(빈 칸)을 허용해야 지우고 다시 칠 수 있다. 비운 채 벗어나면 onBlur 가 되돌린다.
+        const nextQty = Math.min(Math.max(0, qty), target.baseQty);
         return current.map((item, index) =>
           index === rowIndex ? { ...item, qty: nextQty } : item,
         );
@@ -4334,7 +4337,7 @@ function ProductOrderPanel({
       if (sibling.shipSaved) {
         return current;
       }
-      const nextQty = Math.min(Math.max(1, qty), target.baseQty - 1);
+      const nextQty = Math.min(Math.max(0, qty), target.baseQty - 1);
       return current.map((item) => {
         if (item.lineId === target.lineId) {
           return { ...item, qty: nextQty };
@@ -4345,6 +4348,24 @@ function ProductOrderPanel({
         return item;
       });
     });
+  };
+
+  /**
+   * 신규작성에서 수량칸을 비운 채 벗어나면 되돌린다.
+   * 분할 전 줄은 처음 담은 수량(baseQty)으로, 분할된 줄은 1로(형제 줄이 나머지).
+   * 수정 모드는 저장할 때 검증한다.
+   */
+  const restoreEmptyQty = (rowIndex: number) => {
+    const target = productItems[rowIndex];
+    if (!canSplitLines || !target || target.qty > 0) {
+      return;
+    }
+    const hasSibling = productItems.some(
+      (row) =>
+        row.lineId !== target.lineId &&
+        row.splitGroupId === target.splitGroupId,
+    );
+    updateProductQty(rowIndex, hasSibling ? 1 : target.baseQty);
   };
 
   const joinAddress = (base: string, detail: string) =>
@@ -4468,6 +4489,10 @@ function ProductOrderPanel({
     }
     if (productItems.length === 0) {
       return "상품을 1개 이상 추가해 주세요.";
+    }
+    const noQty = productItems.find((item) => item.qty < 1);
+    if (noQty) {
+      return `'${noQty.product}'의 수량을 입력해 주세요.`;
     }
     const noKind = productItems.find((item) => !item.orderKind);
     if (noKind) {
@@ -5168,6 +5193,9 @@ function ProductOrderPanel({
                   updateProductQty(rowIndex, nextQty);
                 }
               }}
+              onBlur={() => {
+                if (!locked) restoreEmptyQty(rowIndex);
+              }}
               className={cn(
                 "mx-auto block h-8 w-16 rounded border border-[#cbd5e1] px-1 text-center text-sm text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
                 locked ? "bg-[#EDF2F7]" : "bg-white",
@@ -5472,6 +5500,9 @@ function ProductOrderPanel({
               if (!Number.isNaN(nextQty)) {
                 updateProductQty(rowIndex, nextQty);
               }
+            }}
+            onBlur={() => {
+              if (!locked) restoreEmptyQty(rowIndex);
             }}
             className={cn(
               "h-9 w-full rounded-md border border-[#E2E8F0] px-2 text-center text-[13px] text-[#1A202C] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
