@@ -3530,6 +3530,8 @@ function ProductOrderPanel({
   const isDesktop = useMinWidth(1040);
   const isWideProductList = useMinWidth(500);
   const memberFieldsReadOnly = !blankCustomerFields;
+  /** 개인앱: 상품 줄의 단가와 합계 금액을 보이지 않는다 (관리자 화면은 그대로) */
+  const hidePrices = !blankCustomerFields;
   const showDirectorCheckbox = !isMemberNewOrder;
   const showProxyToggle =
     isMemberNewOrder && isGwanjangMemberType(loggedInMemberType);
@@ -5339,7 +5341,7 @@ function ProductOrderPanel({
       },
     });
 
-    return cols;
+    return hidePrices ? cols.filter((col) => col.key !== "unitPrice") : cols;
   };
 
   const productColumns = buildProductColumns(true);
@@ -5510,15 +5512,22 @@ function ProductOrderPanel({
             )}
           />
         </label>
-        <div>
-          <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
-            단가
-          </span>
-          <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
-            {formatPrice(row.unitPrice || 0)}
-          </p>
-        </div>
-        <div className="col-span-2 sm:col-span-1">
+        {hidePrices ? null : (
+          <div>
+            <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
+              단가
+            </span>
+            <p className="flex h-9 items-center text-[13px] font-bold text-[#1A202C]">
+              {formatPrice(row.unitPrice || 0)}
+            </p>
+          </div>
+        )}
+        <div
+          className={cn(
+            "col-span-2",
+            hidePrices ? "sm:col-span-2" : "sm:col-span-1",
+          )}
+        >
           <span className="mb-1 block text-[11px] font-bold text-[#64748B]">
             배송선택
           </span>
@@ -6026,10 +6035,15 @@ function ProductOrderPanel({
         {productItems.length > 0 ? (
           <p className="text-[11px] text-[#64748B]">
             총 {productLineCount}건 · 수량{" "}
-            {productItems.reduce((sum, item) => sum + item.qty, 0)}개 ·{" "}
-            <span className="font-bold text-[#1A202C]">
-              {formatPrice(productListTotal)}
-            </span>
+            {productItems.reduce((sum, item) => sum + item.qty, 0)}개
+            {hidePrices ? null : (
+              <>
+                {" · "}
+                <span className="font-bold text-[#1A202C]">
+                  {formatPrice(productListTotal)}
+                </span>
+              </>
+            )}
           </p>
         ) : null}
       </div>
