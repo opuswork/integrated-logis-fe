@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "B2B 통합.물류주문관리시스템",
-    short_name: "SANC-LOGIS",
+    name: "장유주문",
+    short_name: "장유주문",
     description: "B2B통합 물류·주문 관리 시스템",
     start_url: "/login",
     scope: "/",

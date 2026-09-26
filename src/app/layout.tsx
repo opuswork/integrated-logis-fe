@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "B2B통합 물류·주문 관리 시스템",
+    title: "장유주문",
     statusBarStyle: "default",
   },
   formatDetection: {
