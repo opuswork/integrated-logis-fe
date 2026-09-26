@@ -63,18 +63,18 @@ export function MemberHomeInstallMng() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/icons/icon-192.png?v=2"
-            alt="물류관리시스템"
+            alt="장유주문"
             className="size-14 rounded-[14px] border border-[#E2E8F0]"
           />
           <div>
             <p className="text-[15px] font-semibold text-[#1A202C]">
-              물류관리
+              장유주문
             </p>
             <p className="text-[12px] text-[#64748B]">개인회원 모바일 앱</p>
           </div>
         </div>
         <p className="text-[13px] leading-6 text-[#475569]">
-          홈 화면에 물류관리 앱을 추가하면, 아이콘을 눌렀을 때 슬림 시스템
+          홈 화면에 장유주문 앱을 추가하면, 아이콘을 눌렀을 때 슬림 시스템
           바(닫기·점3개)와 함께 앱으로 열립니다. 홈 화면에서 아이콘을 지우면
           이 메뉴가 다시 나타납니다.
         </p>
