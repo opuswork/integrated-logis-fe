@@ -256,11 +256,76 @@ function LineOriginNote({ row }: { row: ProductLineItem }) {
   );
 }
 
-/** 줄별 배송방식 드롭다운 라벨 (스크린샷 ③④) */
+/** 줄별 배송방식 버튼 라벨 (주문서 화면 전용. 관리자 목록·출력물은 배달/상차/택배 그대로) */
 const LINE_SHIP_OPTIONS = [
-  { value: "parcel" as const, label: "택배/개별" },
-  { value: "delivery" as const, label: "상차/배달" },
+  { value: "delivery" as const, icon: "🚚", label: "하차배송" },
+  { value: "parcel" as const, icon: "📦", label: "택배" },
 ];
+
+/**
+ * 배송선택 버튼 (🚚 하차배송 / 📦 택배).
+ * 상품 줄(모바일 카드·PC 표)과 박스상품 추가 창에서 같이 쓴다.
+ */
+function ShipKindButtons({
+  value,
+  onChange,
+  disabled = false,
+  parcelDisabled = false,
+  size = "card",
+  labelPrefix = "",
+}: {
+  value: OrderType | "";
+  onChange: (kind: OrderType) => void;
+  disabled?: boolean;
+  /** 하차배송 전용 상품: 택배를 고를 수 없다 */
+  parcelDisabled?: boolean;
+  size?: "table" | "card" | "sheet";
+  /** 스크린리더용: 어떤 상품의 배송선택인지 */
+  labelPrefix?: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={`${labelPrefix ? `${labelPrefix} ` : ""}배송선택`}
+      className={cn(
+        "grid min-w-0 flex-1 grid-cols-2",
+        size === "sheet" ? "gap-3" : "gap-1.5",
+      )}
+    >
+      {LINE_SHIP_OPTIONS.map((option) => {
+        const selected = value === option.value;
+        const optionDisabled =
+          disabled || (option.value === "parcel" && parcelDisabled);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={optionDisabled}
+            onClick={() => {
+              if (!selected) onChange(option.value);
+            }}
+            className={cn(
+              "inline-flex min-w-0 items-center justify-center gap-1 whitespace-nowrap border font-bold transition-colors",
+              size === "table" && "h-8 rounded px-1.5 text-[12px]",
+              size === "card" && "h-9 rounded-md px-1.5 text-[12.5px]",
+              size === "sheet" && "h-14 rounded-xl border-2 px-2 text-[18px]",
+              selected
+                ? "border-[#5B2A86] bg-[#F5EEFB] text-[#5B2A86]"
+                : "border-[#E2E8F0] bg-white text-[#1A202C] hover:bg-[#F8FAFC]",
+              optionDisabled &&
+                "cursor-not-allowed opacity-50 hover:bg-transparent",
+            )}
+          >
+            <span aria-hidden>{option.icon}</span>
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function lineShipLabel(kind: OrderType | "") {
   return LINE_SHIP_OPTIONS.find((option) => option.value === kind)?.label ?? "";
@@ -1491,7 +1556,8 @@ function ProductAddDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onAddItems: (items: ProductDialogItem[]) => void;
+  /** presetKind: 창 위에서 고른 배송방식 (""=안 고름). 담긴 줄에 미리 선택된다 */
+  onAddItems: (items: ProductDialogItem[], presetKind: OrderType | "") => void;
   /** 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다. */
   showOrderKind?: boolean;
   defaultOrderKind: OrderType;
@@ -1518,6 +1584,8 @@ function ProductAddDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  /** 담을 상품에 미리 넣을 배송방식 (하차배송/택배). 줄마다 다시 바꿀 수 있다 */
+  const [presetKind, setPresetKind] = useState<OrderType | "">("");
   const listRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const qtyRefs = useRef<Map<number, HTMLInputElement>>(new Map());
@@ -1538,6 +1606,7 @@ function ProductAddDialog({
       setLoadError("");
       setKeyword("");
       setCategoryFilter("all");
+      setPresetKind("");
 
       try {
         const response = await apiFetch(
@@ -1694,7 +1763,7 @@ function ProductAddDialog({
       if (selectedItems.length === 0) {
         return;
       }
-      onAddItems(selectedItems);
+      onAddItems(selectedItems, presetKind);
     }
     setQuantities({});
     onClose();
@@ -1804,6 +1873,15 @@ function ProductAddDialog({
         />
       ) : null}
     </div>
+  );
+
+  // 상품목록수정(editList)은 기존 줄을 바꾸는 창이라 배송방식 미리 고르기를 보여주지 않는다.
+  const shipPreset = editList ? null : (
+    <ShipKindButtons
+      size={isSheet ? "sheet" : "card"}
+      value={presetKind}
+      onChange={setPresetKind}
+    />
   );
 
   const listContent = isLoading ? (
@@ -2052,6 +2130,11 @@ function ProductAddDialog({
           </div>
         }
       >
+        {shipPreset ? (
+          <div className="flex border-b border-[#E2E8F0] px-4 pt-1 pb-4">
+            {shipPreset}
+          </div>
+        ) : null}
         {mode === "all" ? (
           <div className="px-4 pt-1 pb-3">{filterControls}</div>
         ) : null}
@@ -2069,6 +2152,8 @@ function ProductAddDialog({
     >
       <div className="space-y-3">
         <p className="text-sm text-[#64748b]">{subtitle}</p>
+
+        {shipPreset ? <div className="flex">{shipPreset}</div> : null}
 
         {filterControls}
 
@@ -3100,7 +3185,7 @@ function LineShipSheet({
   return (
     <BottomSheet
       open={open}
-      title={isDelivery ? "배달정보입력" : "택배정보입력"}
+      title={isDelivery ? "하차배송정보입력" : "택배정보입력"}
       subtitle={
         <>
           {productName} <span className="font-semibold text-ink">{qty}개</span>{" "}
@@ -3123,7 +3208,7 @@ function LineShipSheet({
             onClick={handleSave}
             className="flex-1 rounded-[10px] bg-[#1A365D] py-3 text-[14.5px] font-bold text-white"
           >
-            {isDelivery ? "배달정보저장" : "택배정보저장"}
+            {isDelivery ? "하차배송정보저장" : "택배정보저장"}
           </button>
         </div>
       }
@@ -4128,9 +4213,14 @@ function ProductOrderPanel({
     }
   }, [churchQuery, churchId, churches]);
 
-  const addProductItems = (items: ProductDialogItem[]) => {
-    // 전역 주문종류가 없으므로 줄별 배송선택 전까지 ""로 둔다.
-    const selectedOrderType: OrderType | "" = "";
+  const addProductItems = (
+    items: ProductDialogItem[],
+    presetKind: OrderType | "" = "",
+  ) => {
+    // 추가 창에서 고른 배송방식을 줄에 미리 넣는다. 안 골랐으면 ""(줄별로 선택).
+    // 하차배송 전용 상품은 택배로 미리 넣지 않는다.
+    const kindFor = (item: ProductDialogItem): OrderType | "" =>
+      presetKind === "parcel" && item.deliveryOnly ? "" : presetKind;
     const allowedItems = items;
 
     if (allowedItems.length === 0) {
@@ -4141,12 +4231,13 @@ function ProductOrderPanel({
       const next = [...current];
 
       for (const item of allowedItems) {
-        // 이미 배송선택/배송정보가 정해진 줄에는 합치지 않는다 (분할 정보 보호).
+        const selectedOrderType = kindFor(item);
+        // 배송정보가 저장된 줄이나 배송방식이 다른 줄에는 합치지 않는다 (분할 정보 보호).
         const existingIndex = next.findIndex(
           (row) =>
             row.product === item.product &&
             !row.shipSaved &&
-            row.orderKind === "",
+            row.orderKind === selectedOrderType,
         );
 
         if (existingIndex >= 0) {
@@ -4192,7 +4283,7 @@ function ProductOrderPanel({
   };
 
   /**
-   * 배송선택 드롭다운 (스크린샷 ③→④).
+   * 배송선택 버튼 (🚚 하차배송 / 📦 택배).
    * 수량을 baseQty보다 줄여 놓은 상태에서 방식을 고르면, 남은 수량이
    * 반대 방식(택배↔상차)으로 자동 복사되어 바로 아래 줄로 들어간다.
    */
@@ -5213,32 +5304,18 @@ function ProductOrderPanel({
       {
         key: "lineShip",
         header: "배송선택",
-        className: "w-[180px] px-1",
+        className: "w-[270px] px-1",
         render: (row: ProductLineItem) => {
-          const kindOptions = row.deliveryOnly
-            ? LINE_SHIP_OPTIONS.filter((option) => option.value === "delivery")
-            : LINE_SHIP_OPTIONS;
           return (
             <div className="flex items-center gap-1.5">
-              <select
-                aria-label={`${row.product} 배송선택`}
+              <ShipKindButtons
+                size="table"
+                labelPrefix={row.product}
                 value={row.orderKind}
                 disabled={row.statusLocked}
-                onChange={(event) =>
-                  handleLineKindChange(
-                    row.lineId,
-                    event.target.value as OrderType | "",
-                  )
-                }
-                className="h-8 min-w-0 flex-1 rounded border border-[#cbd5e1] bg-white px-1 text-sm text-ink disabled:bg-[#EDF2F7]"
-              >
-                <option value="">선택</option>
-                {kindOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                parcelDisabled={row.deliveryOnly}
+                onChange={(kind) => handleLineKindChange(row.lineId, kind)}
+              />
               <button
                 type="button"
                 disabled={!row.orderKind}
@@ -5466,14 +5543,11 @@ function ProductOrderPanel({
 
   /**
    * 상품 카드의 수량 / 단가 / 배송선택 줄 (스크린샷 ③④).
-   * 배송선택 드롭다운과 배송정보입력 버튼을 함께 보여준다.
+   * 배송선택 버튼(하차배송/택배)과 배송정보입력 버튼을 함께 보여준다.
    */
   const renderLineControls = (row: ProductLineItem, rowIndex: number) => {
     // 포장완료·발송완료 전까지는 수량·배송선택을 고칠 수 있다.
     const locked = row.statusLocked;
-    const kindOptions = row.deliveryOnly
-      ? LINE_SHIP_OPTIONS.filter((option) => option.value === "delivery")
-      : LINE_SHIP_OPTIONS;
 
     return (
       <div
@@ -5530,25 +5604,14 @@ function ProductOrderPanel({
             배송선택
           </span>
           <div className="flex items-stretch gap-1.5">
-            <select
-              aria-label={`${row.product} 배송선택`}
+            <ShipKindButtons
+              size="card"
+              labelPrefix={row.product}
               value={row.orderKind}
               disabled={locked}
-              onChange={(event) =>
-                handleLineKindChange(
-                  row.lineId,
-                  event.target.value as OrderType | "",
-                )
-              }
-              className="h-9 min-w-0 flex-1 rounded-md border border-[#E2E8F0] bg-white px-1.5 text-[12.5px] text-[#1A202C] disabled:bg-[#EDF2F7] disabled:text-[#64748B]"
-            >
-              <option value="">선택</option>
-              {kindOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              parcelDisabled={row.deliveryOnly}
+              onChange={(kind) => handleLineKindChange(row.lineId, kind)}
+            />
             <button
               type="button"
               disabled={!row.orderKind}
