@@ -3,12 +3,18 @@
 import { EllipsisVertical, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { cn } from "@/lib/utils";
+
 const LOGIN_TITLE = "B2B통합 물류·주문관리-로그인";
+/** 앱 닫기가 막혔을 때 안내 문구 표시 시간 */
+const CLOSE_NOTICE_MS = 3000;
 
 export function LoginChromeHeader() {
   const [host, setHost] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [closeBlocked, setCloseBlocked] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const closeTimersRef = useRef<number[]>([]);
 
   useEffect(() => {
     setHost(window.location.host);
@@ -34,13 +40,22 @@ export function LoginChromeHeader() {
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    const timers = closeTimersRef.current;
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, []);
+
+  // window.close()는 방문 기록이 1개일 때(앱을 막 연 상태)만 허용된다.
+  // 로그아웃 후처럼 기록이 쌓여 있으면 폰이 막으므로, 아무 반응 없는 대신 안내를 보여준다.
   const closeLoginWindow = () => {
+    closeTimersRef.current.forEach((id) => window.clearTimeout(id));
     window.close();
-    window.setTimeout(() => {
-      if (!window.closed) {
-        window.history.back();
-      }
-    }, 80);
+    closeTimersRef.current = [
+      window.setTimeout(() => {
+        if (!window.closed) setCloseBlocked(true);
+      }, 150),
+      window.setTimeout(() => setCloseBlocked(false), 150 + CLOSE_NOTICE_MS),
+    ];
   };
 
   const handleRefresh = () => {
@@ -138,6 +153,19 @@ export function LoginChromeHeader() {
             </div>
           ) : null}
         </div>
+      </div>
+
+      <div
+        role="status"
+        aria-hidden={!closeBlocked}
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-full flex justify-center px-4 pt-2 transition-opacity duration-500",
+          closeBlocked ? "opacity-100" : "opacity-0",
+        )}
+      >
+        <p className="rounded-full bg-[#1A202C]/90 px-4 py-2 text-center text-[13px] font-medium text-white shadow-lg">
+          앱을 닫으려면 휴대폰의 홈(○) 버튼을 눌러 주세요.
+        </p>
       </div>
     </header>
   );
