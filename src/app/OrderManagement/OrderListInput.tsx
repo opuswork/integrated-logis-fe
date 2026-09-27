@@ -42,7 +42,11 @@ import { Spinner } from "@/components/ui/spinner";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, getAuthUser } from "@/lib/auth";
-import { formatMonthDay, toLocalIsoDate } from "@/lib/date-format";
+import {
+  formatMonthDay,
+  isSundayIso,
+  toLocalIsoDate,
+} from "@/lib/date-format";
 import { openDaumPostcode } from "@/lib/daum-postcode";
 import { API_BASE_URL } from "@/lib/env";
 import {
@@ -151,14 +155,6 @@ function todayDateValue() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function isSundayIso(iso: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-    return false;
-  }
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year, month - 1, day).getDay() === 0;
 }
 
 function formatCalendarDayTitle(iso: string) {
@@ -3141,10 +3137,11 @@ function LineShipSheet({
               minIso={minDateIso}
               placeholder="m/d"
               title="배달일"
+              disableSundays
               disabled={shipDateLocked}
               className={datePickerClass}
               onChangeIso={(iso) => {
-                if (iso < minDateIso) return;
+                if (iso < minDateIso || isSundayIso(iso)) return;
                 patch({ deliveryDate: iso });
               }}
             />
@@ -3255,10 +3252,11 @@ function LineShipSheet({
               minIso={minDateIso}
               placeholder="m/d"
               title="택배발송일"
+              disableSundays
               disabled={shipDateLocked}
               className={datePickerClass}
               onChangeIso={(iso) => {
-                if (iso < minDateIso) return;
+                if (iso < minDateIso || isSundayIso(iso)) return;
                 patch({ parcelShipDate: iso });
               }}
             />

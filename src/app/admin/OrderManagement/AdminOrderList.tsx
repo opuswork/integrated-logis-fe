@@ -177,6 +177,7 @@ function MdDateField({
   title,
   minIso,
   maxIso,
+  disableSundays,
 }: {
   iso: string | null | undefined;
   disabled?: boolean;
@@ -186,6 +187,7 @@ function MdDateField({
   title?: string;
   minIso?: string;
   maxIso?: string;
+  disableSundays?: boolean;
 }) {
   return (
     <MdCalendarPicker
@@ -197,6 +199,7 @@ function MdDateField({
       showIcon
       minIso={minIso}
       maxIso={maxIso}
+      disableSundays={disableSundays}
       inputClassName="w-auto min-w-[72px]"
       onChangeIso={(next) => {
         if (next === toDateOnlyIso(iso)) return;
@@ -1077,6 +1080,7 @@ export function AdminOrderList({
                             disabled={savingId === `dd-${row.id}`}
                             yearHint={row.deliveryRequestDate || null}
                             title="납품요청일 (m/d)"
+                            disableSundays
                             onCommit={(v) => {
                               void patchChecklist(
                                 row.id,
@@ -1117,6 +1121,7 @@ export function AdminOrderList({
                                 title="출고요청일 (m/d)"
                                 minIso={todayIsoDate()}
                                 maxIso={maxShip || undefined}
+                                disableSundays
                                 onCommit={(v) => {
                                   const min = todayIsoDate();
                                   if (v < min || (maxShip && v > maxShip)) {
