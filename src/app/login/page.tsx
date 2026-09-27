@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
@@ -109,12 +110,14 @@ function LoginForm() {
       <LoginChromeHeader />
       <main className="px-6 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(5rem,calc(env(safe-area-inset-top)+3.75rem))]">
         <div className="mx-auto flex w-full max-w-md flex-col items-center">
-          <div
-            className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-[#3182ce] text-[1.35rem] font-bold tracking-tight text-white shadow-[0_8px_20px_rgba(0,0,0,0.25)]"
-            aria-hidden
-          >
-            B2B
-          </div>
+          <Image
+            src="/assets/images/jangyu-icon.png"
+            alt="장유 양조간장"
+            width={88}
+            height={288}
+            priority
+            className="mb-4 h-24 w-auto drop-shadow-[0_0_14px_rgba(255,255,255,0.35)]"
+          />
           <h1 className="mb-8 text-center font-['S-Core_Dream'] text-[1.35rem] font-semibold leading-snug text-white">
             통합 물류·주문 관리 시스템
           </h1>
