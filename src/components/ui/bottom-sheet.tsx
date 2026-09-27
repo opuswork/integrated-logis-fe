@@ -11,6 +11,8 @@ export interface BottomSheetProps {
   /** 제목 아래 작은 안내 문구 */
   subtitle?: ReactNode;
   children: ReactNode;
+  /** 헤더 바로 아래에 고정되는 영역 (선택 버튼·필터 등). 본문과 같이 스크롤되지 않는다 */
+  toolbar?: ReactNode;
   /** 스크롤과 무관하게 항상 하단에 고정되는 영역 (버튼 등) */
   footer?: ReactNode;
   onClose: () => void;
@@ -19,13 +21,14 @@ export interface BottomSheetProps {
 
 /**
  * 화면 하단에서 올라와 좌우를 꽉 채우는 시트. 모바일 개인회원 화면용.
- * 헤더/푸터는 고정, 본문(children)만 스크롤된다.
+ * 헤더/툴바/푸터는 고정, 본문(children)만 스크롤된다.
  */
 export function BottomSheet({
   open,
   title,
   subtitle,
   children,
+  toolbar,
   footer,
   onClose,
   className,
@@ -77,6 +80,8 @@ export function BottomSheet({
             <X className="size-7" />
           </button>
         </div>
+
+        {toolbar ? <div className="shrink-0">{toolbar}</div> : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
 

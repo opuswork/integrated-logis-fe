@@ -2116,6 +2116,21 @@ function ProductAddDialog({
         title={dialogTitle}
         subtitle={subtitle}
         onClose={onClose}
+        // 배송방식 선택·필터는 고정하고 상품 목록만 스크롤한다.
+        toolbar={
+          shipPreset || mode === "all" ? (
+            <>
+              {shipPreset ? (
+                <div className="border-b border-[#E2E8F0] px-4 pt-1 pb-4">
+                  {shipPreset}
+                </div>
+              ) : null}
+              {mode === "all" ? (
+                <div className="px-4 pt-1 pb-3">{filterControls}</div>
+              ) : null}
+            </>
+          ) : undefined
+        }
         footer={
           <div className="space-y-4">
             <div className="flex items-baseline justify-between gap-3">
@@ -2157,14 +2172,6 @@ function ProductAddDialog({
           </div>
         }
       >
-        {shipPreset ? (
-          <div className="border-b border-[#E2E8F0] px-4 pt-1 pb-4">
-            {shipPreset}
-          </div>
-        ) : null}
-        {mode === "all" ? (
-          <div className="px-4 pt-1 pb-3">{filterControls}</div>
-        ) : null}
         {listContent}
       </BottomSheet>
     );
