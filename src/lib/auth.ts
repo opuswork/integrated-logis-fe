@@ -22,8 +22,18 @@ export const ADMIN_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 /** 개인회원: 1시간 동안 활동이 없으면 자동 로그아웃 */
 export const MEMBER_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 
-/** 로그인 화면으로 보낼 때 붙이는 사유 (`/login?reason=...`) */
-export type LogoutReason = "idle" | "expired";
+/**
+ * 로그인 화면으로 보낼 때 붙이는 사유 (`/login?reason=...`)
+ * - logout: 직접 로그아웃
+ * - expired: 마지막 활동 후 24시간이 지나 세션 만료 (관리자·공장 무활동, 서버 토큰 만료)
+ * - idle: 개인회원 1시간 무활동
+ */
+export type LogoutReason = "logout" | "expired" | "idle";
+
+/** 무활동 자동 로그아웃의 사유: 24시간 규칙이면 expired, 더 짧으면(개인회원) idle */
+export function idleReason(timeoutMs: number): LogoutReason {
+  return timeoutMs >= ADMIN_IDLE_TIMEOUT_MS ? "expired" : "idle";
+}
 
 export function normalizeUserRole(role: string | undefined | null): UserRole {
   if (role === "ADMIN" || role === "admin") {
