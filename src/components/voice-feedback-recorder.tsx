@@ -96,13 +96,31 @@ export function VoiceFeedbackRecorder({
           method: "POST",
           body: form,
         });
-        if (!res.ok) throw new Error();
+        if (!res.ok) {
+          // 원인을 휴대폰 화면에서도 알 수 있게 서버 메시지(없으면 상태코드)를 보여준다.
+          let serverMessage = "";
+          try {
+            const data = (await res.json()) as { message?: string | string[] };
+            serverMessage = Array.isArray(data.message)
+              ? data.message.join(" ")
+              : (data.message ?? "");
+          } catch {
+            // JSON 이 아닌 응답
+          }
+          setError(
+            /[가-힣]/.test(serverMessage)
+              ? serverMessage
+              : `저장에 실패했습니다. (${res.status}) 다시 시도해 주세요.`,
+          );
+          setState("idle");
+          return;
+        }
         setState("done");
         doneTimerRef.current = window.setTimeout(() => {
           setState("idle");
         }, 3000);
       } catch {
-        setError("저장에 실패했습니다. 다시 시도해 주세요.");
+        setError("저장에 실패했습니다. (네트워크) 다시 시도해 주세요.");
         setState("idle");
       }
     },
