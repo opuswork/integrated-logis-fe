@@ -1881,14 +1881,12 @@ function ProductAddDialog({
   const shipKindMissing = !editList && presetKind === "";
   const shipPreset = editList ? null : (
     <div>
-      <p
-        className={cn(
-          "mb-2 font-bold text-[#475569]",
-          isSheet ? "text-[16px]" : "text-xs",
-        )}
-      >
-        배송방식 선택 <span className="text-[#E53E3E]">*</span>
-      </p>
+      {/* 모바일 시트는 두 버튼만 보여준다 (익숙한 UI라 라벨 없이도 먼저 고른다). PC 창은 라벨 유지 */}
+      {isSheet ? null : (
+        <p className="mb-2 text-xs font-bold text-[#475569]">
+          배송방식 선택 <span className="text-[#E53E3E]">*</span>
+        </p>
+      )}
       <div className="flex">
         <ShipKindButtons
           size={isSheet ? "sheet" : "card"}
