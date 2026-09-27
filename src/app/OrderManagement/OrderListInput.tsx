@@ -3598,6 +3598,11 @@ function ProductOrderPanel({
     open: boolean;
     message: string;
   }>({ open: false, message: "" });
+  /** 접수 전 확인: 처음 담은 수량보다 줄 합계가 적은 상품 (나머지 수량 누락) */
+  const [missingQtyDialog, setMissingQtyDialog] = useState<{
+    open: boolean;
+    items: { product: string; missing: number }[];
+  }>({ open: false, items: [] });
   const [resultDialog, setResultDialog] = useState<{
     open: boolean;
     success: boolean;
@@ -4598,9 +4603,54 @@ function ProductOrderPanel({
     return "";
   };
 
-  const handleSubmitOrder = async () => {
+  /**
+   * 신규작성: 처음 담은 수량(baseQty)보다 같은 분할 그룹 줄의 합계가 적은 상품.
+   * 배송방식을 먼저 고른 뒤(추가 창에서 미리 고른 경우 포함) 수량을 줄이면
+   * 나머지 줄이 생기지 않아, 그대로 접수하면 나머지 수량이 빠진다.
+   */
+  const findMissingQuantities = () => {
+    if (!canSplitLines) {
+      return [];
+    }
+    const groups = new Map<
+      string,
+      { product: string; baseQty: number; total: number }
+    >();
+    for (const row of productItems) {
+      const group = groups.get(row.splitGroupId);
+      if (group) {
+        group.baseQty = Math.max(group.baseQty, row.baseQty);
+        group.total += row.qty;
+      } else {
+        groups.set(row.splitGroupId, {
+          product: row.product,
+          baseQty: row.baseQty,
+          total: row.qty,
+        });
+      }
+    }
+    return [...groups.values()]
+      .filter((group) => group.baseQty > group.total)
+      .map((group) => ({
+        product: group.product,
+        missing: group.baseQty - group.total,
+      }));
+  };
+
+  const handleSubmitOrder = async (
+    options: { allowMissingQty?: boolean } = {},
+  ) => {
     if (isSubmitting) {
       return;
+    }
+
+    // 나머지 수량이 빠졌으면 접수 전에 먼저 확인 받는다 (인사장 확인보다 앞서 한 번만).
+    if (!options.allowMissingQty) {
+      const missingItems = findMissingQuantities();
+      if (missingItems.length > 0) {
+        setMissingQtyDialog({ open: true, items: missingItems });
+        return;
+      }
     }
 
     if (hasUnsavedGreeting) {
@@ -6257,6 +6307,57 @@ function ProductOrderPanel({
             }}
           >
             {isCancelling ? "처리 중..." : "확인"}
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={missingQtyDialog.open}
+        title="수량 확인"
+        onClose={() => setMissingQtyDialog({ open: false, items: [] })}
+      >
+        {missingQtyDialog.items.length === 1 ? (
+          <p className="text-sm leading-6 text-ink">
+            &apos;{missingQtyDialog.items[0].product}&apos; 나머지 수량{" "}
+            <strong className="text-[#E53E3E]">
+              {missingQtyDialog.items[0].missing}개
+            </strong>
+            가 누락되었습니다.
+            <br />
+            이대로 접수하시겠습니까?
+          </p>
+        ) : (
+          <div className="text-sm leading-6 text-ink">
+            <p>나머지 수량이 누락된 상품이 있습니다.</p>
+            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[#475569]">
+              {missingQtyDialog.items.map((item) => (
+                <li key={item.product}>
+                  {item.product}:{" "}
+                  <strong className="text-[#E53E3E]">{item.missing}개</strong>{" "}
+                  누락
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">이대로 접수하시겠습니까?</p>
+          </div>
+        )}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setMissingQtyDialog({ open: false, items: [] })}
+          >
+            돌아가서 수정
+          </Button>
+          <Button
+            type="button"
+            className="border-[#2F855A] bg-[#2F855A] text-white hover:bg-[#276749]"
+            onClick={() => {
+              setMissingQtyDialog({ open: false, items: [] });
+              void handleSubmitOrder({ allowMissingQty: true });
+            }}
+          >
+            이대로 접수
           </Button>
         </div>
       </Dialog>
