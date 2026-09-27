@@ -61,14 +61,38 @@ type ProductFormState = {
   openStock: boolean;
 };
 
-/** 구분 필터: 카테고리(선물세트/일반품) + 고객공개 여부(공개/비공개) */
+/** 구분 필터: 카테고리(선물세트/일반품) */
 const CATEGORY_FILTER_OPTIONS = [
   { value: "all", label: "전체" },
   { value: "선물세트", label: "선물세트" },
   { value: "일반품", label: "일반품" },
+] as const;
+
+/** 구분 하위 필터: 고객공개 여부 */
+const OPEN_FILTER_OPTIONS = [
+  { value: "all", label: "전체" },
   { value: "open", label: "공개" },
   { value: "closed", label: "비공개" },
 ] as const;
+
+/** 검색 항목 */
+const SEARCH_FIELD_OPTIONS = [
+  { value: "all", label: "전체" },
+  { value: "code", label: "코드" },
+  { value: "productName", label: "품명" },
+  { value: "spec", label: "규격" },
+  { value: "stock", label: "재고" },
+  { value: "unit", label: "단위" },
+] as const;
+
+const SEARCH_PLACEHOLDERS: Record<string, string> = {
+  all: "코드 / 품명 / 규격 / 재고 / 단위",
+  code: "예: 8809240183038",
+  productName: "예: 기쁨2호",
+  spec: "예: 500ML",
+  stock: "예: 무제한, 재고 없음, 80000",
+  unit: "예: 10",
+};
 
 const CATEGORY_FORM_OPTIONS = [
   { value: "선물세트", label: "선물세트" },
@@ -658,10 +682,13 @@ function StockInventoryDetailModal({
 
 function MobileProductCard({
   product,
+  index,
   isSelected,
   onSelect,
 }: {
   product: StockInventoryRow;
+  /** 목록 번호 (1부터) */
+  index: number;
   isSelected: boolean;
   onSelect: () => void;
 }) {
@@ -688,7 +715,12 @@ function MobileProductCard({
             className="h-14 w-14 shrink-0"
           />
           <div className="min-w-0">
-            <p className="text-sm font-bold text-ink">{product.productName}</p>
+            <p className="text-sm font-bold text-ink">
+              <span className="mr-1.5 text-xs font-semibold tabular-nums text-[#64748b]">
+                No. {index}
+              </span>
+              {product.productName}
+            </p>
             <p className="mt-0.5 text-xs text-[#64748b]">{product.code}</p>
             <p className="mt-1 text-xs text-[#64748b]">
               {product.spec || "규격 없음"} · 단위 {product.unit} · 재고{" "}
@@ -724,6 +756,8 @@ export function StockInventoryMng() {
   const [error, setError] = useState("");
   const [keyword, setKeyword] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [openFilter, setOpenFilter] = useState("all");
+  const [searchField, setSearchField] = useState("all");
   const [selectedProduct, setSelectedProduct] =
     useState<StockInventoryRow | null>(null);
   const [view, setView] = useState<"list" | "create" | "edit">("list");
@@ -770,32 +804,56 @@ export function StockInventoryMng() {
 
   const filteredProducts = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
+    const stripCommas = (value: string) => value.replace(/,/g, "");
+
+    const matchesStock = (product: StockInventoryRow) =>
+      stripCommas(
+        formatStock(product.stock, product.stockMax).toLowerCase(),
+      ).includes(stripCommas(normalizedKeyword));
+    // 단위는 정확히 일치해야 한다 ("1" 로 10 이 걸리지 않게).
+    const matchesUnit = (product: StockInventoryRow) =>
+      String(product.unit) === normalizedKeyword;
+    const includesText = (value: string | null | undefined) =>
+      (value ?? "").toLowerCase().includes(normalizedKeyword);
 
     return products.filter((product) => {
-      if (categoryFilter === "open" || categoryFilter === "closed") {
+      if (categoryFilter !== "all" && product.category !== categoryFilter) {
+        return false;
+      }
+      if (openFilter !== "all") {
         const isOpen = product.openStock !== false;
-        if (isOpen !== (categoryFilter === "open")) {
+        if (isOpen !== (openFilter === "open")) {
           return false;
         }
-      } else if (
-        categoryFilter !== "all" &&
-        product.category !== categoryFilter
-      ) {
-        return false;
       }
 
       if (!normalizedKeyword) {
         return true;
       }
 
-      return (
-        product.code.toLowerCase().includes(normalizedKeyword) ||
-        product.productName.toLowerCase().includes(normalizedKeyword) ||
-        (product.spec ?? "").toLowerCase().includes(normalizedKeyword) ||
-        product.category.toLowerCase().includes(normalizedKeyword)
-      );
+      switch (searchField) {
+        case "code":
+          return includesText(product.code);
+        case "productName":
+          return includesText(product.productName);
+        case "spec":
+          return includesText(product.spec);
+        case "stock":
+          return matchesStock(product);
+        case "unit":
+          return matchesUnit(product);
+        default:
+          return (
+            includesText(product.code) ||
+            includesText(product.productName) ||
+            includesText(product.spec) ||
+            includesText(product.category) ||
+            matchesStock(product) ||
+            matchesUnit(product)
+          );
+      }
     });
-  }, [products, keyword, categoryFilter]);
+  }, [products, keyword, categoryFilter, openFilter, searchField]);
 
   const openCreate = () => {
     setView("create");
@@ -986,6 +1044,12 @@ export function StockInventoryMng() {
   };
 
   const columns: TableColumn<StockInventoryRow>[] = [
+    {
+      key: "no",
+      header: "번호",
+      className: "w-[56px]",
+      render: (_row, rowIndex) => rowIndex + 1,
+    },
     { key: "code", header: "코드" },
     {
       key: "productName",
@@ -1139,22 +1203,48 @@ export function StockInventoryMng() {
         <>
           <section className="rounded-lg border border-line bg-panel p-3.5">
             <div className="grid gap-3 min-[640px]:grid-cols-2">
-              <Dropdown
-                label="구분"
-                options={[...CATEGORY_FILTER_OPTIONS]}
-                value={categoryFilter}
-                onChange={setCategoryFilter}
-              />
-              <Input
-                label="검색"
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="코드 / 품명 / 규격"
-              />
+              <div>
+                <p className="mb-1.5 text-2xl font-bold text-ink">구분</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Dropdown
+                    aria-label="구분"
+                    options={[...CATEGORY_FILTER_OPTIONS]}
+                    value={categoryFilter}
+                    onChange={setCategoryFilter}
+                  />
+                  <Dropdown
+                    aria-label="고객공개"
+                    options={[...OPEN_FILTER_OPTIONS]}
+                    value={openFilter}
+                    onChange={setOpenFilter}
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1.5 text-2xl font-bold text-ink">검색</p>
+                <div className="flex gap-2">
+                  <div className="w-[110px] shrink-0">
+                    <Dropdown
+                      aria-label="검색 항목"
+                      options={[...SEARCH_FIELD_OPTIONS]}
+                      value={searchField}
+                      onChange={setSearchField}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      aria-label="검색어"
+                      value={keyword}
+                      onChange={(event) => setKeyword(event.target.value)}
+                      placeholder={SEARCH_PLACEHOLDERS[searchField]}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
             <p className="mt-2 text-xs text-[#64748b]">
               총 {filteredProducts.length}건
-              {keyword.trim() || categoryFilter !== "all"
+              {keyword.trim() || categoryFilter !== "all" || openFilter !== "all"
                 ? ` (전체 ${products.length}건 중)`
                 : ""}
             </p>
@@ -1166,10 +1256,11 @@ export function StockInventoryMng() {
                 검색 결과가 없습니다.
               </p>
             ) : (
-              filteredProducts.map((product) => (
+              filteredProducts.map((product, index) => (
                 <MobileProductCard
                   key={product.id}
                   product={product}
+                  index={index + 1}
                   isSelected={selectedProduct?.id === product.id}
                   onSelect={() => setSelectedProduct(product)}
                 />
