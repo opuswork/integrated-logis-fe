@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
@@ -17,6 +16,7 @@ import {
   type AuthUser,
 } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/env";
+import { cn } from "@/lib/utils";
 
 function LoginForm() {
   const router = useRouter();
@@ -25,6 +25,9 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logoutMsg, setLogoutMsg] = useState<"shown" | "fading" | "hidden">(
+    "shown",
+  );
   const signupSuccess = searchParams.get("signup") === "success";
   const logoutReason = searchParams.get("reason");
   const loggedOutByUser = logoutReason === "logout";
@@ -34,6 +37,17 @@ function LoginForm() {
       : logoutReason === "idle"
         ? "1시간 동안 사용하지 않아 자동 로그아웃되었습니다. 다시 로그인해 주세요."
         : "";
+
+  // "성공적으로 로그아웃 되었습니다."는 1초 보여준 뒤 0.5초 동안 사라진다.
+  useEffect(() => {
+    if (!loggedOutByUser) return;
+    const fadeTimer = window.setTimeout(() => setLogoutMsg("fading"), 1000);
+    const hideTimer = window.setTimeout(() => setLogoutMsg("hidden"), 1500);
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, [loggedOutByUser]);
 
   useEffect(() => {
     const existing = getAuthUser();
@@ -107,12 +121,13 @@ function LoginForm() {
           <h2 className="sr-only">B2B통합 물류·주문 관리 시스템</h2>
 
           <div className="flex w-full flex-col items-center gap-6 rounded-[10px] border border-[#cbd3df] bg-white px-6 py-8 shadow-[0_14px_34px_rgba(18,38,63,0.18)]">
-            <p className="text-center text-sm text-muted-foreground">
-              개인회원 모바일 앱 · 관리자·공장 계정으로도 로그인할 수 있습니다.
-            </p>
-
-            {loggedOutByUser && !signupSuccess ? (
-              <p className="w-full rounded-[7px] border border-green/30 bg-[#e8f8ef] px-3 py-2 text-sm text-green">
+            {loggedOutByUser && !signupSuccess && logoutMsg !== "hidden" ? (
+              <p
+                className={cn(
+                  "w-full rounded-[7px] border border-green/30 bg-[#e8f8ef] px-3 py-2 text-sm text-green transition-opacity duration-500",
+                  logoutMsg === "fading" && "opacity-0",
+                )}
+              >
                 성공적으로 로그아웃 되었습니다.
               </p>
             ) : null}
@@ -190,16 +205,6 @@ function LoginForm() {
                 )}
               </Button>
             </form>
-
-            <p className="text-center text-xs text-[#64748b]">
-              개인회원이시면 가입하기 버튼을 클릭하여 가입해 주세요.{" "}
-              <Link
-                href="/members/signup"
-                className="font-semibold text-[#F97B22] underline underline-offset-2"
-              >
-                가입하기
-              </Link>
-            </p>
           </div>
         </div>
       </main>
