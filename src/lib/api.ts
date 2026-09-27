@@ -1,12 +1,19 @@
 import { API_BASE_URL } from "@/lib/env";
 import { clearAuthUser, getAccessToken } from "@/lib/auth";
 
-// 세션 만료: 로그인 요청이 아닌 API가 401이면 로그인 화면으로 보낸다.
+// 세션 만료: 토큰을 보냈는데 401이면 로그인 화면으로 보낸다.
 // (화면 안에 빨간 "Unauthorized"만 뜨고 헤더·사이드바가 남던 문제)
+// 토큰 없이 나간 요청(로그아웃 직후 남은 폴링 등)은 만료가 아니므로 건너뛴다.
 let redirectingToLogin = false;
-function handleUnauthorized(path: string, response: Response) {
+function handleUnauthorized(
+  path: string,
+  response: Response,
+  sentToken: string | null,
+) {
   if (
     response.status !== 401 ||
+    !sentToken ||
+    getAccessToken() !== sentToken ||
     path.includes("/api/auth/login") ||
     redirectingToLogin ||
     typeof window === "undefined"
@@ -60,7 +67,7 @@ export async function apiFetch(
     ...init,
     headers,
   });
-  handleUnauthorized(path, response);
+  handleUnauthorized(path, response, token);
   if (redirectingToLogin) {
     // 로그인 화면으로 이동 중: 응답을 넘기지 않아 화면에 "Unauthorized"가 잠깐 뜨지 않게 한다.
     return new Promise<Response>(() => {});

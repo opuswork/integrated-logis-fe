@@ -10,6 +10,7 @@ import {
   getAuthUser,
   getLastActivity,
   getTokenTimes,
+  idleReason,
   isAccessTokenExpired,
   isAuthStorageKey,
   isIdleExpired,
@@ -58,13 +59,13 @@ export function useIdleLogout(timeoutMs: number = MEMBER_IDLE_TIMEOUT_MS) {
     let refreshing = false;
     let lastRefreshAttempt = 0;
 
-    const logout = (reason?: LogoutReason) => {
+    const logout = (reason: LogoutReason) => {
       if (loggedOut) {
         return;
       }
       loggedOut = true;
       clearAuthUser();
-      router.replace(reason ? `/login?reason=${reason}` : "/login");
+      router.replace(`/login?reason=${reason}`);
     };
 
     /** true면 세션이 끝나 로그아웃 처리됨 */
@@ -73,9 +74,9 @@ export function useIdleLogout(timeoutMs: number = MEMBER_IDLE_TIMEOUT_MS) {
         return true;
       }
       if (!getAuthUser()) {
-        logout();
+        logout("logout");
       } else if (isIdleExpired(timeoutMs)) {
-        logout("idle");
+        logout(idleReason(timeoutMs));
       } else if (isAccessTokenExpired()) {
         logout("expired");
       }
@@ -135,7 +136,7 @@ export function useIdleLogout(timeoutMs: number = MEMBER_IDLE_TIMEOUT_MS) {
       // 다른 탭에서 로그아웃하면 이 탭도 로그인 화면으로
       if (event.key === null || isAuthStorageKey(event.key)) {
         if (!getAuthUser()) {
-          logout();
+          logout("logout");
         }
       }
     };

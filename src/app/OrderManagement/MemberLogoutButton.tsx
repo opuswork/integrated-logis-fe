@@ -30,7 +30,7 @@ export function MemberLogoutButton({ className }: { className?: string }) {
     setStep("farewell");
     timerRef.current = window.setTimeout(() => {
       clearAuthUser();
-      router.replace("/login");
+      router.replace("/login?reason=logout");
     }, FAREWELL_DELAY_MS);
   };
 

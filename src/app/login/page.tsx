@@ -27,11 +27,12 @@ function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const signupSuccess = searchParams.get("signup") === "success";
   const logoutReason = searchParams.get("reason");
+  const loggedOutByUser = logoutReason === "logout";
   const logoutNotice =
-    logoutReason === "idle"
-      ? "오랫동안 사용하지 않아 자동 로그아웃되었습니다. 다시 로그인해 주세요."
-      : logoutReason === "expired"
-        ? "로그인이 만료되었습니다. 다시 로그인해 주세요."
+    logoutReason === "expired"
+      ? "세션 만료: 마지막 활동 이후 24시간이 경과하여 로그아웃되었습니다. 다시 로그인해 주세요."
+      : logoutReason === "idle"
+        ? "1시간 동안 사용하지 않아 자동 로그아웃되었습니다. 다시 로그인해 주세요."
         : "";
 
   useEffect(() => {
@@ -109,6 +110,12 @@ function LoginForm() {
             <p className="text-center text-sm text-muted-foreground">
               개인회원 모바일 앱 · 관리자·공장 계정으로도 로그인할 수 있습니다.
             </p>
+
+            {loggedOutByUser && !signupSuccess ? (
+              <p className="w-full rounded-[7px] border border-green/30 bg-[#e8f8ef] px-3 py-2 text-sm text-green">
+                성공적으로 로그아웃 되었습니다.
+              </p>
+            ) : null}
 
             {logoutNotice && !signupSuccess ? (
               <p className="w-full rounded-[7px] border border-[#f2b620]/40 bg-[#fff8e6] px-3 py-2 text-sm text-[#8a5a00]">

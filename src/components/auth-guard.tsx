@@ -9,6 +9,7 @@ import {
   clearAuthUser,
   getAuthUser,
   getHomePathForRole,
+  idleReason,
   isAccessTokenExpired,
   isIdleExpired,
   type AuthUser,
@@ -68,7 +69,9 @@ export function AuthGuard({
       idleTimeoutMs != null && idleTimeoutMs > 0 && isIdleExpired(idleTimeoutMs);
     if (idle || isAccessTokenExpired()) {
       clearAuthUser();
-      router.replace(`/login?reason=${idle ? "idle" : "expired"}`);
+      router.replace(
+        `/login?reason=${idle ? idleReason(idleTimeoutMs) : "expired"}`,
+      );
       return;
     }
 
@@ -118,7 +121,7 @@ export function LogoutButton({
       className={className}
       onClick={() => {
         clearAuthUser();
-        router.replace("/login");
+        router.replace("/login?reason=logout");
       }}
     >
       {children}
