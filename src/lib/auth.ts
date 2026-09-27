@@ -128,6 +128,13 @@ export function isFactoryGUser(user: AuthUser | null | undefined): boolean {
   );
 }
 
+/** 최고관리자(파일관리 메뉴 전용) */
+export const TOP_ADMIN_USERNAME = "01044631440";
+
+export function isTopAdminUser(user: AuthUser | null | undefined): boolean {
+  return user?.username === TOP_ADMIN_USERNAME;
+}
+
 export function canApproveGreetingAction(
   user: AuthUser | null | undefined,
 ): boolean {
