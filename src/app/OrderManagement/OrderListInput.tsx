@@ -3441,7 +3441,12 @@ function LineShipSheet({
                               recipientAddress: draft.senderAddress,
                               recipientAddressDetail: draft.senderAddressDetail,
                             }
-                          : { sameAsSenderAddress: false },
+                          : // 해제하면 복사해 둔 보내는 사람 주소를 비운다 (그대로 두면 잘못 저장됨)
+                            {
+                              sameAsSenderAddress: false,
+                              recipientAddress: "",
+                              recipientAddressDetail: "",
+                            },
                       );
                     }}
                     className="size-4 accent-[#6B46C1]"
