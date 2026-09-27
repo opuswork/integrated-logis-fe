@@ -1,5 +1,22 @@
 import { API_BASE_URL } from "@/lib/env";
-import { getAccessToken } from "@/lib/auth";
+import { clearAuthUser, getAccessToken } from "@/lib/auth";
+
+// 세션 만료: 로그인 요청이 아닌 API가 401이면 로그인 화면으로 보낸다.
+// (화면 안에 빨간 "Unauthorized"만 뜨고 헤더·사이드바가 남던 문제)
+let redirectingToLogin = false;
+function handleUnauthorized(path: string, response: Response) {
+  if (
+    response.status !== 401 ||
+    path.includes("/api/auth/login") ||
+    redirectingToLogin ||
+    typeof window === "undefined"
+  ) {
+    return;
+  }
+  redirectingToLogin = true;
+  clearAuthUser();
+  window.location.replace("/login?reason=expired");
+}
 
 // 중복로그인 방지 (비활성): 401 + "중복 로그인"이면 강제 로그아웃
 // const DUPLICATE_LOGIN_MESSAGE = "중복 로그인을 허용하지 않습니다";
@@ -39,8 +56,14 @@ export async function apiFetch(
     headers.set("Content-Type", "application/json");
   }
 
-  return fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
   });
+  handleUnauthorized(path, response);
+  if (redirectingToLogin) {
+    // 로그인 화면으로 이동 중: 응답을 넘기지 않아 화면에 "Unauthorized"가 잠깐 뜨지 않게 한다.
+    return new Promise<Response>(() => {});
+  }
+  return response;
 }

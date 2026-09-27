@@ -14,6 +14,16 @@ export interface AuthUser {
 
 const AUTH_STORAGE_KEY = "sanc-logistics-auth";
 const TOKEN_STORAGE_KEY = "sanc-logistics-access-token";
+/** 마지막 사용자 활동 시각(ms). 탭끼리 공유되고 새로고침해도 남는다. */
+const LAST_ACTIVITY_KEY = "sanc-logistics-last-activity";
+
+/** 관리자·공장: 24시간 동안 활동이 없으면 자동 로그아웃 */
+export const ADMIN_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+/** 개인회원: 1시간 동안 활동이 없으면 자동 로그아웃 */
+export const MEMBER_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
+
+/** 로그인 화면으로 보낼 때 붙이는 사유 (`/login?reason=...`) */
+export type LogoutReason = "idle" | "expired";
 
 export function normalizeUserRole(role: string | undefined | null): UserRole {
   if (role === "ADMIN" || role === "admin") {
@@ -197,6 +207,7 @@ export function saveAuthUser(user: AuthUser, accessToken?: string) {
   if (accessToken) {
     window.localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
   }
+  markActivity();
 }
 
 export function getAuthUser(): AuthUser | null {
@@ -234,6 +245,14 @@ export function getAccessToken(): string | null {
   return window.localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
+export function setAccessToken(accessToken: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
+}
+
 export function clearAuthUser() {
   if (typeof window === "undefined") {
     return;
@@ -241,4 +260,61 @@ export function clearAuthUser() {
 
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
   window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+}
+
+export function isAuthStorageKey(key: string | null): boolean {
+  return key === AUTH_STORAGE_KEY || key === TOKEN_STORAGE_KEY;
+}
+
+/** JWT의 발급(iat)·만료(exp) 시각을 ms로 읽는다. 서명은 서버가 검증한다. */
+export function getTokenTimes(
+  token: string | null,
+): { issuedAt: number | null; expiresAt: number | null } {
+  const empty = { issuedAt: null, expiresAt: null };
+  const part = token?.split(".")[1];
+  if (!part) {
+    return empty;
+  }
+
+  try {
+    const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const claims = JSON.parse(atob(padded)) as { iat?: number; exp?: number };
+    return {
+      issuedAt: typeof claims.iat === "number" ? claims.iat * 1000 : null,
+      expiresAt: typeof claims.exp === "number" ? claims.exp * 1000 : null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+/** 토큰이 없거나, 읽을 수 없거나, 만료되었으면 true */
+export function isAccessTokenExpired(): boolean {
+  const { expiresAt } = getTokenTimes(getAccessToken());
+  return expiresAt == null || expiresAt <= Date.now();
+}
+
+export function markActivity() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+}
+
+export function getLastActivity(): number | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const value = Number(window.localStorage.getItem(LAST_ACTIVITY_KEY));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** 마지막 활동 후 timeoutMs가 지났으면 true (기록이 없으면 false) */
+export function isIdleExpired(timeoutMs: number): boolean {
+  const last = getLastActivity();
+  return last != null && Date.now() - last > timeoutMs;
 }
