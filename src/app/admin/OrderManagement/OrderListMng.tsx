@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Factory,
   FileDown,
+  FolderOpen,
   LayoutDashboard,
   Package,
   Truck,
@@ -32,11 +33,13 @@ import { AdminShipmentMng } from "@/app/admin/OrderManagement/AdminShipmentMng";
 import { AdminReleaseMng } from "@/app/admin/OrderManagement/AdminReleaseMng";
 import { AdminPackagingMng } from "@/app/admin/OrderManagement/AdminPackagingMng";
 import { AdminMissingCheckMng } from "@/app/admin/OrderManagement/AdminMissingCheckMng";
+import { AdminFileMng } from "@/app/admin/OrderManagement/AdminFileMng";
 import { MemberPartnerMng } from "@/app/OrderManagement/MemberPartnerMng";
 import { OrderListInput } from "@/app/OrderManagement/OrderListInput";
 import { LogoutButton } from "@/components/auth-guard";
 import { AdminTopBar } from "@/components/admin-top-bar";
 import { Dialog } from "@/components/ui/dialog";
+import { getAuthUser, isTopAdminUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 /** 실제 콘텐츠가 연결된 화면 키 */
@@ -59,6 +62,7 @@ type AdminView =
   | "재고/상품"
   | "재고 엑셀업로드"
   | "회원관리"
+  | "파일관리"
   | "프로필";
 
 type NavPrimaryId =
@@ -68,7 +72,8 @@ type NavPrimaryId =
   | "factory"
   | "inventory"
   | "members"
-  | "export";
+  | "export"
+  | "files";
 
 type NavSubItem = {
   id: string;
@@ -154,6 +159,12 @@ const FULL_NAV: NavPrimaryItem[] = [
     icon: FileDown,
     view: "데이터 내보내기",
     children: [{ id: "excel", label: "엑셀", view: "엑셀" }],
+  },
+  {
+    id: "files",
+    label: "파일관리",
+    icon: FolderOpen,
+    view: "파일관리",
   },
 ];
 
@@ -310,7 +321,12 @@ const ORDER_LEAVE_CONFIRM_MESSAGE =
   "주문서를 벗어나면 데이터가 소실됩니다. 주문서 작성을 먼저 완료해주세요.\n\n그래도 다른 메뉴로 이동하시겠습니까?";
 
 export function OrderListMng() {
-  const nav = FULL_NAV;
+  // 파일관리(음성 녹음)는 최고관리자에게만 보인다.
+  const [nav] = useState(() =>
+    isTopAdminUser(getAuthUser())
+      ? FULL_NAV
+      : FULL_NAV.filter((item) => item.id !== "files"),
+  );
 
   const [activeMenu, setActiveMenu] = useState<AdminView>("주문목록");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -418,6 +434,10 @@ export function OrderListMng() {
   const renderContent = () => {
     if (activeMenu === "프로필") {
       return <AdminProfilePanel />;
+    }
+
+    if (activeMenu === "파일관리") {
+      return <AdminFileMng />;
     }
 
     if (activeMenu === "주문목록") {

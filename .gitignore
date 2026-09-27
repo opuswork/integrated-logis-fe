@@ -44,3 +44,6 @@ next-env.d.ts
 storybook-static
 
 /src/generated/prisma
+# 로컬 개발 시 저장되는 음성 신고 녹음
+/public/assets/voice_recordings/*
+!/public/assets/voice_recordings/.gitkeep
