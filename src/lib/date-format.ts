@@ -59,3 +59,12 @@ export function formatMonthDayTime(
   const mm = String(date.getMinutes()).padStart(2, "0");
   return `${m}.${d} ${hh}:${mm}`;
 }
+
+/** YYYY-MM-DD가 일요일이면 true (일요일에는 주문·출고 날짜를 잡을 수 없다) */
+export function isSundayIso(iso: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return false;
+  }
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day).getDay() === 0;
+}

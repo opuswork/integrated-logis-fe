@@ -405,6 +405,7 @@ export function AdminShipmentMng() {
                           valueIso={row.requestedShipDate}
                           yearHint={row.requestedShipDate}
                           minIso={todayIsoDate()}
+                          disableSundays
                           disabled={
                             !canSetShipDate || savingId === `d-${row.id}`
                           }

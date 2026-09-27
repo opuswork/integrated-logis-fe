@@ -6,6 +6,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from "react-dom";
 import Calendar from "react-calendar";
 
+import { isSundayIso } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 
 import "react-calendar/dist/Calendar.css";
@@ -90,6 +91,8 @@ type MdCalendarPickerProps = {
   onClear?: () => void;
   minIso?: string;
   maxIso?: string;
+  /** 일요일은 고를 수 없게 막는다 */
+  disableSundays?: boolean;
 };
 
 export function MdCalendarPicker({
@@ -108,6 +111,7 @@ export function MdCalendarPicker({
   onClear,
   minIso,
   maxIso,
+  disableSundays = false,
 }: MdCalendarPickerProps) {
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -173,6 +177,7 @@ export function MdCalendarPicker({
     const iso = dayjs(date).format("YYYY-MM-DD");
     if (minIso && iso < minIso) return true;
     if (maxIso && iso > maxIso) return true;
+    if (disableSundays && date.getDay() === 0) return true;
     return false;
   };
 
@@ -208,6 +213,7 @@ export function MdCalendarPicker({
                 const pickedIso = dayjs(date).format("YYYY-MM-DD");
                 if (minIso && pickedIso < minIso) return;
                 if (maxIso && pickedIso > maxIso) return;
+                if (disableSundays && isSundayIso(pickedIso)) return;
 
                 onChangeMd?.(md);
                 onChangeIso?.(pickedIso);
