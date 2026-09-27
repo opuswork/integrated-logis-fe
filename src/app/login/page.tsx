@@ -9,8 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
+  clearAuthUser,
   getAuthUser,
   getHomePathForRole,
+  isAccessTokenExpired,
   saveAuthUser,
   type AuthUser,
 } from "@/lib/auth";
@@ -24,9 +26,21 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const signupSuccess = searchParams.get("signup") === "success";
+  const logoutReason = searchParams.get("reason");
+  const logoutNotice =
+    logoutReason === "idle"
+      ? "오랫동안 사용하지 않아 자동 로그아웃되었습니다. 다시 로그인해 주세요."
+      : logoutReason === "expired"
+        ? "로그인이 만료되었습니다. 다시 로그인해 주세요."
+        : "";
 
   useEffect(() => {
     const existing = getAuthUser();
+    // 토큰이 만료된 로그인 정보는 지우고 로그인 화면에 머문다.
+    if (existing && isAccessTokenExpired()) {
+      clearAuthUser();
+      return;
+    }
     if (existing) {
       router.replace(
         getHomePathForRole(existing.role, {
@@ -95,6 +109,12 @@ function LoginForm() {
             <p className="text-center text-sm text-muted-foreground">
               개인회원 모바일 앱 · 관리자·공장 계정으로도 로그인할 수 있습니다.
             </p>
+
+            {logoutNotice && !signupSuccess ? (
+              <p className="w-full rounded-[7px] border border-[#f2b620]/40 bg-[#fff8e6] px-3 py-2 text-sm text-[#8a5a00]">
+                {logoutNotice}
+              </p>
+            ) : null}
 
             {signupSuccess ? (
               <p className="w-full rounded-[7px] border border-green/30 bg-[#e8f8ef] px-3 py-2 text-sm text-green">

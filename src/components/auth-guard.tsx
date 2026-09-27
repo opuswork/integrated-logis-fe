@@ -9,6 +9,8 @@ import {
   clearAuthUser,
   getAuthUser,
   getHomePathForRole,
+  isAccessTokenExpired,
+  isIdleExpired,
   type AuthUser,
   type UserRole,
 } from "@/lib/auth";
@@ -61,6 +63,15 @@ export function AuthGuard({
       return;
     }
 
+    // 만료된 세션이면 헤더·사이드바를 그리기 전에 로그인 화면으로 보낸다.
+    const idle =
+      idleTimeoutMs != null && idleTimeoutMs > 0 && isIdleExpired(idleTimeoutMs);
+    if (idle || isAccessTokenExpired()) {
+      clearAuthUser();
+      router.replace(`/login?reason=${idle ? "idle" : "expired"}`);
+      return;
+    }
+
     if (!allowedRoles.includes(current.role)) {
       router.replace(getHomePathForRole(current.role));
       return;
@@ -68,7 +79,7 @@ export function AuthGuard({
 
     setUser(current);
     setReady(true);
-  }, [router, allowedKey]);
+  }, [router, allowedKey, idleTimeoutMs]);
 
   if (!ready || !user) {
     return (
