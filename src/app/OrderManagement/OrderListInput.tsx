@@ -1760,7 +1760,8 @@ function ProductAddDialog({
         catalog.map((item) => item.productName),
       );
     } else {
-      if (selectedItems.length === 0) {
+      // 배송방식은 필수 (버튼도 막혀 있지만 한 번 더 확인)
+      if (selectedItems.length === 0 || presetKind === "") {
         return;
       }
       onAddItems(selectedItems, presetKind);
@@ -1876,12 +1877,37 @@ function ProductAddDialog({
   );
 
   // 상품목록수정(editList)은 기존 줄을 바꾸는 창이라 배송방식 미리 고르기를 보여주지 않는다.
+  // 그 밖에는 배송방식(하차배송/택배)을 골라야 장바구니에 담을 수 있다 (필수).
+  const shipKindMissing = !editList && presetKind === "";
   const shipPreset = editList ? null : (
-    <ShipKindButtons
-      size={isSheet ? "sheet" : "card"}
-      value={presetKind}
-      onChange={setPresetKind}
-    />
+    <div>
+      <p
+        className={cn(
+          "mb-2 font-bold text-[#475569]",
+          isSheet ? "text-[16px]" : "text-xs",
+        )}
+      >
+        배송방식 선택 <span className="text-[#E53E3E]">*</span>
+      </p>
+      <div className="flex">
+        <ShipKindButtons
+          size={isSheet ? "sheet" : "card"}
+          value={presetKind}
+          onChange={setPresetKind}
+        />
+      </div>
+      {shipKindMissing && selectedItems.length > 0 ? (
+        <p
+          role="alert"
+          className={cn(
+            "mt-2 font-semibold text-[#E53E3E]",
+            isSheet ? "text-[15px]" : "text-xs",
+          )}
+        >
+          하차배송 또는 택배를 선택해 주세요.
+        </p>
+      ) : null}
+    </div>
   );
 
   const listContent = isLoading ? (
@@ -2080,7 +2106,8 @@ function ProductAddDialog({
     </div>
   );
 
-  const confirmDisabled = !editList && selectedItems.length === 0;
+  const confirmDisabled =
+    !editList && (selectedItems.length === 0 || shipKindMissing);
 
   if (isSheet) {
     return (
@@ -2131,7 +2158,7 @@ function ProductAddDialog({
         }
       >
         {shipPreset ? (
-          <div className="flex border-b border-[#E2E8F0] px-4 pt-1 pb-4">
+          <div className="border-b border-[#E2E8F0] px-4 pt-1 pb-4">
             {shipPreset}
           </div>
         ) : null}
@@ -2153,7 +2180,7 @@ function ProductAddDialog({
       <div className="space-y-3">
         <p className="text-sm text-[#64748b]">{subtitle}</p>
 
-        {shipPreset ? <div className="flex">{shipPreset}</div> : null}
+        {shipPreset}
 
         {filterControls}
 
