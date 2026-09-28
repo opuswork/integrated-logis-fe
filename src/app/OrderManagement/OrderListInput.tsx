@@ -18,6 +18,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { MemberHomeInstallMng } from "@/app/OrderManagement/MemberHomeInstallMng";
@@ -1585,6 +1586,19 @@ function ProductAddDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  /** 썸네일을 누르면 크게 보여줄 상품 이미지 */
+  const [zoomItem, setZoomItem] = useState<{ src: string; name: string } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!zoomItem) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setZoomItem(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [zoomItem]);
   /** 담을 상품에 미리 넣을 배송방식 (하차배송/택배). 줄마다 다시 바꿀 수 있다 */
   const [presetKind, setPresetKind] = useState<OrderType | "">("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -1989,15 +2003,41 @@ function ProductAddDialog({
               active ? "bg-[#eff6ff]" : selected ? "bg-[#f5f9ff]" : "bg-white",
             )}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={productImageSrc(item.imageUrl)}
-              alt={item.productName}
-              className={cn(
-                "shrink-0 border border-line bg-white object-contain",
-                isSheet ? "h-20 w-20 rounded-xl" : "h-14 w-14 rounded",
-              )}
-            />
+            {item.imageUrl?.trim() ? (
+              <button
+                type="button"
+                aria-label={`${item.productName} 이미지 크게 보기`}
+                className="shrink-0 cursor-zoom-in"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setActiveIndex(index);
+                  setZoomItem({
+                    src: productImageSrc(item.imageUrl),
+                    name: item.productName,
+                  });
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={productImageSrc(item.imageUrl)}
+                  alt={item.productName}
+                  className={cn(
+                    "block border border-line bg-white object-contain",
+                    isSheet ? "h-20 w-20 rounded-xl" : "h-14 w-14 rounded",
+                  )}
+                />
+              </button>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={productImageSrc(item.imageUrl)}
+                alt={item.productName}
+                className={cn(
+                  "shrink-0 border border-line bg-white object-contain",
+                  isSheet ? "h-20 w-20 rounded-xl" : "h-14 w-14 rounded",
+                )}
+              />
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <ProductNameWithStock
@@ -2105,6 +2145,33 @@ function ProductAddDialog({
     </div>
   );
 
+  // 인사장 미리보기와 같은 모양의 큰 이미지 팝업. 아무 곳이나 누르면 닫힌다.
+  const zoomPopup =
+    open && zoomItem && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${zoomItem.name} 이미지`}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+            onClick={() => setZoomItem(null)}
+          >
+            <div className="w-[22rem] max-w-full rounded-lg border border-line bg-white p-3 shadow-[0_10px_28px_rgba(15,23,42,0.18)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={zoomItem.src}
+                alt={zoomItem.name}
+                className="h-80 w-full rounded bg-[#f8fafc] object-contain"
+              />
+              <p className="mt-1.5 text-center text-sm font-semibold text-ink">
+                {zoomItem.name}
+              </p>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   const confirmDisabled =
     !editList && (selectedItems.length === 0 || shipKindMissing);
 
@@ -2172,6 +2239,7 @@ function ProductAddDialog({
         }
       >
         {listContent}
+        {zoomPopup}
       </BottomSheet>
     );
   }
@@ -2191,6 +2259,7 @@ function ProductAddDialog({
         {filterControls}
 
         {listContent}
+        {zoomPopup}
 
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[#64748b]">
           <span>
