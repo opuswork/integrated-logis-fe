@@ -9,6 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -211,18 +212,81 @@ function DetailField({
   );
 }
 
+/** 상품 이미지를 최대 500×500 으로 크게 보여주는 하단 시트 */
+function ProductImageSheet({
+  product,
+  open,
+  onClose,
+}: {
+  product: StockInventoryRow;
+  open: boolean;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  return (
+    <BottomSheet
+      open={open}
+      title="상품 이미지"
+      subtitle={product.productName}
+      onClose={onClose}
+      className="h-auto"
+    >
+      <div className="flex justify-center px-5 pb-6">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={productImageSrc(product.imageUrl)}
+          alt={product.productName || "상품 이미지"}
+          className="aspect-square w-full max-w-[500px] rounded-lg border border-line bg-white object-contain"
+        />
+      </div>
+    </BottomSheet>
+  );
+}
+
 function StockInventoryDetailContent({
   product,
 }: {
   product: StockInventoryRow;
 }) {
+  const [imageOpen, setImageOpen] = useState(false);
+  const hasImage = Boolean(product.imageUrl?.trim());
+
   return (
     <>
       <div className="mb-4">
-        <ProductThumbnail
-          product={product}
-          className="mx-auto h-40 w-40 max-h-40"
-        />
+        {hasImage ? (
+          <>
+            <button
+              type="button"
+              aria-label="이미지 크게 보기"
+              onClick={() => setImageOpen(true)}
+              className="mx-auto block cursor-zoom-in rounded transition hover:ring-2 hover:ring-brand/40"
+            >
+              <ProductThumbnail product={product} className="h-40 w-40 max-h-40" />
+            </button>
+            <p className="mt-1.5 text-center text-xs text-[#64748b]">
+              클릭하면 크게 볼 수 있습니다
+            </p>
+            <ProductImageSheet
+              product={product}
+              open={imageOpen}
+              onClose={() => setImageOpen(false)}
+            />
+          </>
+        ) : (
+          <ProductThumbnail
+            product={product}
+            className="mx-auto h-40 w-40 max-h-40"
+          />
+        )}
       </div>
 
       <dl className="grid gap-3 min-[640px]:grid-cols-2 min-[1040px]:grid-cols-3">
@@ -633,7 +697,7 @@ function StockInventoryDetailPanel({
         </div>
       </div>
 
-      <StockInventoryDetailContent product={product} />
+      <StockInventoryDetailContent key={product.id} product={product} />
     </section>
   );
 }
@@ -658,7 +722,7 @@ function StockInventoryDetailModal({
           {product.productName}
         </p>
         <div className="max-h-[60vh] overflow-y-auto pr-1">
-          <StockInventoryDetailContent product={product} />
+          <StockInventoryDetailContent key={product.id} product={product} />
         </div>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={onEdit}>
