@@ -7,6 +7,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -15,7 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
-import { getAuthUser } from "@/lib/auth";
+import { getAuthUser, isTopAdminUser } from "@/lib/auth";
+import { exportMembersWorkbook } from "@/lib/export-members-excel";
 import { cn } from "@/lib/utils";
 
 type MemberRow = {
@@ -791,6 +793,8 @@ export function MembersListMng() {
   const [error, setError] = useState("");
   const [keyword, setKeyword] = useState("");
   const [editingMember, setEditingMember] = useState<MemberRow | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const canExportMembers = isTopAdminUser(getAuthUser());
 
   const loadMembers = async () => {
     setIsLoading(true);
@@ -872,6 +876,42 @@ export function MembersListMng() {
       );
     });
   }, [members, keyword]);
+
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+      await exportMembersWorkbook({
+        rows: filteredMembers.map((member) => [
+          member.username,
+          member.churchName
+            ? `${member.fullname}-${member.churchName}`
+            : member.fullname,
+          formatMemberType(member.memberType),
+        ]),
+        filename: `회원명단_${stamp}.xlsx`,
+      });
+    } catch {
+      window.alert("엑셀 파일을 만들지 못했습니다.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportButton = canExportMembers ? (
+    <div className="flex justify-end">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={isExporting || filteredMembers.length === 0}
+        onClick={() => void handleExportExcel()}
+      >
+        <Download className="size-4" />
+        {isExporting ? "다운로드 중..." : "엑셀 다운로드"}
+      </Button>
+    </div>
+  ) : null;
 
   const columns: TableColumn<MemberRow>[] = [
     { key: "username", header: "아이디" },
@@ -1006,6 +1046,8 @@ export function MembersListMng() {
               visibleRows={8}
             />
           </section>
+
+          {exportButton}
 
           {editingMember ? (
             <MemberEditPanel
