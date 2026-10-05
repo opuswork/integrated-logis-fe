@@ -14,10 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/ui/pagination";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 15;
 
 type StockInventoryRow = {
   [key: string]: string | number | boolean | null;
@@ -822,6 +825,7 @@ export function StockInventoryMng() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [openFilter, setOpenFilter] = useState("all");
   const [searchField, setSearchField] = useState("all");
+  const [page, setPage] = useState(1);
   const [selectedProduct, setSelectedProduct] =
     useState<StockInventoryRow | null>(null);
   const [view, setView] = useState<"list" | "create" | "edit">("list");
@@ -918,6 +922,15 @@ export function StockInventoryMng() {
       }
     });
   }, [products, keyword, categoryFilter, openFilter, searchField]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, categoryFilter, openFilter, searchField]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageOffset = (safePage - 1) * PAGE_SIZE;
+  const pageProducts = filteredProducts.slice(pageOffset, pageOffset + PAGE_SIZE);
 
   const openCreate = () => {
     setView("create");
@@ -1112,7 +1125,7 @@ export function StockInventoryMng() {
       key: "no",
       header: "번호",
       className: "w-[56px]",
-      render: (_row, rowIndex) => rowIndex + 1,
+      render: (_row, rowIndex) => pageOffset + rowIndex + 1,
     },
     { key: "code", header: "코드" },
     {
@@ -1320,11 +1333,11 @@ export function StockInventoryMng() {
                 검색 결과가 없습니다.
               </p>
             ) : (
-              filteredProducts.map((product, index) => (
+              pageProducts.map((product, index) => (
                 <MobileProductCard
                   key={product.id}
                   product={product}
-                  index={index + 1}
+                  index={pageOffset + index + 1}
                   isSelected={selectedProduct?.id === product.id}
                   onSelect={() => setSelectedProduct(product)}
                 />
@@ -1336,10 +1349,8 @@ export function StockInventoryMng() {
             <Table
               caption="상품 목록"
               columns={columns}
-              data={filteredProducts}
+              data={pageProducts}
               emptyMessage="검색 결과가 없습니다."
-              scrollable
-              visibleRows={10}
               onRowClick={(row) => setSelectedProduct(row)}
               getRowClassName={(row) =>
                 selectedProduct?.id === row.id
@@ -1348,6 +1359,16 @@ export function StockInventoryMng() {
               }
             />
           </section>
+
+          {filteredProducts.length > 0 ? (
+            <div className="flex justify-center">
+              <Pagination
+                page={safePage}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            </div>
+          ) : null}
 
           {selectedProduct ? (
             <>
