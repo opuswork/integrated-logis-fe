@@ -39,6 +39,11 @@ type StockInventoryRow = {
   priceOver100man: number;
   wholesalePrice: number;
   associatePrice: number;
+  unitPriceShow: boolean | null;
+  retailPrice: number | null;
+  supermarketPrice: number | null;
+  schoolServePrice: number | null;
+  taxExemption: boolean | null;
   category: string;
   openStock: boolean;
   createdAt: string;
@@ -61,6 +66,13 @@ type ProductFormState = {
   priceOver100man: string;
   wholesalePrice: string;
   associatePrice: string;
+  /** 선택 가격. 빈 값 = 가격 없음 */
+  retailPrice: string;
+  supermarketPrice: string;
+  schoolServePrice: string;
+  /** "" = 미지정, "true" / "false" */
+  unitPriceShow: string;
+  taxExemption: string;
   category: string;
   openStock: boolean;
 };
@@ -103,6 +115,13 @@ const CATEGORY_FORM_OPTIONS = [
   { value: "일반품", label: "일반품" },
 ] as const;
 
+/** 단가노출여부 · 비과세 (빈 값 = 미지정) */
+const YES_NO_FORM_OPTIONS = [
+  { value: "", label: "미지정" },
+  { value: "true", label: "예" },
+  { value: "false", label: "아니오" },
+];
+
 const DEFAULT_PRODUCT_IMAGE = "/assets/images/No_img.jpg";
 
 function productImageSrc(imageUrl: string | null | undefined) {
@@ -131,6 +150,19 @@ function formatPrice(value: number) {
   return `${value.toLocaleString("ko-KR")}원`;
 }
 
+function formatOptionalPrice(value: number | null | undefined) {
+  return value === null || value === undefined ? "" : formatPrice(value);
+}
+
+function formatYesNo(value: boolean | null | undefined) {
+  if (value === null || value === undefined) return "";
+  return value ? "예" : "아니오";
+}
+
+function optionalToForm(value: number | boolean | null | undefined) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
 function formatDate(value: string) {
   return value.slice(0, 10);
 }
@@ -149,6 +181,11 @@ function emptyFormState(): ProductFormState {
     priceOver100man: "",
     wholesalePrice: "",
     associatePrice: "",
+    retailPrice: "",
+    supermarketPrice: "",
+    schoolServePrice: "",
+    unitPriceShow: "",
+    taxExemption: "",
     category: "일반품",
     openStock: true,
   };
@@ -171,6 +208,11 @@ function formFromProduct(product: StockInventoryRow): ProductFormState {
     priceOver100man: String(product.priceOver100man),
     wholesalePrice: String(product.wholesalePrice),
     associatePrice: String(product.associatePrice),
+    retailPrice: optionalToForm(product.retailPrice),
+    supermarketPrice: optionalToForm(product.supermarketPrice),
+    schoolServePrice: optionalToForm(product.schoolServePrice),
+    unitPriceShow: optionalToForm(product.unitPriceShow),
+    taxExemption: optionalToForm(product.taxExemption),
     category: product.category || "일반품",
     openStock: product.openStock !== false,
   };
@@ -323,6 +365,23 @@ function StockInventoryDetailContent({
           label="준회원가"
           value={formatPrice(product.associatePrice)}
         />
+        <DetailField
+          label="소매가"
+          value={formatOptionalPrice(product.retailPrice)}
+        />
+        <DetailField
+          label="슈퍼 납품가"
+          value={formatOptionalPrice(product.supermarketPrice)}
+        />
+        <DetailField
+          label="급식가"
+          value={formatOptionalPrice(product.schoolServePrice)}
+        />
+        <DetailField
+          label="단가노출여부"
+          value={formatYesNo(product.unitPriceShow)}
+        />
+        <DetailField label="비과세" value={formatYesNo(product.taxExemption)} />
         <DetailField
           label="원본 파일명"
           value={product.imageOriginalName ?? ""}
@@ -630,6 +689,43 @@ function ProductFormEditor({
           value={form.priceOver500man}
           onChange={updateField("priceOver500man")}
           required
+        />
+        <Input
+          label="소매가"
+          type="number"
+          value={form.retailPrice}
+          onChange={updateField("retailPrice")}
+          placeholder="선택"
+        />
+        <Input
+          label="슈퍼 납품가"
+          type="number"
+          value={form.supermarketPrice}
+          onChange={updateField("supermarketPrice")}
+          placeholder="선택"
+        />
+        <Input
+          label="급식가"
+          type="number"
+          value={form.schoolServePrice}
+          onChange={updateField("schoolServePrice")}
+          placeholder="선택"
+        />
+        <Dropdown
+          label="단가노출여부"
+          options={YES_NO_FORM_OPTIONS}
+          value={form.unitPriceShow}
+          onChange={(value) =>
+            setForm((prev) => ({ ...prev, unitPriceShow: value }))
+          }
+        />
+        <Dropdown
+          label="비과세"
+          options={YES_NO_FORM_OPTIONS}
+          value={form.taxExemption}
+          onChange={(value) =>
+            setForm((prev) => ({ ...prev, taxExemption: value }))
+          }
         />
       </div>
 
@@ -1003,6 +1099,18 @@ export function StockInventoryMng() {
     ) {
       return "가격을 모두 입력해 주세요.";
     }
+    const optionalPrices = [
+      form.retailPrice,
+      form.supermarketPrice,
+      form.schoolServePrice,
+    ];
+    if (
+      optionalPrices.some(
+        (value) => value.trim() !== "" && !Number.isFinite(Number(value)),
+      )
+    ) {
+      return "소매 / 슈퍼 / 급식 가격은 숫자로 입력하거나 비워 두세요.";
+    }
     return "";
   };
 
@@ -1030,6 +1138,17 @@ export function StockInventoryMng() {
     formData.append("priceOver100man", String(Number(form.priceOver100man)));
     formData.append("wholesalePrice", String(Number(form.wholesalePrice)));
     formData.append("associatePrice", String(Number(form.associatePrice)));
+    // 빈 값은 그대로 보내 null(가격 없음 / 미지정)로 저장한다.
+    for (const key of [
+      "retailPrice",
+      "supermarketPrice",
+      "schoolServePrice",
+    ] as const) {
+      const value = form[key].trim();
+      formData.append(key, value === "" ? "" : String(Number(value)));
+    }
+    formData.append("unitPriceShow", form.unitPriceShow);
+    formData.append("taxExemption", form.taxExemption);
     formData.append("category", form.category.trim());
     formData.append("openStock", String(form.openStock));
     if (imageFile) {

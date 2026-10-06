@@ -35,6 +35,9 @@ type PreviewRow = {
   nextStock: number | null;
   effectiveDate: string | null;
   wholesalePrice: number | null;
+  retailPrice: number | null;
+  supermarketPrice: number | null;
+  schoolServePrice: number | null;
   imageStatus: ImageStatus;
   /** data URI. 응답 크기 때문에 앞쪽 행·작은 이미지만 채워진다 */
   imageThumbnail: string | null;
@@ -626,7 +629,7 @@ function PreviewPanel({
       ) : null}
 
       <div className="max-h-[360px] overflow-auto rounded-lg border border-[#E2E8F0]">
-        <table className="w-full min-w-[980px] border-collapse text-left text-[12px]">
+        <table className="w-full min-w-[1180px] border-collapse text-left text-[12px]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11.5px] font-bold text-[#64748B]">
               <th className="px-3 py-2.5">행</th>
@@ -640,7 +643,10 @@ function PreviewPanel({
               <th className="px-3 py-2.5">현재재고</th>
               <th className="px-3 py-2.5">입고수량</th>
               <th className="px-3 py-2.5">적용 후 재고</th>
+              <th className="px-3 py-2.5">소매</th>
               <th className="px-3 py-2.5">도매가</th>
+              <th className="px-3 py-2.5">슈퍼</th>
+              <th className="px-3 py-2.5">급식</th>
               <th className="px-3 py-2.5">적용일자</th>
               <th className="px-3 py-2.5">비고</th>
             </tr>
@@ -681,8 +687,17 @@ function PreviewPanel({
                 <td className="px-3 py-2 font-bold tabular-nums text-[#1A202C]">
                   {formatInt(row.nextStock)}
                 </td>
+                <td className="px-3 py-2 tabular-nums text-[#64748B]">
+                  {formatInt(row.retailPrice)}
+                </td>
                 <td className="px-3 py-2 tabular-nums">
                   {formatInt(row.wholesalePrice)}
+                </td>
+                <td className="px-3 py-2 tabular-nums text-[#64748B]">
+                  {formatInt(row.supermarketPrice)}
+                </td>
+                <td className="px-3 py-2 tabular-nums text-[#64748B]">
+                  {formatInt(row.schoolServePrice)}
                 </td>
                 <td className="px-3 py-2 text-[#64748B]">
                   {formatDate(row.effectiveDate)}
