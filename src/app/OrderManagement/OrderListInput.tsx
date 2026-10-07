@@ -2067,8 +2067,11 @@ function ProductAddDialog({
                   isSheet ? "mt-0.5 text-[17px]" : "mt-0.5 text-xs",
                 )}
               >
-                {item.unit} · {item.category} ·{" "}
-                {formatPrice(item.wholesalePrice)}
+                {item.unit} · {item.category}
+                {/* 개인앱 박스상품 추가 창은 상품 단가를 숨긴다 (합계는 그대로 표시) */}
+                {isSheet && mode === "box"
+                  ? null
+                  : ` · ${formatPrice(item.wholesalePrice)}`}
               </p>
             </div>
             <input
