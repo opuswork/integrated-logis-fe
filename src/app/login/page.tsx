@@ -157,12 +157,12 @@ function LoginForm() {
                   htmlFor="username"
                   className="text-sm font-medium text-[#475569]"
                 >
-                  아이디 (연락처)
+                  아이디 (휴대폰 가운데 4자리)
                 </label>
                 <Input
                   id="username"
                   type="text"
-                  placeholder="01012345678"
+                  placeholder="예: 010-4463-1440 → 4463"
                   className="w-full"
                   autoComplete="username"
                   value={username}
@@ -180,7 +180,7 @@ function LoginForm() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="비밀번호를 입력해 주세요"
+                  placeholder="휴대폰 가운데+뒷자리 8자리 (예: 44631440)"
                   className="w-full"
                   autoComplete="current-password"
                   value={password}
