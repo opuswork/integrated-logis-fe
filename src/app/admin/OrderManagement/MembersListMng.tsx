@@ -349,7 +349,7 @@ function MemberEditPanel({
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  /** 비밀번호가 이미 초기값(연락처 숫자)인지. null이면 확인 중 */
+  /** 비밀번호가 이미 초기값(연락처 가운데+뒷자리)인지. null이면 확인 중 */
   const [isInitialPassword, setIsInitialPassword] = useState<boolean | null>(
     null,
   );
@@ -559,7 +559,7 @@ function MemberEditPanel({
     }
     if (
       !window.confirm(
-        `${member.fullname} 회원의 비밀번호를 연락처 숫자로 초기화할까요?`,
+        `${member.fullname} 회원의 비밀번호를 연락처 가운데+뒷자리 8자리로 초기화할까요?`,
       )
     ) {
       return;
@@ -725,8 +725,8 @@ function MemberEditPanel({
             {isInitialPassword === null
               ? "비밀번호 상태를 확인하는 중입니다."
               : isInitialPassword
-                ? "비밀번호가 이미 연락처 숫자로 되어 있어 회원이 로그인할 수 있습니다. 추가 초기화는 필요하지 않습니다."
-                : "초기화하면 비밀번호가 아이디와 같은 연락처 숫자로 바뀝니다."}
+                ? "비밀번호가 이미 연락처 가운데+뒷자리 8자리로 되어 있어 회원이 로그인할 수 있습니다. 추가 초기화는 필요하지 않습니다."
+                : "초기화하면 비밀번호가 연락처 가운데+뒷자리 8자리(예: 44631440)로 바뀝니다."}
           </p>
         ) : null}
       </form>
