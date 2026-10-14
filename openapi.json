@@ -24,6 +24,7 @@
     { "name": "Auth", "description": "로그인 / 내 정보" },
     { "name": "Churches", "description": "교회(기준정보) 등록 / 조회" },
     { "name": "Members", "description": "회원 조회 / 가입 / 수정" },
+    { "name": "Partners", "description": "거래처 조회 / 검색" },
     { "name": "Orders", "description": "주문 조회 / 생성 / 수정" },
     { "name": "OrderItems", "description": "주문 상품(OrderItem) CRUD" },
     { "name": "Shipments", "description": "배송(Shipment) CRUD" },
@@ -423,6 +424,37 @@
           "401": { "description": "JWT 없음" },
           "403": { "description": "권한 없음" },
           "404": { "description": "회원 없음" }
+        }
+      }
+    },
+    "/api/partners": {
+      "get": {
+        "tags": ["Partners"],
+        "summary": "거래처 목록 / 거래처명 검색 (JWT)",
+        "description": "q 없음: 관리자는 전체, 일반 회원은 본인 거래처만 반환합니다.\n\nq 있음: 모든 회원의 거래처에서 거래처명 부분 일치(대소문자 무시)로 검색하며 최대 30건을 반환합니다.\n\n정렬: 거래처명 오름차순, 같은 이름은 id 내림차순.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "신앙촌" },
+            "description": "거래처명 검색어 (공백만 있으면 무시)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "거래처 목록",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Partner" }
+                }
+              }
+            }
+          },
+          "401": { "description": "JWT 없음 또는 유효하지 않음" }
         }
       }
     },
