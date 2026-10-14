@@ -3,7 +3,7 @@
   "info": {
     "title": "SANC Logistics API",
     "description": "시온식품(주) 물류부 주문 관리 시스템 API (Prisma schema aligned)",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "servers": [
     {
@@ -457,11 +457,11 @@
             "application/json": {
               "schema": { "$ref": "#/components/schemas/OrderCreateRequest" },
               "example": {
-                "orderNumber": "SANC-2026-0001",
                 "userId": 2,
                 "status": "PLACED",
                 "totalAmount": 45000,
                 "notes": "개별택배",
+                "extraNote": "아이스박스 동봉",
                 "items": [
                   { "productName": "명진1호", "quantity": 300, "price": 15000 },
                   { "productName": "S5호", "quantity": 200, "price": 12000 }
@@ -1309,6 +1309,22 @@
             "type": "integer",
             "nullable": true,
             "description": "null이면 교회 연결 해제"
+          },
+          "memberType": {
+            "type": "string",
+            "enum": ["GWANJANG", "GENERAL", "CHONGMU", "SAJANG", "BUSAJANG", "SANGMU"],
+            "description": "회원 직분. GWANJANG(관장) | GENERAL(일반) | CHONGMU(총무) | SAJANG(사장) | BUSAJANG(부사장) | SANGMU(상무)"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["MEMBER", "ADMIN", "FACTORY"],
+            "description": "관리자만 변경 가능"
+          },
+          "adminRegion": {
+            "type": "string",
+            "enum": ["JUNGBU", "NAMBU", "SEOBU"],
+            "nullable": true,
+            "description": "지역 서브 관리자. ADMIN + null = Super admin"
           }
         }
       },
@@ -1320,7 +1336,24 @@
           "fullname": { "type": "string" },
           "phone": { "type": "string" },
           "email": { "type": "string", "nullable": true },
-          "role": { "type": "string", "enum": ["MEMBER", "ADMIN"] },
+          "role": { "type": "string", "enum": ["MEMBER", "ADMIN", "FACTORY"] },
+          "adminRegion": {
+            "type": "string",
+            "enum": ["JUNGBU", "NAMBU", "SEOBU"],
+            "nullable": true,
+            "description": "지역 서브 관리자. JUNGBU(중부·덕소) | NAMBU(남부·기장) | SEOBU(서부·소사). ADMIN + null = Super admin"
+          },
+          "accountSource": {
+            "type": "string",
+            "enum": ["SELF_SIGNUP", "ADMIN_ORDER", "BULK_IMPORT"],
+            "description": "계정 생성 경로. SELF_SIGNUP 이외는 본인확인 전 계정"
+          },
+          "memberType": {
+            "type": "string",
+            "enum": ["GWANJANG", "GENERAL", "CHONGMU", "SAJANG", "BUSAJANG", "SANGMU"],
+            "default": "GWANJANG",
+            "description": "회원 직분. GWANJANG(관장) | GENERAL(일반) | CHONGMU(총무) | SAJANG(사장) | BUSAJANG(부사장) | SANGMU(상무)"
+          },
           "churchId": { "type": "integer", "nullable": true },
           "church": { "$ref": "#/components/schemas/Church", "nullable": true },
           "createdAt": { "type": "string", "format": "date-time" },
@@ -1482,23 +1515,69 @@
         "type": "object",
         "properties": {
           "id": { "type": "integer" },
-          "orderNumber": { "type": "string" },
-          "status": {
+          "orderNumber": {
             "type": "string",
-            "enum": [
-              "PLACED",
-              "PRINTING_COMPLETE",
-              "WAITING_FOR_SHIPMENT",
-              "CANCELLED"
-            ]
+            "description": "표시용. SYN + 10자리 난수, 분할이면 SYN…-1",
+            "example": "SYN1234567890"
           },
+          "orderGroupKey": {
+            "type": "string",
+            "description": "분할 주문 형제가 공유하는 키 (형제 조회는 번호 문자열이 아니라 이 값으로)"
+          },
+          "splitIndex": { "type": "integer", "default": 1, "description": "분할 순번. 단일 주문이면 1" },
+          "status": { "$ref": "#/components/schemas/OrderStatus" },
           "totalAmount": { "type": "number" },
           "notes": { "type": "string", "nullable": true },
+          "extraNote": { "type": "string", "nullable": true, "description": "제품주문서 특이사항 (출고·포장관리 표시)" },
+          "factoryAlert": { "type": "string", "nullable": true, "description": "공장 화면 알림 (예: 주문서 변경요청발생!). 확인 후 null" },
+          "storeRegion": {
+            "type": "string",
+            "enum": ["JUNGBU", "NAMBU", "SEOBU"],
+            "nullable": true,
+            "description": "주문 작업 매장 지역 (중부/남부/서부)"
+          },
+          "packagingWorker": {
+            "type": "string",
+            "enum": ["STORE", "FACTORY"],
+            "nullable": true,
+            "description": "택배 작업 위치: 매장 | 공장"
+          },
+          "orderConfirmedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "orderConfirmedBy": { "type": "string", "nullable": true },
+          "paymentDone": { "type": "boolean", "default": false },
+          "paymentAuthor": { "type": "string", "nullable": true },
+          "greetingDone": { "type": "boolean", "default": false },
+          "slipDone": { "type": "boolean", "default": false },
+          "slipAuthor": { "type": "string", "nullable": true },
+          "readyForShipment": {
+            "type": "boolean",
+            "default": false,
+            "description": "작업자+확인+결제+인사장+기표지 충족 시 true → 배송/출고/포장 후보"
+          },
+          "requestedShipDate": { "type": "string", "format": "date-time", "nullable": true, "description": "배송관리: 출고요청일" },
+          "packDept": {
+            "type": "string",
+            "enum": ["FACTORY_PACK", "SOCK_PACK"],
+            "nullable": true,
+            "description": "포장구분: 공장포장 | 양말부포장"
+          },
+          "packDate": { "type": "string", "format": "date-time", "nullable": true },
+          "packPt": { "type": "string", "nullable": true },
+          "storagePlace": { "type": "string", "nullable": true },
+          "packDone": { "type": "boolean", "default": false },
+          "releaseDone": { "type": "boolean", "default": false, "description": "출고관리: 출고완료" },
+          "releaseDoneAt": { "type": "string", "format": "date-time", "nullable": true },
+          "finalCompleteDone": { "type": "boolean", "default": false, "description": "배송관리: 최종완료" },
+          "finalConfirmDone": { "type": "boolean", "default": false, "description": "배송관리: 최종확인" },
           "userId": { "type": "integer" },
           "user": { "$ref": "#/components/schemas/MemberUser" },
           "items": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/OrderItem" }
+          },
+          "greetingForms": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/GreetingForm" }
           },
           "shipment": { "$ref": "#/components/schemas/Shipment", "nullable": true },
           "createdAt": { "type": "string", "format": "date-time" },
@@ -1507,20 +1586,26 @@
       },
       "OrderCreateRequest": {
         "type": "object",
-        "required": ["orderNumber", "userId"],
+        "required": ["userId"],
         "properties": {
-          "orderNumber": { "type": "string", "example": "SANC-2026-0001" },
+          "orderNumber": { "type": "string", "description": "생략 시 서버에서 SYN + 10자리 난수로 발급", "example": "SYN1234567890" },
+          "orderGroupKey": { "type": "string", "description": "분할 주문 그룹 키 (생략 시 서버 발급)" },
+          "splitIndex": { "type": "integer", "minimum": 1, "description": "분할 순번" },
+          "splitCount": { "type": "integer", "minimum": 1, "description": "분할 총 개수" },
           "userId": { "type": "integer", "example": 2 },
           "totalAmount": { "type": "number", "example": 45000 },
           "notes": { "type": "string", "example": "개별택배" },
-          "status": {
-            "type": "string",
-            "enum": [
-              "PLACED",
-              "PRINTING_COMPLETE",
-              "WAITING_FOR_SHIPMENT",
-              "CANCELLED"
-            ]
+          "extraNote": { "type": "string", "description": "제품주문서 특이사항 (출고·포장관리 표시)", "example": "아이스박스 동봉" },
+          "status": { "$ref": "#/components/schemas/OrderStatus" },
+          "ordererProfile": {
+            "type": "object",
+            "description": "주문자 정보 (관리자 대리 주문 시)",
+            "required": ["fullname", "phone"],
+            "properties": {
+              "fullname": { "type": "string" },
+              "phone": { "type": "string" },
+              "churchId": { "type": "integer" }
+            }
           },
           "items": {
             "type": "array",
@@ -1531,20 +1616,22 @@
       },
       "OrderUpdateRequest": {
         "type": "object",
+        "description": "OrderCreateRequest의 부분 집합 (모든 필드 선택)",
         "properties": {
           "orderNumber": { "type": "string" },
+          "orderGroupKey": { "type": "string" },
+          "splitIndex": { "type": "integer", "minimum": 1 },
+          "splitCount": { "type": "integer", "minimum": 1 },
           "userId": { "type": "integer" },
           "totalAmount": { "type": "number" },
           "notes": { "type": "string" },
-          "status": {
-            "type": "string",
-            "enum": [
-              "PLACED",
-              "PRINTING_COMPLETE",
-              "WAITING_FOR_SHIPMENT",
-              "CANCELLED"
-            ]
-          }
+          "extraNote": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/OrderStatus" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/OrderItemCreateRequest" }
+          },
+          "shipment": { "$ref": "#/components/schemas/ShipmentCreateRequest" }
         }
       },
       "StockInventory": {
@@ -1557,12 +1644,17 @@
             "nullable": true,
             "example": "https://cdn.example.com/products/soy.png"
           },
+          "imageStoredName": { "type": "string", "nullable": true, "description": "날짜+random 저장 파일명" },
+          "imageOriginalName": { "type": "string", "nullable": true, "description": "원본 파일명" },
+          "imageHash": { "type": "string", "nullable": true, "description": "엑셀 업로드 이미지 sha256. 같으면 재업로드 생략" },
           "productName": {
             "type": "string",
             "example": "1급진간장 1.8L (개)"
           },
           "spec": { "type": "string", "nullable": true, "example": "1.8L(개)" },
           "unit": { "type": "integer", "example": 1 },
+          "stock": { "type": "integer", "nullable": true, "example": 100, "description": "창고 재고 수량 (null = 무제한)" },
+          "stockMax": { "type": "integer", "nullable": true, "example": 30000, "description": "기준/최대 재고 (current/max 표시용, null이면 현재수량만 표시)" },
           "effectiveDate": {
             "type": "string",
             "format": "date-time",
@@ -1572,7 +1664,15 @@
           "priceOver100man": { "type": "number", "example": 8150 },
           "wholesalePrice": { "type": "number", "example": 8400 },
           "associatePrice": { "type": "number", "example": 8900 },
+          "unitPriceShow": { "type": "boolean", "nullable": true, "description": "단가노출여부" },
+          "retailPrice": { "type": "number", "nullable": true, "description": "소매" },
+          "supermarketPrice": { "type": "number", "nullable": true, "description": "슈퍼 납품가" },
+          "schoolServePrice": { "type": "number", "nullable": true, "description": "급식" },
+          "taxExemption": { "type": "boolean", "nullable": true, "description": "비과세" },
           "category": { "type": "string", "example": "일반품" },
+          "openStock": { "type": "boolean", "default": true, "description": "고객 공개 여부" },
+          "boxName": { "type": "string", "nullable": true, "example": "신앙촌 1호", "description": "우체국 박스명" },
+          "postWeight": { "type": "integer", "nullable": true, "example": 5, "description": "우체국 박스 무게 (KG)" },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
         }
@@ -1592,39 +1692,64 @@
         ],
         "properties": {
           "code": { "type": "string", "example": "8809240150143" },
-          "imageUrl": { "type": "string" },
+          "imageUrl": { "type": "string", "description": "사진 URL/경로 (파일 업로드 시 생략)" },
           "productName": {
             "type": "string",
             "example": "1급진간장 1.8L (개)"
           },
           "spec": { "type": "string", "example": "1.8L(개)" },
           "unit": { "type": "integer", "example": 1 },
+          "stock": { "type": "integer", "minimum": 0, "nullable": true, "example": 100, "description": "창고 재고 수량 (비우면/null = 무제한)" },
+          "stockIn": {
+            "type": "integer",
+            "minimum": 0,
+            "nullable": true,
+            "example": 50,
+            "description": "추가 입고 수량. 현재 재고와 누적 총 입고량에 함께 더해집니다 (2/3 상품에 10 입고 → 12/13)."
+          },
+          "stockMax": { "type": "integer", "minimum": 0, "nullable": true, "example": 30000 },
           "effectiveDate": {
             "type": "string",
-            "format": "date-time",
-            "example": "2026-01-01T00:00:00.000Z"
+            "description": "적용일자 (YYYY-MM-DD 또는 ISO)",
+            "example": "2026-01-01"
           },
           "priceOver500man": { "type": "number", "example": 7980 },
           "priceOver100man": { "type": "number", "example": 8150 },
           "wholesalePrice": { "type": "number", "example": 8400 },
           "associatePrice": { "type": "number", "example": 8900 },
-          "category": { "type": "string", "example": "일반품" }
+          "category": { "type": "string", "example": "일반품" },
+          "openStock": { "type": "boolean", "default": true, "description": "고객 공개 여부 (true면 고객 주문 화면에 표시)" },
+          "unitPriceShow": { "type": "boolean", "nullable": true, "description": "단가노출여부 (빈 값 = 미지정)" },
+          "retailPrice": { "type": "number", "nullable": true, "description": "소매" },
+          "supermarketPrice": { "type": "number", "nullable": true, "description": "슈퍼 납품가" },
+          "schoolServePrice": { "type": "number", "nullable": true, "description": "급식" },
+          "taxExemption": { "type": "boolean", "nullable": true, "description": "비과세 (빈 값 = 미지정)" }
         }
       },
       "StockInventoryUpdateRequest": {
         "type": "object",
+        "description": "StockInventoryCreateRequest의 부분 집합 (모든 필드 선택)",
         "properties": {
           "code": { "type": "string" },
           "imageUrl": { "type": "string" },
           "productName": { "type": "string" },
           "spec": { "type": "string" },
           "unit": { "type": "integer" },
-          "effectiveDate": { "type": "string", "format": "date-time" },
+          "stock": { "type": "integer", "minimum": 0, "nullable": true },
+          "stockIn": { "type": "integer", "minimum": 0, "nullable": true },
+          "stockMax": { "type": "integer", "minimum": 0, "nullable": true },
+          "effectiveDate": { "type": "string" },
           "priceOver500man": { "type": "number" },
           "priceOver100man": { "type": "number" },
           "wholesalePrice": { "type": "number" },
           "associatePrice": { "type": "number" },
-          "category": { "type": "string" }
+          "category": { "type": "string" },
+          "openStock": { "type": "boolean" },
+          "unitPriceShow": { "type": "boolean", "nullable": true },
+          "retailPrice": { "type": "number", "nullable": true },
+          "supermarketPrice": { "type": "number", "nullable": true },
+          "schoolServePrice": { "type": "number", "nullable": true },
+          "taxExemption": { "type": "boolean", "nullable": true }
         }
       },
       "StockInventoryBulkImportResponse": {
@@ -1658,6 +1783,139 @@
               }
             }
           }
+        }
+      },
+      "OrderStatus": {
+        "type": "string",
+        "enum": [
+          "PLACED",
+          "WAITING_FOR_SHIPMENT",
+          "PREPARED",
+          "LOAD_NOTIFIED",
+          "SHIPPING",
+          "RECEIVED",
+          "PRINTING_COMPLETE",
+          "CANCELLED"
+        ],
+        "default": "PLACED"
+      },
+      "StockInventoryLedger": {
+        "type": "object",
+        "description": "재고 변동 이력 (초기재고 / 추가재고 / 주문차감)",
+        "properties": {
+          "id": { "type": "integer" },
+          "productId": { "type": "integer" },
+          "productName": { "type": "string" },
+          "type": { "type": "string", "enum": ["INITIAL", "ADDITION", "ORDER_DEDUCT"] },
+          "delta": { "type": "integer", "description": "+추가 / -차감", "example": -10 },
+          "actorLabel": { "type": "string", "example": "자동(주문관리 연동)", "description": "\"자동(주문관리 연동)\" | \"공장 관리자\"" },
+          "orderId": { "type": "integer", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "GreetingForm": {
+        "type": "object",
+        "description": "인사장 작성 폼 (제품주문 연계 / 인사장만 의뢰)",
+        "properties": {
+          "id": { "type": "integer" },
+          "greetingNumber": { "type": "string", "example": "1", "description": "1~4" },
+          "includeSelf": { "type": "boolean", "default": false, "description": "자체" },
+          "imageUrl": { "type": "string" },
+          "imageStoredName": { "type": "string", "description": "날짜+random 저장 파일명" },
+          "imageOriginalName": { "type": "string", "description": "원본 파일명" },
+          "content": { "type": "string", "description": "인사장내용" },
+          "quantity": { "type": "integer" },
+          "size": { "type": "string", "enum": ["8칸", "6칸", "4칸"] },
+          "productName": { "type": "string", "nullable": true, "description": "제품주문 연계일 때만" },
+          "receivePlace": { "type": "string", "description": "받을 곳" },
+          "specialNote": { "type": "string", "nullable": true, "description": "특이사항" },
+          "businessCard": { "type": "string", "enum": ["선택하세요", "동봉"], "default": "선택하세요", "description": "명함 유무" },
+          "ordererName": { "type": "string", "nullable": true, "description": "성명(주문자)" },
+          "churchName": { "type": "string", "nullable": true, "description": "중앙" },
+          "phone": { "type": "string", "nullable": true },
+          "linkedToOrder": { "type": "boolean", "description": "true = 제품주문 연계, false = 인사장만 의뢰" },
+          "submitted": { "type": "boolean", "default": false, "description": "인사장만 접수 완료 여부" },
+          "completedAt": { "type": "string", "format": "date-time", "nullable": true, "description": "인사장 작업 완료 시각" },
+          "completedBy": { "type": "string", "nullable": true, "description": "완료 처리자 이름" },
+          "orderId": { "type": "integer", "nullable": true },
+          "userId": { "type": "integer", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Partner": {
+        "type": "object",
+        "description": "회원별 거래처",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string", "description": "거래처명" },
+          "contactName": { "type": "string", "description": "담당자명" },
+          "phone": { "type": "string" },
+          "address": { "type": "string" },
+          "email": { "type": "string", "nullable": true },
+          "userId": { "type": "integer" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AdminActivity": {
+        "type": "object",
+        "description": "관리자 액션 알림 피드",
+        "properties": {
+          "id": { "type": "integer" },
+          "actorUserId": { "type": "integer", "nullable": true },
+          "actorName": { "type": "string" },
+          "actorRegion": { "type": "string", "enum": ["JUNGBU", "NAMBU", "SEOBU"], "nullable": true },
+          "action": {
+            "type": "string",
+            "enum": [
+              "ORDER_CONFIRM",
+              "WORKER_SAVE",
+              "PAYMENT_SAVE",
+              "GREETING_SAVE",
+              "SLIP_SAVE",
+              "SHIP_DATE_SAVE",
+              "PACK_DEPT_SAVE",
+              "PACK_COMPLETE",
+              "RELEASE_COMPLETE",
+              "FINAL_COMPLETE",
+              "FINAL_CONFIRM"
+            ]
+          },
+          "orderId": { "type": "integer", "nullable": true },
+          "orderNumber": { "type": "string" },
+          "summary": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ChatMessage": {
+        "type": "object",
+        "description": "매장·공장 관리자 공용 라이브 채팅",
+        "properties": {
+          "id": { "type": "integer" },
+          "kind": { "type": "string", "enum": ["MESSAGE", "SYSTEM"], "default": "MESSAGE", "description": "MESSAGE(관리자 입력) | SYSTEM(접속 알림 등 자동 메시지)" },
+          "body": { "type": "string" },
+          "senderName": { "type": "string", "description": "표시용 스냅샷 (회원 정보가 바뀌어도 과거 대화는 그대로)" },
+          "senderLabel": { "type": "string", "example": "남부매장 관리자" },
+          "senderId": { "type": "integer", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "VoiceRecording": {
+        "type": "object",
+        "description": "사용자 음성 불편·오류 신고 녹음 (m4a)",
+        "properties": {
+          "id": { "type": "integer" },
+          "userId": { "type": "integer", "nullable": true },
+          "ordererName": { "type": "string", "description": "주문자 성명 (녹음한 로그인 사용자)" },
+          "churchName": { "type": "string", "nullable": true, "description": "중앙 (User.church.name)" },
+          "screen": { "type": "string", "example": "제품주문서(신규작성)", "description": "녹음한 화면" },
+          "fileName": { "type": "string" },
+          "fileUrl": { "type": "string" },
+          "mimeType": { "type": "string", "example": "audio/mp4" },
+          "sizeBytes": { "type": "integer" },
+          "durationSec": { "type": "integer", "nullable": true },
+          "recordedAt": { "type": "string", "format": "date-time" }
         }
       }
     }
