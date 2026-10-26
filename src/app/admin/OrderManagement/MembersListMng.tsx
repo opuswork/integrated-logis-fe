@@ -76,6 +76,15 @@ function formatMemberType(value: string) {
   return MEMBER_TYPE_LABEL[trimmed] ?? trimmed;
 }
 
+/** 휴대폰번호 아이디(010xxxxyyyy)는 가운데 4자리만 표시 */
+function formatUsername(username: string) {
+  const digits = username.replace(/\D/g, "");
+  if (/^01\d{9}$/.test(digits)) {
+    return digits.slice(3, 7);
+  }
+  return username;
+}
+
 type ChurchOption = {
   id: number;
   name: string;
@@ -765,7 +774,9 @@ function MobileMemberCard({
             ) : null}
             <AccountSourceBadge accountSource={member.accountSource} />
           </p>
-          <p className="mt-0.5 text-xs text-[#64748b]">{member.username}</p>
+          <p className="mt-0.5 text-xs text-[#64748b]">
+            {formatUsername(member.username)}
+          </p>
           <p className="mt-1 text-xs text-[#64748b]">
             {formatMemberType(member.memberType)
               ? `${formatMemberType(member.memberType)} · ${member.phone}`
@@ -923,7 +934,11 @@ export function MembersListMng() {
   ) : null;
 
   const columns: TableColumn<MemberRow>[] = [
-    { key: "username", header: "아이디" },
+    {
+      key: "username",
+      header: "아이디",
+      render: (row) => formatUsername(row.username),
+    },
     {
       key: "fullname",
       header: "이름",
