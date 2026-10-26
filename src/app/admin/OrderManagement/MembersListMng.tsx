@@ -13,12 +13,15 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/ui/pagination";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAuthUser, isTopAdminUser } from "@/lib/auth";
 import { exportMembersWorkbook } from "@/lib/export-members-excel";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 20;
 
 type MemberRow = {
   [key: string]: string | number;
@@ -792,6 +795,7 @@ export function MembersListMng() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
   const [editingMember, setEditingMember] = useState<MemberRow | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const canExportMembers = isTopAdminUser(getAuthUser());
@@ -876,6 +880,11 @@ export function MembersListMng() {
       );
     });
   }, [members, keyword]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMembers.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageOffset = (safePage - 1) * PAGE_SIZE;
+  const pageMembers = filteredMembers.slice(pageOffset, pageOffset + PAGE_SIZE);
 
   const handleExportExcel = async () => {
     setIsExporting(true);
@@ -1010,7 +1019,10 @@ export function MembersListMng() {
             <Input
               label="검색"
               value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
+              onChange={(event) => {
+                setKeyword(event.target.value);
+                setPage(1);
+              }}
               placeholder="아이디 / 이름 / 중앙 / 연락처 / 이메일"
             />
             <p className="mt-2 text-xs text-[#64748b]">
@@ -1025,7 +1037,7 @@ export function MembersListMng() {
                 검색 결과가 없습니다.
               </p>
             ) : (
-              filteredMembers.map((member) => (
+              pageMembers.map((member) => (
                 <MobileMemberCard
                   key={member.id}
                   member={member}
@@ -1040,12 +1052,20 @@ export function MembersListMng() {
             <Table
               caption="회원 목록"
               columns={columns}
-              data={filteredMembers}
+              data={pageMembers}
               emptyMessage="검색 결과가 없습니다."
-              scrollable
-              visibleRows={8}
             />
           </section>
+
+          {filteredMembers.length > 0 ? (
+            <div className="flex justify-center">
+              <Pagination
+                page={safePage}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            </div>
+          ) : null}
 
           {exportButton}
 
