@@ -6,7 +6,6 @@ import { Suspense, useEffect, useState, type FormEvent } from "react";
 
 import { LoginChromeHeader } from "@/components/login-chrome-header";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
   clearAuthUser,
@@ -18,6 +17,10 @@ import {
 } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/env";
 import { cn } from "@/lib/utils";
+
+const LABEL_CLASS = "mb-1.5 block text-[13px] text-[#7A6F66]";
+const INPUT_CLASS =
+  "h-[50px] w-full rounded-xl border border-[#E6DED4] bg-white px-3.5 text-[15px] text-[#2B2622] placeholder:text-[#7A6F66]/80 focus:outline-2 focus:outline-offset-1 focus:outline-[#D9663A]";
 
 function LoginForm() {
   const router = useRouter();
@@ -106,28 +109,48 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#1a365d]">
+    <div className="min-h-[100dvh] bg-[#FAF7F2] font-[family-name:var(--font-noto-sans-kr)] text-[#2B2622]">
       <LoginChromeHeader />
-      <main className="px-6 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(5rem,calc(env(safe-area-inset-top)+3.75rem))]">
-        <div className="mx-auto flex w-full max-w-md flex-col items-center">
-          <Image
-            src="/assets/images/jangyu-icon.png"
-            alt="장유 양조간장"
-            width={88}
-            height={288}
-            priority
-            className="mb-4 h-24 w-auto drop-shadow-[0_0_14px_rgba(255,255,255,0.35)]"
-          />
-          <h1 className="mb-8 text-center font-['S-Core_Dream'] text-[1.35rem] font-semibold leading-snug text-white">
-            통합 물류·주문 관리 시스템
-          </h1>
-          <h2 className="sr-only">B2B통합 물류·주문 관리 시스템</h2>
+      <main className="px-5 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(4.5rem,calc(env(safe-area-inset-top)+4.25rem))]">
+        <div className="mx-auto flex w-full max-w-[480px] flex-col gap-3.5">
+          <section className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(120%_90%_at_50%_15%,#FBEFE2_0%,#F7DFC6_100%)] px-5 pb-[22px] pt-7 text-center">
+            <div
+              aria-hidden
+              className="absolute -right-[60px] -top-[70px] size-[220px] rounded-full bg-[#D9663A] opacity-10"
+            />
+            <div
+              aria-hidden
+              className="absolute -bottom-[50px] -left-10 size-[140px] rounded-full bg-[#D9663A] opacity-[0.08]"
+            />
+            <span className="relative z-[1] inline-block rounded-full bg-white px-3 py-[5px] text-xs font-bold text-[#D9663A]">
+              생명물간장 주문
+            </span>
+            <div className="relative z-[1] mx-auto mt-3.5 w-[min(78%,300px)]">
+              <Image
+                src="/assets/images/login-truck.webp"
+                alt="간장병 캐릭터가 트럭을 몰며 손을 흔드는 그림"
+                width={640}
+                height={566}
+                priority
+                className="login-drive block h-auto w-full"
+              />
+            </div>
+            <div
+              aria-hidden
+              className="relative mx-auto -mt-2.5 h-3.5 w-[62%] rounded-[50%] bg-[rgba(120,70,30,0.18)] blur-[6px]"
+            />
+            <h1 className="relative z-[1] mt-4 text-2xl font-bold">장유 주문앱</h1>
+            <p className="relative z-[1] mt-1 text-sm text-[#7A6F66]">
+              로그인하고 주문을 시작하세요
+            </p>
+            <h2 className="sr-only">B2B통합 물류·주문 관리 시스템</h2>
+          </section>
 
-          <div className="flex w-full flex-col items-center gap-6 rounded-[10px] border border-[#cbd3df] bg-white px-6 py-8 shadow-[0_14px_34px_rgba(18,38,63,0.18)]">
+          <div className="flex flex-col gap-3 rounded-2xl border border-[#EFE8DF] bg-white p-4">
             {loggedOutByUser && !signupSuccess && logoutMsg !== "hidden" ? (
               <p
                 className={cn(
-                  "w-full rounded-[7px] border border-green/30 bg-[#e8f8ef] px-3 py-2 text-sm text-green transition-opacity duration-500",
+                  "rounded-xl border border-green/30 bg-[#e8f8ef] px-3 py-2 text-sm text-green transition-opacity duration-500",
                   logoutMsg === "fading" && "opacity-0",
                 )}
               >
@@ -136,52 +159,46 @@ function LoginForm() {
             ) : null}
 
             {logoutNotice && !signupSuccess ? (
-              <p className="w-full rounded-[7px] border border-[#f2b620]/40 bg-[#fff8e6] px-3 py-2 text-sm text-[#8a5a00]">
+              <p className="rounded-xl border border-[#f2b620]/40 bg-[#fff8e6] px-3 py-2 text-sm text-[#8a5a00]">
                 {logoutNotice}
               </p>
             ) : null}
 
             {signupSuccess ? (
-              <p className="w-full rounded-[7px] border border-green/30 bg-[#e8f8ef] px-3 py-2 text-sm text-green">
+              <p className="rounded-xl border border-green/30 bg-[#e8f8ef] px-3 py-2 text-sm text-green">
                 회원가입이 완료되었습니다. 로그인해 주세요.
               </p>
             ) : null}
 
             <form
-              className="flex w-full flex-col gap-5"
+              className="flex flex-col gap-3"
               noValidate
               onSubmit={handleSubmit}
             >
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="username"
-                  className="text-sm font-medium text-[#475569]"
-                >
+              <div>
+                <label htmlFor="username" className={LABEL_CLASS}>
                   아이디 (휴대폰 가운데 4자리)
                 </label>
-                <Input
+                <input
                   id="username"
                   type="text"
                   placeholder="예: 010-4463-1440 → 4463"
-                  className="w-full"
+                  className={INPUT_CLASS}
                   autoComplete="username"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
                 />
               </div>
 
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="password"
-                  className="text-sm font-medium text-[#475569]"
-                >
+              <div>
+                <label htmlFor="password" className={LABEL_CLASS}>
                   비밀번호
                 </label>
-                <Input
+                <input
                   id="password"
                   type="password"
                   placeholder="휴대폰 가운데+뒷자리 8자리 (예: 44631440)"
-                  className="w-full"
+                  className={INPUT_CLASS}
                   autoComplete="current-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -189,7 +206,7 @@ function LoginForm() {
               </div>
 
               {error ? (
-                <p className="rounded-[7px] border border-red/30 bg-[#fff0ed] px-3 py-2 text-sm text-red">
+                <p role="alert" className="text-[13px] text-[#B3261E]">
                   {error}
                 </p>
               ) : null}
@@ -199,7 +216,7 @@ function LoginForm() {
                 variant="default"
                 disabled={!username || !password || isSubmitting}
                 aria-busy={isSubmitting}
-                className="h-12 w-full border-brand bg-brand text-white hover:bg-[#1856bf] disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-14 w-full rounded-2xl border-[#D9663A] bg-[#D9663A] text-base font-bold text-white hover:bg-[#c55a31] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? (
                   <Spinner size="sm" label="로그인 중" />
@@ -219,7 +236,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#1a365d] text-sm text-white">
+        <main className="flex min-h-screen items-center justify-center bg-[#FAF7F2] text-sm text-[#7A6F66]">
           로그인 화면을 불러오는 중...
         </main>
       }

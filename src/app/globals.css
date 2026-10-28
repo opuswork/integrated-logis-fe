@@ -189,6 +189,27 @@
   }
 }
 
+/* 로그인 대문 트럭 흔들림 */
+@keyframes login-drive {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.login-drive {
+  animation: login-drive 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-drive {
+    animation: none;
+  }
+}
+
 /* Keep 선물세트 주문서 cell backgrounds when using browser Print. */
 @media print {
   .gift-set-print-sheet,
