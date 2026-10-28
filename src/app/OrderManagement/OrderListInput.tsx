@@ -26,6 +26,7 @@ import { MemberLogoutButton } from "@/app/OrderManagement/MemberLogoutButton";
 import { MemberOrderCalendar } from "@/app/OrderManagement/MemberOrderCalendar";
 import { MemberGreetingMng } from "@/app/OrderManagement/MemberGreetingMng";
 import { MemberPartnerMng } from "@/app/OrderManagement/MemberPartnerMng";
+import { OrderAppV2 } from "@/app/OrderManagement/v2/OrderAppV2";
 import { LogoutButton } from "@/components/auth-guard";
 import {
   GreetingNumberChipPicker,
@@ -122,7 +123,7 @@ type ChurchOption = {
   assigner: string;
 };
 
-const BRANCH_STORES = [
+export const BRANCH_STORES = [
   {
     id: "nambu" as const,
     name: "남부(기장)",
@@ -463,6 +464,28 @@ const STATUS_VARIANT: Record<string, ChipVariant> = {
   취소: "red",
   취소됨: "red",
 };
+
+/** 내 주문 현황 화면 버전: 기본 / 주문목록포함버전 (두 버전 비교용, 기기마다 기억) */
+type OrderUiVersion = "classic" | "v2";
+const ORDER_UI_VERSION_KEY = "jy-order-ui-version";
+
+function readOrderUiVersion(): OrderUiVersion {
+  try {
+    return window.localStorage.getItem(ORDER_UI_VERSION_KEY) === "v2"
+      ? "v2"
+      : "classic";
+  } catch {
+    return "classic";
+  }
+}
+
+function saveOrderUiVersion(version: OrderUiVersion) {
+  try {
+    window.localStorage.setItem(ORDER_UI_VERSION_KEY, version);
+  } catch {
+    // 저장이 막혀 있어도 이번 화면에서는 전환된다.
+  }
+}
 
 function useMinWidth(minWidth: number) {
   const [matches, setMatches] = useState(false);
@@ -1534,7 +1557,7 @@ function catalogItemMatches(
   );
 }
 
-interface ProductDialogItem {
+export interface ProductDialogItem {
   product: string;
   qty: number;
   note: string;
@@ -1543,7 +1566,7 @@ interface ProductDialogItem {
   lineSection: "box" | "giftUnit";
 }
 
-function ProductAddDialog({
+export function ProductAddDialog({
   open,
   onClose,
   onAddItems,
@@ -1555,6 +1578,7 @@ function ProductAddDialog({
   initialQuantities,
   onReplaceItems,
   presentation = "dialog",
+  unifiedCatalog = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1571,6 +1595,11 @@ function ProductAddDialog({
   mode?: "all" | "box" | "giftUnit";
   /** 수정 모드: 현재 목록을 미리 채우고, 확정 시 추가가 아닌 목록 교체 */
   editList?: boolean;
+  /**
+   * 주문목록포함버전: 구분(선물세트/일반품) 필터 없이 전체 상품을 한 목록으로 보이고,
+   * 배송방식은 주문서에서 한 번만 고르므로 여기서 묻지 않는다.
+   */
+  unifiedCatalog?: boolean;
   /** editList 시 미리 채울 수량 (품명 → 수량) */
   initialQuantities?: Record<string, number>;
   /** editList 확정. catalogProducts = 카탈로그에 있는 품명(없는 행은 유지 판단용) */
@@ -1776,7 +1805,10 @@ function ProductAddDialog({
       );
     } else {
       // 배송방식은 필수 (버튼도 막혀 있지만 한 번 더 확인)
-      if (selectedItems.length === 0 || presetKind === "") {
+      if (
+        selectedItems.length === 0 ||
+        (!unifiedCatalog && presetKind === "")
+      ) {
         return;
       }
       onAddItems(selectedItems, presetKind);
@@ -1823,12 +1855,14 @@ function ProductAddDialog({
         ? "선물세트 낱개 추가"
         : "상품 추가";
 
-  const scopeLabel =
-    mode === "box"
+  const scopeLabel = unifiedCatalog
+    ? "공개 상품 전체"
+    : mode === "box"
       ? "박스 상품만 표시"
       : mode === "giftUnit"
         ? "선물세트 (개)만 표시"
         : "(현재 배달/택배 탭 기준)";
+  const showCategoryFilter = mode === "all" && !unifiedCatalog;
   const subtitle = showOrderKind ? (
     <>
       주문종류:{" "}
@@ -1845,10 +1879,12 @@ function ProductAddDialog({
     <div
       className={cn(
         "grid gap-2",
-        mode === "all" && !isSheet ? "min-[480px]:grid-cols-[140px_1fr]" : "",
+        showCategoryFilter && !isSheet
+          ? "min-[480px]:grid-cols-[140px_1fr]"
+          : "",
       )}
     >
-      {mode === "all" ? (
+      {showCategoryFilter ? (
         <select
           aria-label="구분 필터"
           value={categoryFilter}
@@ -1893,8 +1929,8 @@ function ProductAddDialog({
 
   // 상품목록수정(editList)은 기존 줄을 바꾸는 창이라 배송방식 미리 고르기를 보여주지 않는다.
   // 그 밖에는 배송방식(하차배송/택배)을 골라야 장바구니에 담을 수 있다 (필수).
-  const shipKindMissing = !editList && presetKind === "";
-  const shipPreset = editList ? null : (
+  const shipKindMissing = !editList && !unifiedCatalog && presetKind === "";
+  const shipPreset = editList || unifiedCatalog ? null : (
     <div>
       {/* 모바일 시트는 두 버튼만 보여준다 (익숙한 UI라 라벨 없이도 먼저 고른다). PC 창은 라벨 유지 */}
       {isSheet ? null : (
@@ -2187,14 +2223,14 @@ function ProductAddDialog({
         onClose={onClose}
         // 배송방식 선택·필터는 고정하고 상품 목록만 스크롤한다.
         toolbar={
-          shipPreset || mode === "all" ? (
+          shipPreset || showCategoryFilter ? (
             <>
               {shipPreset ? (
                 <div className="border-b border-[#E2E8F0] px-4 pt-1 pb-4">
                   {shipPreset}
                 </div>
               ) : null}
-              {mode === "all" ? (
+              {showCategoryFilter ? (
                 <div className="px-4 pt-1 pb-3">{filterControls}</div>
               ) : null}
             </>
@@ -7305,6 +7341,14 @@ export function OrderListInput({
   );
   const [presetShipDate, setPresetShipDate] = useState<string | null>(null);
   const preserveGreetingOnOrderNavRef = useRef(false);
+  const [orderUiVersion, setOrderUiVersion] = useState<OrderUiVersion>(() =>
+    embedded ? "classic" : readOrderUiVersion(),
+  );
+  const switchOrderUiVersion = (version: OrderUiVersion) => {
+    saveOrderUiVersion(version);
+    setOrderUiVersion(version);
+    window.scrollTo(0, 0);
+  };
   const [memberProfile, setMemberProfile] = useState<{
     name: string;
     churchName: string;
@@ -7675,13 +7719,29 @@ export function OrderListInput({
           </>
         );
       case "내 주문 현황":
+        if (orderUiVersion === "v2") {
+          return (
+            <OrderAppV2
+              onSwitchToClassic={() => switchOrderUiVersion("classic")}
+            />
+          );
+        }
         return (
-          <OrderStatusPanel
-            reloadToken={ordersReloadToken}
-            churchName={memberProfile.churchName}
-            onEditOrder={handleStartEditOrder}
-            onCreateOrderForDate={handleCreateOrderForDate}
-          />
+          <>
+            <button
+              type="button"
+              className="mb-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#D9663A] bg-[#FAF7F2] text-[17px] font-bold text-[#D9663A] hover:bg-[#F3EDE4]"
+              onClick={() => switchOrderUiVersion("v2")}
+            >
+              주문목록포함버전
+            </button>
+            <OrderStatusPanel
+              reloadToken={ordersReloadToken}
+              churchName={memberProfile.churchName}
+              onEditOrder={handleStartEditOrder}
+              onCreateOrderForDate={handleCreateOrderForDate}
+            />
+          </>
         );
       case "거래처관리":
         return <MemberPartnerMng />;

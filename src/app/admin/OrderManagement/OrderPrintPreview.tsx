@@ -92,6 +92,12 @@ type ApiOrder = {
     includeSelf?: boolean | null;
     businessCard?: string | null;
   }>;
+  /** 회원이 첨부한 사진 (대량 택배 명단 등) */
+  attachments?: Array<{
+    id: number;
+    imageUrl: string;
+    originalName?: string | null;
+  }>;
   user?: {
     fullname?: string | null;
     phone?: string | null;
@@ -228,7 +234,12 @@ function toPrintShipType(
   fulfillmentType?: string | null,
 ): OrderShipType {
   const fromNotes = parseOrderTypeFromNotes(notes);
-  if (fromNotes === "배달" || fromNotes.startsWith("배달")) {
+  // 직접수령은 운송장이 없으므로 상차(배달) 시트로 보여준다.
+  if (
+    fromNotes === "배달" ||
+    fromNotes.startsWith("배달") ||
+    fromNotes === "직접수령"
+  ) {
     return "배달";
   }
   if (fromNotes === "택배") {
@@ -1276,6 +1287,33 @@ export function OrderPrintPreview({
           <GiftSetPrintSheet page={selectedPage} />
         </div>
       </div>
+
+      {selectedOrder?.attachments?.length ? (
+        <section className="mt-3 rounded-lg border border-line bg-white p-3 print:hidden">
+          <h4 className="mb-2 text-sm font-bold text-ink">
+            첨부 사진 (대량 택배 명단) · {selectedOrder.attachments.length}장
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {selectedOrder.attachments.map((attachment) => (
+              <a
+                key={attachment.id}
+                href={attachment.imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+                title={attachment.originalName ?? "첨부 사진"}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={attachment.imageUrl}
+                  alt={attachment.originalName ?? "첨부 사진"}
+                  className="h-24 w-24 rounded border border-line bg-[#f8fafc] object-cover"
+                />
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {canDeleteOrder ? (
         <div className="flex flex-col items-center gap-2 pt-3 print:hidden">

@@ -156,7 +156,12 @@ function formatOrderType(
   fulfillmentType?: string | null,
 ) {
   const fromNotes = parseOrderTypeFromNotes(notes);
-  if (fromNotes === "배달" || fromNotes === "택배" || fromNotes === "배달/택배") {
+  if (
+    fromNotes === "배달" ||
+    fromNotes === "택배" ||
+    fromNotes === "배달/택배" ||
+    fromNotes === "직접수령"
+  ) {
     return fromNotes;
   }
   if (fulfillmentType === "PICKUP") {

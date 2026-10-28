@@ -132,6 +132,10 @@ function statusChipClass(status: DeliveryOrderStatus) {
 }
 
 function isParcelType(type: string, fulfillmentType: string | null) {
+  // 직접수령은 매장에서 가져가므로 기표지(택배) 대상이 아니다.
+  if (type === "직접수령") {
+    return false;
+  }
   return type.startsWith("택배") || fulfillmentType === "PARCEL";
 }
 
@@ -911,12 +915,26 @@ export function AdminOrderList({
                             >
                               <option value="">선택</option>
                               <option value="STORE">매장</option>
-                              <option value="FACTORY">공장</option>
+                              {/* 직접수령은 주문자가 매장에 와서 가져가므로 공장 작업이 없다. */}
+                              <option
+                                value="FACTORY"
+                                disabled={row.type === "직접수령"}
+                              >
+                                공장
+                              </option>
                             </select>
+                            {row.type === "직접수령" ? (
+                              <span className="text-[11px] text-[#64748b]">
+                                직접수령 · 매장만 지정
+                              </span>
+                            ) : null}
                             <div className="flex flex-wrap gap-1">
                               <CellBtn
                                 disabled={
-                                  !draft.worker || savingId === `w-${row.id}`
+                                  !draft.worker ||
+                                  savingId === `w-${row.id}` ||
+                                  (row.type === "직접수령" &&
+                                    draft.worker === "FACTORY")
                                 }
                                 onClick={() =>
                                   void patchChecklist(

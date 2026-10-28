@@ -1,0 +1,700 @@
+/*
+ * 주문목록포함버전 (시안: fe/장유 주문 7.html)
+ * 따뜻한 미색 바탕, 흰 카드, 주황 포인트, 아래 고정 버튼 바. 라이트·다크 모두.
+ * 모든 규칙은 .jy-v2 안에서만 적용된다.
+ */
+.jy-v2 {
+  --bg: #faf7f2;
+  --surface: #ffffff;
+  --fg: #2b2622;
+  --muted: #7a6f66;
+  --line: #e6ded4;
+  --line2: #efe8df;
+  --accent: #d9663a;
+  --accent-fg: #ffffff;
+  --soft: #f3ede4;
+  --ink: #2b2622;
+  --ink-fg: #faf7f2;
+  --ink-muted: #cfc4b6;
+  --prep: #8a5a12;
+  --prep-bg: #f6e8cf;
+  --done: #2f6b5e;
+  --done-bg: #e3efea;
+  --err: #b3261e;
+  --sat: #3d6fb4;
+  --blue: #1e4f9c;
+  --blue-bg: #e3ecfa;
+  --purple: #6b3fa0;
+  --purple-bg: #eee5f8;
+
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-noto-sans-kr), -apple-system, "Apple SD Gothic Neo",
+    "Malgun Gothic", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .jy-v2 {
+    --bg: #1a1715;
+    --surface: #24201d;
+    --fg: #f1ece6;
+    --muted: #ada398;
+    --line: #3a3430;
+    --line2: #332e2a;
+    --accent: #e8784c;
+    --accent-fg: #1a1715;
+    --soft: #2e2824;
+    --ink: #f1ece6;
+    --ink-fg: #1a1715;
+    --ink-muted: #5e554d;
+    --prep: #f0c27a;
+    --prep-bg: #3a2e1a;
+    --done: #8fd1bf;
+    --done-bg: #1c322c;
+    --err: #f2a49c;
+    --sat: #8eb4ea;
+    --blue: #9fc0f2;
+    --blue-bg: #1d2a40;
+    --purple: #cdb2f0;
+    --purple-bg: #2e2340;
+    color-scheme: dark;
+  }
+}
+
+.jy-v2 *,
+.jy-v2 *::before,
+.jy-v2 *::after {
+  box-sizing: border-box;
+}
+
+.jy-v2 .jy-wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 20px 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.jy-v2 .jy-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.jy-v2 .jy-bar .jy-sp {
+  flex: 1;
+  min-width: 0;
+}
+.jy-v2 h1 {
+  font-size: 22px;
+  margin: 0;
+  font-weight: 700;
+}
+.jy-v2 h2 {
+  font-size: 15px;
+  margin: 0;
+  font-weight: 700;
+}
+.jy-v2 .jy-eyebrow {
+  font-size: 13px;
+  color: var(--muted);
+}
+.jy-v2 .jy-card {
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.jy-v2 .jy-label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.jy-v2 .jy-input {
+  width: 100%;
+  font: inherit;
+  font-size: 15px;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 14px;
+  height: 50px;
+}
+.jy-v2 .jy-input::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+.jy-v2 .jy-input:focus,
+.jy-v2 button:focus-visible,
+.jy-v2 a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.jy-v2 .jy-input[aria-invalid="true"] {
+  border-color: var(--err);
+}
+.jy-v2 .jy-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.jy-v2 .jy-row > * {
+  min-width: 0;
+}
+.jy-v2 .jy-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.jy-v2 .jy-btn {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  padding: 0 16px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.jy-v2 .jy-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.jy-v2 .jy-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.jy-v2 .jy-dark {
+  background: var(--ink);
+  color: var(--ink-fg);
+  border-color: var(--ink);
+  font-weight: 700;
+}
+.jy-v2 .jy-big {
+  width: 100%;
+  height: 56px;
+  font-size: 16px;
+  border-radius: 16px;
+}
+.jy-v2 .jy-circle {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 20px;
+  flex: none;
+}
+.jy-v2 .jy-link {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  height: auto;
+  padding: 6px 4px;
+  font-size: 13px;
+}
+
+.jy-v2 .jy-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.jy-v2 .jy-chips.jy-scroll {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -20px;
+  padding: 0 20px 2px;
+}
+.jy-v2 .jy-chips.jy-scroll::-webkit-scrollbar {
+  display: none;
+}
+.jy-v2 .jy-chip {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 19px;
+  font-size: 14px;
+  font-weight: 500;
+  flex: none;
+}
+.jy-v2 .jy-chip[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.jy-v2 .jy-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 50px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+}
+.jy-v2 .jy-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  height: 46px;
+  padding: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 15px;
+}
+.jy-v2 .jy-search input::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+.jy-v2 .jy-search input:focus {
+  outline: none;
+}
+.jy-v2 .jy-search:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.jy-v2 .jy-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.jy-v2 .jy-badge[data-tone="blue"] {
+  color: var(--blue);
+  background: var(--blue-bg);
+}
+.jy-v2 .jy-badge[data-tone="prep"] {
+  color: var(--prep);
+  background: var(--prep-bg);
+}
+.jy-v2 .jy-badge[data-tone="purple"] {
+  color: var(--purple);
+  background: var(--purple-bg);
+}
+.jy-v2 .jy-badge[data-tone="done"] {
+  color: var(--done);
+  background: var(--done-bg);
+}
+
+.jy-v2 .jy-order {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.jy-v2 .jy-order .jy-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.jy-v2 .jy-meta {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.jy-v2 .jy-items {
+  font-size: 14px;
+}
+.jy-v2 .jy-item-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--soft);
+  border-radius: 12px;
+}
+.jy-v2 .jy-item-line > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.jy-v2 .jy-qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.jy-v2 .jy-qty .jy-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 10px;
+}
+.jy-v2 .jy-qty input {
+  width: 52px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--fg);
+  text-align: center;
+  font: inherit;
+  font-weight: 700;
+}
+.jy-v2 .jy-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 24px 0;
+}
+.jy-v2 .jy-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.jy-v2 .jy-info {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--soft);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.jy-v2 .jy-info b {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.jy-v2 .jy-addr-sum {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--soft);
+}
+.jy-v2 .jy-addr-sum > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.jy-v2 .jy-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 8px 10px;
+}
+.jy-v2 .jy-dl dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.jy-v2 .jy-dl dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.jy-v2 .jy-err {
+  color: var(--err);
+  font-size: 13px;
+}
+.jy-v2 .jy-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.jy-v2 .jy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.jy-v2 .jy-table th,
+.jy-v2 .jy-table td {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line2);
+  text-align: right;
+}
+.jy-v2 .jy-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
+}
+.jy-v2 .jy-table th:first-child,
+.jy-v2 .jy-table td:first-child {
+  text-align: left;
+}
+
+/* 사진 첨부 */
+.jy-v2 .jy-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.jy-v2 .jy-photo {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--soft);
+}
+.jy-v2 .jy-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.jy-v2 .jy-photo button {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 12px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 14px;
+  line-height: 24px;
+  cursor: pointer;
+}
+.jy-v2 .jy-photo-add {
+  width: 76px;
+  height: 76px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+}
+
+/* 고정 하단 버튼 */
+.jy-v2 .jy-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px max(16px, env(safe-area-inset-right, 0px))
+    calc(16px + env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  z-index: 30;
+}
+.jy-v2 .jy-dock-in {
+  max-width: 480px;
+  margin: 0 auto;
+}
+.jy-v2 .jy-cartbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 12px 18px;
+  border-radius: 18px;
+  background: var(--ink);
+  color: var(--ink-fg);
+}
+.jy-v2 .jy-cartbar .jy-meta {
+  color: var(--ink-muted);
+}
+.jy-v2 .jy-cartbar .jy-t {
+  font-size: 16px;
+  font-weight: 700;
+}
+.jy-v2 .jy-cartbar .jy-btn {
+  height: 46px;
+  border-radius: 12px;
+}
+.jy-v2 .jy-two {
+  display: flex;
+  gap: 8px;
+}
+
+/* 달력 */
+.jy-v2 .jy-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.jy-v2 .jy-cal-head .jy-ym {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.jy-v2 .jy-cal-head .jy-nav {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.jy-v2 .jy-cal-head .jy-today-btn {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 20px;
+  font-size: 13px;
+}
+.jy-v2 .jy-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.jy-v2 .jy-dow {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 0 6px;
+}
+.jy-v2 .jy-dow.jy-sun,
+.jy-v2 .jy-day.jy-sun .jy-d {
+  color: var(--err);
+}
+.jy-v2 .jy-dow.jy-sat,
+.jy-v2 .jy-day.jy-sat .jy-d {
+  color: var(--sat);
+}
+.jy-v2 .jy-day {
+  height: 58px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+}
+.jy-v2 .jy-day .jy-d {
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  border-radius: 14px;
+  text-align: center;
+}
+.jy-v2 .jy-day.jy-is-today .jy-d {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.jy-v2 .jy-day[aria-pressed="true"] {
+  background: var(--accent);
+}
+.jy-v2 .jy-day[aria-pressed="true"] .jy-d {
+  color: var(--accent-fg);
+  box-shadow: none;
+  font-weight: 700;
+}
+.jy-v2 .jy-day .jy-cnt {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: var(--prep-bg);
+  color: var(--prep);
+}
+.jy-v2 .jy-day .jy-cnt.jy-all-done {
+  background: var(--done-bg);
+  color: var(--done);
+}
+.jy-v2 .jy-day[aria-pressed="true"] .jy-cnt {
+  background: var(--accent-fg);
+  color: var(--accent);
+}
+.jy-v2 .jy-blank {
+  visibility: hidden;
+}
+.jy-v2 .jy-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.jy-v2 .jy-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+/* 완료 화면 */
+.jy-v2 .jy-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  margin: 60px auto 0;
+}
+.jy-v2 .jy-title-c {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 12px 0 0;
+}
+.jy-v2 .jy-sub {
+  text-align: center;
+  color: var(--muted);
+  margin: 4px 0 16px;
+}
+
+@media (max-width: 400px) {
+  .jy-v2 .jy-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jy-v2 * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

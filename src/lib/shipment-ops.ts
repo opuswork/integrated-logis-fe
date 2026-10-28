@@ -182,7 +182,9 @@ export function mapShipmentOpsOrder(order: {
   const typeFromNotes = parseOrderTypeFromNotes(order.notes);
   // 배달 notes 또는 PICKUP → 상차. (PARCEL만으로 택배로 단정하지 않음)
   const isParcel = !(
-    isDeliveryOrderType(typeFromNotes) || fulfillmentType === "PICKUP"
+    isDeliveryOrderType(typeFromNotes) ||
+    typeFromNotes === "직접수령" ||
+    fulfillmentType === "PICKUP"
   );
   const items = (order.items ?? []).map((item) => ({
     productName: item.productName?.trim() || "—",
