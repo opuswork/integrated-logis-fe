@@ -148,6 +148,8 @@ export function NewOrderV2({
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryRequest, setDeliveryRequest] = useState(DELIVERY_REQUESTS[0]);
   const [remark, setRemark] = useState("");
+  /** 직접수령·개별택배 메모 (배달은 주소 화면의 비고를 쓴다) */
+  const [memo, setMemo] = useState("");
   const [addressSaved, setAddressSaved] = useState(false);
   const [addressError, setAddressError] = useState("");
 
@@ -314,7 +316,7 @@ export function NewOrderV2({
     if (isProxy && proxyPhone.replace(/\D/g, "").length < 10) {
       return "대신 주문하는 분의 연락처를 입력해 주세요.";
     }
-    if (!branch) return "소속(중부·서부·남부)을 선택해 주세요.";
+    if (!branch) return "작업매장(중부·서부·남부)을 선택해 주세요.";
     if (items.length === 0) return "상품을 1개 이상 담아 주세요.";
     if (!ship) return "배송 방법을 선택해 주세요.";
     if (ship === "delivery" && !addressSaved) return "배달 주소를 입력해 주세요.";
@@ -385,14 +387,22 @@ export function NewOrderV2({
     const branchName = branchInfo?.name ?? "";
     const lineShip = buildLineShip();
     const tag = ship === "parcel" ? "택배" : ship === "pickup" ? "직접수령" : "배달";
-    const lineNote =
+    // 메모는 줄 note 괄호 안에 들어가므로 괄호도 바꿔 둔다
+    const memoNote = memo.trim()
+      ? `메모: ${clean(memo.replace(/[()]/g, " "))}`
+      : "";
+    const lineNote = (
       ship === "delivery"
         ? [clean(deliveryRequest), remark.trim() ? `비고: ${clean(remark)}` : ""]
-            .filter(Boolean)
-            .join(", ")
-        : ship === "parcel" && photos.length > 0
-          ? "대량 택배 명단 사진 첨부"
-          : "";
+        : [
+            ship === "parcel" && photos.length > 0
+              ? "대량 택배 명단 사진 첨부"
+              : "",
+            memoNote,
+          ]
+    )
+      .filter(Boolean)
+      .join(", ");
 
     const deliveryAddress = joinAddress(address, addressDetail);
     const senderFull = joinAddress(senderAddress, senderAddressDetail);
@@ -598,6 +608,7 @@ export function NewOrderV2({
     setAddressDetail("");
     setDeliveryPhone("");
     setRemark("");
+    setMemo("");
     setReceiverName("");
     setReceiverPhone("");
     setReceiverAddress("");
@@ -711,7 +722,7 @@ export function NewOrderV2({
           <dl className="jy-dl">
             <dt>날짜</dt>
             <dd>{dateLabel(date)}</dd>
-            <dt>소속</dt>
+            <dt>작업매장</dt>
             <dd>{branchInfo?.name ?? "-"}</dd>
             <dt>주문자</dt>
             <dd>
@@ -761,6 +772,12 @@ export function NewOrderV2({
                     <dd>{photos.length}장</dd>
                   </>
                 ) : null}
+              </>
+            ) : null}
+            {(ship === "pickup" || ship === "parcel") && memo.trim() ? (
+              <>
+                <dt>메모</dt>
+                <dd>{memo.trim()}</dd>
               </>
             ) : null}
           </dl>
@@ -906,7 +923,7 @@ export function NewOrderV2({
           </div>
         ) : null}
         <div>
-          <span className="jy-label">소속</span>
+          <span className="jy-label">작업매장</span>
           <div className="jy-chips">
             {BRANCH_ORDER.map((id) => BRANCH_STORES.find((store) => store.id === id)!).map((store) => (
               <button
@@ -1028,7 +1045,7 @@ export function NewOrderV2({
             <span>
               {branchInfo
                 ? `${branchInfo.name} 매장에서 ${dateLabel(date)}에 직접 수령해요.`
-                : "소속 매장을 선택하면 그 매장에서 직접 수령해요."}
+                : "작업매장을 선택하면 그 매장에서 직접 수령해요."}
             </span>
           </div>
         ) : null}
@@ -1161,6 +1178,21 @@ export function NewOrderV2({
               {photoError ? <div className="jy-err">{photoError}</div> : null}
             </div>
           </>
+        ) : null}
+
+        {ship === "pickup" || ship === "parcel" ? (
+          <div>
+            <label className="jy-label" htmlFor="jy-memo">
+              메모
+            </label>
+            <textarea
+              id="jy-memo"
+              className="jy-input"
+              value={memo}
+              onChange={(event) => setMemo(event.target.value)}
+              placeholder="전달할 내용을 적어 주세요"
+            />
+          </div>
         ) : null}
       </section>
 
