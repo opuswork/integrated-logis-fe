@@ -381,9 +381,18 @@ export function parseShipDateFromNotes(notes: string | null | undefined) {
   return "";
 }
 
+/** 직접수령(매장 방문 수령) 주문: 상품 줄 태그 [직접수령] */
+export function isPickupOrderNotes(notes: string | null | undefined) {
+  return Boolean(notes?.includes("[직접수령]"));
+}
+
 export function parseOrderTypeFromNotes(notes: string | null | undefined) {
   if (!notes) {
     return "택배";
+  }
+  // 직접수령은 배달업체명 자리에 '직접수령'을 싣지만 배달이 아니다.
+  if (isPickupOrderNotes(notes)) {
+    return "직접수령";
   }
 
   const hasDelivery =

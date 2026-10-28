@@ -47,3 +47,4 @@ storybook-static
 # 로컬 개발 시 저장되는 음성 신고 녹음
 /public/assets/voice_recordings/*
 !/public/assets/voice_recordings/.gitkeep
+/public/assets/order_attachments/*
