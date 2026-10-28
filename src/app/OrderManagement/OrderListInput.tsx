@@ -1856,7 +1856,7 @@ export function ProductAddDialog({
         : "상품 추가";
 
   const scopeLabel = unifiedCatalog
-    ? "공개 상품 전체"
+    ? ""
     : mode === "box"
       ? "박스 상품만 표시"
       : mode === "giftUnit"
@@ -2291,7 +2291,9 @@ export function ProductAddDialog({
       className="max-w-lg"
     >
       <div className="space-y-3">
-        <p className="text-sm text-[#64748b]">{subtitle}</p>
+        {subtitle ? (
+          <p className="text-sm text-[#64748b]">{subtitle}</p>
+        ) : null}
 
         {shipPreset}
 

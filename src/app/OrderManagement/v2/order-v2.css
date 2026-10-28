@@ -4,32 +4,32 @@
  * 모든 규칙은 .jy-v2 안에서만 적용된다.
  */
 .jy-v2 {
-  --bg: #faf7f2;
-  --surface: #ffffff;
-  --fg: #2b2622;
-  --muted: #7a6f66;
-  --line: #e6ded4;
-  --line2: #efe8df;
-  --accent: #d9663a;
-  --accent-fg: #ffffff;
-  --soft: #f3ede4;
-  --ink: #2b2622;
-  --ink-fg: #faf7f2;
-  --ink-muted: #cfc4b6;
-  --prep: #8a5a12;
-  --prep-bg: #f6e8cf;
-  --done: #2f6b5e;
-  --done-bg: #e3efea;
-  --err: #b3261e;
-  --sat: #3d6fb4;
-  --blue: #1e4f9c;
-  --blue-bg: #e3ecfa;
-  --purple: #6b3fa0;
-  --purple-bg: #eee5f8;
+  --jy-bg: #faf7f2;
+  --jy-surface: #ffffff;
+  --jy-fg: #2b2622;
+  --jy-muted: #7a6f66;
+  --jy-line: #e6ded4;
+  --jy-line2: #efe8df;
+  --jy-accent: #d9663a;
+  --jy-accent-fg: #ffffff;
+  --jy-soft: #f3ede4;
+  --jy-ink: #2b2622;
+  --jy-ink-fg: #faf7f2;
+  --jy-ink-muted: #cfc4b6;
+  --jy-prep: #8a5a12;
+  --jy-prep-bg: #f6e8cf;
+  --jy-done: #2f6b5e;
+  --jy-done-bg: #e3efea;
+  --jy-err: #b3261e;
+  --jy-sat: #3d6fb4;
+  --jy-blue: #1e4f9c;
+  --jy-blue-bg: #e3ecfa;
+  --jy-purple: #6b3fa0;
+  --jy-purple-bg: #eee5f8;
 
   min-height: 100%;
-  background: var(--bg);
-  color: var(--fg);
+  background: var(--jy-bg);
+  color: var(--jy-fg);
   font-family: var(--font-noto-sans-kr), -apple-system, "Apple SD Gothic Neo",
     "Malgun Gothic", sans-serif;
   font-size: 15px;
@@ -38,28 +38,28 @@
 
 @media (prefers-color-scheme: dark) {
   .jy-v2 {
-    --bg: #1a1715;
-    --surface: #24201d;
-    --fg: #f1ece6;
-    --muted: #ada398;
-    --line: #3a3430;
-    --line2: #332e2a;
-    --accent: #e8784c;
-    --accent-fg: #1a1715;
-    --soft: #2e2824;
-    --ink: #f1ece6;
-    --ink-fg: #1a1715;
-    --ink-muted: #5e554d;
-    --prep: #f0c27a;
-    --prep-bg: #3a2e1a;
-    --done: #8fd1bf;
-    --done-bg: #1c322c;
-    --err: #f2a49c;
-    --sat: #8eb4ea;
-    --blue: #9fc0f2;
-    --blue-bg: #1d2a40;
-    --purple: #cdb2f0;
-    --purple-bg: #2e2340;
+    --jy-bg: #1a1715;
+    --jy-surface: #24201d;
+    --jy-fg: #f1ece6;
+    --jy-muted: #ada398;
+    --jy-line: #3a3430;
+    --jy-line2: #332e2a;
+    --jy-accent: #e8784c;
+    --jy-accent-fg: #1a1715;
+    --jy-soft: #2e2824;
+    --jy-ink: #f1ece6;
+    --jy-ink-fg: #1a1715;
+    --jy-ink-muted: #5e554d;
+    --jy-prep: #f0c27a;
+    --jy-prep-bg: #3a2e1a;
+    --jy-done: #8fd1bf;
+    --jy-done-bg: #1c322c;
+    --jy-err: #f2a49c;
+    --jy-sat: #8eb4ea;
+    --jy-blue: #9fc0f2;
+    --jy-blue-bg: #1d2a40;
+    --jy-purple: #cdb2f0;
+    --jy-purple-bg: #2e2340;
     color-scheme: dark;
   }
 }
@@ -101,11 +101,11 @@
 }
 .jy-v2 .jy-eyebrow {
   font-size: 13px;
-  color: var(--muted);
+  color: var(--jy-muted);
 }
 .jy-v2 .jy-card {
-  background: var(--surface);
-  border: 1px solid var(--line2);
+  background: var(--jy-surface);
+  border: 1px solid var(--jy-line2);
   border-radius: 16px;
   padding: 16px;
   display: flex;
@@ -115,32 +115,32 @@
 .jy-v2 .jy-label {
   display: block;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--jy-muted);
   margin-bottom: 6px;
 }
 .jy-v2 .jy-input {
   width: 100%;
   font: inherit;
   font-size: 15px;
-  color: var(--fg);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  color: var(--jy-fg);
+  background: var(--jy-surface);
+  border: 1px solid var(--jy-line);
   border-radius: 12px;
   padding: 0 14px;
   height: 50px;
 }
 .jy-v2 .jy-input::placeholder {
-  color: var(--muted);
+  color: var(--jy-muted);
   opacity: 0.8;
 }
 .jy-v2 .jy-input:focus,
 .jy-v2 button:focus-visible,
 .jy-v2 a:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--jy-accent);
   outline-offset: 1px;
 }
 .jy-v2 .jy-input[aria-invalid="true"] {
-  border-color: var(--err);
+  border-color: var(--jy-err);
 }
 .jy-v2 .jy-row {
   display: grid;
@@ -160,9 +160,9 @@
   font: inherit;
   cursor: pointer;
   border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--fg);
+  border: 1px solid var(--jy-line);
+  background: var(--jy-surface);
+  color: var(--jy-fg);
   padding: 0 16px;
   height: 44px;
   display: inline-flex;
@@ -175,15 +175,15 @@
   opacity: 0.5;
 }
 .jy-v2 .jy-primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
+  background: var(--jy-accent);
+  color: var(--jy-accent-fg);
+  border-color: var(--jy-accent);
   font-weight: 700;
 }
 .jy-v2 .jy-dark {
-  background: var(--ink);
-  color: var(--ink-fg);
-  border-color: var(--ink);
+  background: var(--jy-ink);
+  color: var(--jy-ink-fg);
+  border-color: var(--jy-ink);
   font-weight: 700;
 }
 .jy-v2 .jy-big {
@@ -202,7 +202,7 @@
 .jy-v2 .jy-link {
   background: transparent;
   border: 0;
-  color: var(--muted);
+  color: var(--jy-muted);
   height: auto;
   padding: 6px 4px;
   font-size: 13px;
@@ -232,9 +232,9 @@
   flex: none;
 }
 .jy-v2 .jy-chip[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
+  background: var(--jy-accent);
+  color: var(--jy-accent-fg);
+  border-color: var(--jy-accent);
   font-weight: 700;
 }
 
@@ -245,9 +245,9 @@
   height: 50px;
   padding: 0 14px;
   border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--muted);
+  border: 1px solid var(--jy-line);
+  background: var(--jy-surface);
+  color: var(--jy-muted);
 }
 .jy-v2 .jy-search input {
   flex: 1;
@@ -256,19 +256,19 @@
   height: 46px;
   padding: 0;
   background: transparent;
-  color: var(--fg);
+  color: var(--jy-fg);
   font: inherit;
   font-size: 15px;
 }
 .jy-v2 .jy-search input::placeholder {
-  color: var(--muted);
+  color: var(--jy-muted);
   opacity: 0.8;
 }
 .jy-v2 .jy-search input:focus {
   outline: none;
 }
 .jy-v2 .jy-search:focus-within {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--jy-accent);
   outline-offset: 1px;
 }
 
@@ -281,20 +281,20 @@
   white-space: nowrap;
 }
 .jy-v2 .jy-badge[data-tone="blue"] {
-  color: var(--blue);
-  background: var(--blue-bg);
+  color: var(--jy-blue);
+  background: var(--jy-blue-bg);
 }
 .jy-v2 .jy-badge[data-tone="prep"] {
-  color: var(--prep);
-  background: var(--prep-bg);
+  color: var(--jy-prep);
+  background: var(--jy-prep-bg);
 }
 .jy-v2 .jy-badge[data-tone="purple"] {
-  color: var(--purple);
-  background: var(--purple-bg);
+  color: var(--jy-purple);
+  background: var(--jy-purple-bg);
 }
 .jy-v2 .jy-badge[data-tone="done"] {
-  color: var(--done);
-  background: var(--done-bg);
+  color: var(--jy-done);
+  background: var(--jy-done-bg);
 }
 
 .jy-v2 .jy-order {
@@ -303,8 +303,8 @@
   font: inherit;
   color: inherit;
   cursor: pointer;
-  background: var(--surface);
-  border: 1px solid var(--line2);
+  background: var(--jy-surface);
+  border: 1px solid var(--jy-line2);
   border-radius: 14px;
   padding: 14px;
   display: flex;
@@ -318,7 +318,7 @@
   align-items: center;
 }
 .jy-v2 .jy-meta {
-  color: var(--muted);
+  color: var(--jy-muted);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -331,7 +331,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--soft);
+  background: var(--jy-soft);
   border-radius: 12px;
 }
 .jy-v2 .jy-item-line > span {
@@ -353,22 +353,22 @@
 .jy-v2 .jy-qty input {
   width: 52px;
   height: 34px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--jy-line);
   border-radius: 10px;
-  background: var(--surface);
-  color: var(--fg);
+  background: var(--jy-surface);
+  color: var(--jy-fg);
   text-align: center;
   font: inherit;
   font-weight: 700;
 }
 .jy-v2 .jy-empty {
-  color: var(--muted);
+  color: var(--jy-muted);
   text-align: center;
   padding: 24px 0;
 }
 .jy-v2 .jy-hint {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--jy-muted);
 }
 .jy-v2 .jy-info {
   display: flex;
@@ -376,9 +376,9 @@
   align-items: flex-start;
   padding: 14px;
   border-radius: 14px;
-  background: var(--soft);
+  background: var(--jy-soft);
   font-size: 13px;
-  color: var(--muted);
+  color: var(--jy-muted);
   line-height: 1.5;
 }
 .jy-v2 .jy-info b {
@@ -386,8 +386,8 @@
   width: 18px;
   height: 18px;
   border-radius: 9px;
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: var(--jy-accent);
+  color: var(--jy-accent-fg);
   font-size: 11px;
   display: flex;
   align-items: center;
@@ -400,7 +400,7 @@
   gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: var(--soft);
+  background: var(--jy-soft);
 }
 .jy-v2 .jy-addr-sum > div {
   min-width: 0;
@@ -413,7 +413,7 @@
   gap: 8px 10px;
 }
 .jy-v2 .jy-dl dt {
-  color: var(--muted);
+  color: var(--jy-muted);
   font-size: 13px;
 }
 .jy-v2 .jy-dl dd {
@@ -422,7 +422,7 @@
   overflow-wrap: anywhere;
 }
 .jy-v2 .jy-err {
-  color: var(--err);
+  color: var(--jy-err);
   font-size: 13px;
 }
 .jy-v2 .jy-num {
@@ -437,11 +437,11 @@
 .jy-v2 .jy-table th,
 .jy-v2 .jy-table td {
   padding: 8px 4px;
-  border-bottom: 1px solid var(--line2);
+  border-bottom: 1px solid var(--jy-line2);
   text-align: right;
 }
 .jy-v2 .jy-table th {
-  color: var(--muted);
+  color: var(--jy-muted);
   font-weight: 500;
   font-size: 12px;
 }
@@ -462,8 +462,8 @@
   height: 76px;
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  background: var(--soft);
+  border: 1px solid var(--jy-line);
+  background: var(--jy-soft);
 }
 .jy-v2 .jy-photo img {
   display: block;
@@ -490,9 +490,9 @@
   width: 76px;
   height: 76px;
   border-radius: 12px;
-  border: 1.5px dashed var(--line);
+  border: 1.5px dashed var(--jy-line);
   background: transparent;
-  color: var(--muted);
+  color: var(--jy-muted);
   font-size: 12px;
   display: flex;
   flex-direction: column;
@@ -511,7 +511,7 @@
   padding: 12px max(16px, env(safe-area-inset-right, 0px))
     calc(16px + env(safe-area-inset-bottom, 0px))
     max(16px, env(safe-area-inset-left, 0px));
-  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  background: linear-gradient(to top, var(--jy-bg) 70%, transparent);
   z-index: 30;
 }
 .jy-v2 .jy-dock-in {
@@ -525,11 +525,11 @@
   gap: 12px;
   padding: 12px 12px 12px 18px;
   border-radius: 18px;
-  background: var(--ink);
-  color: var(--ink-fg);
+  background: var(--jy-ink);
+  color: var(--jy-ink-fg);
 }
 .jy-v2 .jy-cartbar .jy-meta {
-  color: var(--ink-muted);
+  color: var(--jy-ink-muted);
 }
 .jy-v2 .jy-cartbar .jy-t {
   font-size: 16px;
@@ -575,16 +575,16 @@
 .jy-v2 .jy-dow {
   text-align: center;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--jy-muted);
   padding: 2px 0 6px;
 }
 .jy-v2 .jy-dow.jy-sun,
 .jy-v2 .jy-day.jy-sun .jy-d {
-  color: var(--err);
+  color: var(--jy-err);
 }
 .jy-v2 .jy-dow.jy-sat,
 .jy-v2 .jy-day.jy-sat .jy-d {
-  color: var(--sat);
+  color: var(--jy-sat);
 }
 .jy-v2 .jy-day {
   height: 58px;
@@ -592,7 +592,7 @@
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: var(--fg);
+  color: var(--jy-fg);
   font: inherit;
   cursor: pointer;
   display: flex;
@@ -612,15 +612,15 @@
   text-align: center;
 }
 .jy-v2 .jy-day.jy-is-today .jy-d {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
-  color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--jy-accent);
+  color: var(--jy-accent);
   font-weight: 700;
 }
 .jy-v2 .jy-day[aria-pressed="true"] {
-  background: var(--accent);
+  background: var(--jy-accent);
 }
 .jy-v2 .jy-day[aria-pressed="true"] .jy-d {
-  color: var(--accent-fg);
+  color: var(--jy-accent-fg);
   box-shadow: none;
   font-weight: 700;
 }
@@ -630,16 +630,16 @@
   line-height: 1;
   padding: 3px 6px;
   border-radius: 8px;
-  background: var(--prep-bg);
-  color: var(--prep);
+  background: var(--jy-prep-bg);
+  color: var(--jy-prep);
 }
 .jy-v2 .jy-day .jy-cnt.jy-all-done {
-  background: var(--done-bg);
-  color: var(--done);
+  background: var(--jy-done-bg);
+  color: var(--jy-done);
 }
 .jy-v2 .jy-day[aria-pressed="true"] .jy-cnt {
-  background: var(--accent-fg);
-  color: var(--accent);
+  background: var(--jy-accent-fg);
+  color: var(--jy-accent);
 }
 .jy-v2 .jy-blank {
   visibility: hidden;
@@ -648,7 +648,7 @@
   display: flex;
   gap: 12px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--jy-muted);
   flex-wrap: wrap;
 }
 .jy-v2 .jy-legend i {
@@ -665,8 +665,8 @@
   width: 72px;
   height: 72px;
   border-radius: 20px;
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: var(--jy-accent);
+  color: var(--jy-accent-fg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -682,7 +682,7 @@
 }
 .jy-v2 .jy-sub {
   text-align: center;
-  color: var(--muted);
+  color: var(--jy-muted);
   margin: 4px 0 16px;
 }
 

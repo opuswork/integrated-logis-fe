@@ -204,11 +204,11 @@ export function OrderCalendarV2({
 
         <div className="jy-legend">
           <span>
-            <i style={{ background: "var(--prep-bg)" }} />
+            <i style={{ background: "var(--jy-prep-bg)" }} />
             진행 중 있음
           </span>
           <span>
-            <i style={{ background: "var(--done-bg)" }} />
+            <i style={{ background: "var(--jy-done-bg)" }} />
             모두 배송완료
           </span>
           <span>숫자 = 주문 건수</span>
