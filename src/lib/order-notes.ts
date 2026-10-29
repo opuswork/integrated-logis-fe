@@ -430,7 +430,7 @@ export function parseItemNoteFromNotes(
       ? String(quantity)
       : "\\d+";
   const pattern = new RegExp(
-    `^\\[(배달|택배)\\]\\s+${escapedName}\\s+${qtyPart}개(?:\\((.*)\\))?$`,
+    `^\\[(배달|택배|직접수령)\\]\\s+${escapedName}\\s+${qtyPart}개(?:\\((.*)\\))?$`,
   );
 
   for (const segment of segments) {
@@ -442,7 +442,7 @@ export function parseItemNoteFromNotes(
 
   // Fallback: match by product name only (qty may have changed)
   const loosePattern = new RegExp(
-    `^\\[(배달|택배)\\]\\s+${escapedName}\\s+\\d+개(?:\\((.*)\\))?$`,
+    `^\\[(배달|택배|직접수령)\\]\\s+${escapedName}\\s+\\d+개(?:\\((.*)\\))?$`,
   );
   for (const segment of segments) {
     const match = loosePattern.exec(segment);

@@ -113,7 +113,7 @@ const GREETING_RECEIVE_PLACES = [
   "방문",
 ] as const;
 /** 줄별 배송방식. 화면 라벨은 LINE_SHIP_OPTIONS 참고 */
-type OrderType = "parcel" | "delivery";
+type OrderType = "parcel" | "delivery" | "pickup";
 
 type ChurchOption = {
   id: number;
@@ -261,12 +261,27 @@ function LineOriginNote({ row }: { row: ProductLineItem }) {
 
 /** 줄별 배송방식 버튼 라벨 (주문서 화면 전용. 관리자 목록·출력물은 배달/상차/택배 그대로) */
 const LINE_SHIP_OPTIONS = [
-  { value: "delivery" as const, icon: "🚚", label: "하차배송" },
+  { value: "pickup" as const, icon: "🏪", label: "직접수령" },
+  { value: "delivery" as const, icon: "🚚", label: "배달" },
   { value: "parcel" as const, icon: "📦", label: "택배" },
 ];
 
+/** 직접수령은 notes·배송상세에 배달 형식으로 싣고 업체명 자리에 이 값을 넣는다 (개인 v2 주문서와 동일) */
+const PICKUP_COMPANY_NAME = "직접수령";
+
+/** 줄 배송방식 → 배송상세(LineShipInfo) kind. 직접수령은 배달 형식으로 저장한다 */
+function toLineShipKind(kind: OrderType): LineShipInfo["kind"] {
+  return kind === "parcel" ? "parcel" : "delivery";
+}
+
+/** 저장된 배송상세 → 줄 배송방식 */
+function orderKindFromShip(ship: LineShipInfo): OrderType {
+  if (ship.kind === "parcel") return "parcel";
+  return ship.companyName.trim() === PICKUP_COMPANY_NAME ? "pickup" : "delivery";
+}
+
 /**
- * 배송선택 버튼 (🚚 하차배송 / 📦 택배).
+ * 배송선택 버튼 (🏪 직접수령 / 🚚 배달 / 📦 택배).
  * 상품 줄(모바일 카드·PC 표)과 박스상품 추가 창에서 같이 쓴다.
  */
 function ShipKindButtons({
@@ -280,7 +295,7 @@ function ShipKindButtons({
   value: OrderType | "";
   onChange: (kind: OrderType) => void;
   disabled?: boolean;
-  /** 하차배송 전용 상품: 택배를 고를 수 없다 */
+  /** 배달 전용 상품: 택배를 고를 수 없다 (직접수령은 가능) */
   parcelDisabled?: boolean;
   size?: "table" | "card" | "sheet";
   /** 스크린리더용: 어떤 상품의 배송선택인지 */
@@ -291,7 +306,7 @@ function ShipKindButtons({
       role="radiogroup"
       aria-label={`${labelPrefix ? `${labelPrefix} ` : ""}배송선택`}
       className={cn(
-        "grid min-w-0 flex-1 grid-cols-2",
+        "grid min-w-0 flex-1 grid-cols-3",
         size === "sheet" ? "gap-3" : "gap-1.5",
       )}
     >
@@ -313,7 +328,7 @@ function ShipKindButtons({
               "inline-flex min-w-0 items-center justify-center gap-1 whitespace-nowrap border font-bold transition-colors",
               size === "table" && "h-8 rounded px-1.5 text-[12px]",
               size === "card" && "h-9 rounded-md px-1.5 text-[12.5px]",
-              size === "sheet" && "h-14 rounded-xl border-2 px-2 text-[18px]",
+              size === "sheet" && "h-14 rounded-xl border-2 px-1 text-[16px]",
               selected
                 ? "border-[#5B2A86] bg-[#F5EEFB] text-[#5B2A86]"
                 : "border-[#E2E8F0] bg-white text-[#1A202C] hover:bg-[#F8FAFC]",
@@ -334,11 +349,14 @@ function lineShipLabel(kind: OrderType | "") {
   return LINE_SHIP_OPTIONS.find((option) => option.value === kind)?.label ?? "";
 }
 
-function oppositeKind(kind: OrderType): OrderType {
+/** 줄 분할 시 나머지 수량에 넣을 방식. 직접수령은 반대가 정해지지 않아 미선택으로 둔다 */
+function oppositeKind(kind: OrderType): OrderType | "" {
+  if (kind === "pickup") return "";
   return kind === "delivery" ? "parcel" : "delivery";
 }
 
 function orderKindLabel(kind: OrderType) {
+  if (kind === "pickup") return "직접수령";
   return kind === "delivery" ? "배달" : "택배";
 }
 
@@ -1628,7 +1646,7 @@ export function ProductAddDialog({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [zoomItem]);
-  /** 담을 상품에 미리 넣을 배송방식 (하차배송/택배). 줄마다 다시 바꿀 수 있다 */
+  /** 담을 상품에 미리 넣을 배송방식 (직접수령/배달/택배). 줄마다 다시 바꿀 수 있다 */
   const [presetKind, setPresetKind] = useState<OrderType | "">("");
   const listRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -1928,11 +1946,11 @@ export function ProductAddDialog({
   );
 
   // 상품목록수정(editList)은 기존 줄을 바꾸는 창이라 배송방식 미리 고르기를 보여주지 않는다.
-  // 그 밖에는 배송방식(하차배송/택배)을 골라야 장바구니에 담을 수 있다 (필수).
+  // 그 밖에는 배송방식(직접수령/배달/택배)을 골라야 장바구니에 담을 수 있다 (필수).
   const shipKindMissing = !editList && !unifiedCatalog && presetKind === "";
   const shipPreset = editList || unifiedCatalog ? null : (
     <div>
-      {/* 모바일 시트는 두 버튼만 보여준다 (익숙한 UI라 라벨 없이도 먼저 고른다). PC 창은 라벨 유지 */}
+      {/* 모바일 시트는 버튼만 보여준다 (익숙한 UI라 라벨 없이도 먼저 고른다). PC 창은 라벨 유지 */}
       {isSheet ? null : (
         <p className="mb-2 text-xs font-bold text-[#475569]">
           배송방식 선택 <span className="text-[#E53E3E]">*</span>
@@ -1953,7 +1971,7 @@ export function ProductAddDialog({
             isSheet ? "text-[15px]" : "text-xs",
           )}
         >
-          하차배송 또는 택배를 선택해 주세요.
+          직접수령, 배달, 택배 중 하나를 선택해 주세요.
         </p>
       ) : null}
     </div>
@@ -3207,7 +3225,8 @@ function GreetingViewModal({
 
 /**
  * 줄별 배송정보 입력 시트 (스크린샷 ⑤⑥).
- * 배송선택이 택배면 "택배정보입력", 상차/배달이면 "배달정보입력"으로 열린다.
+ * 배송선택이 택배면 "택배정보입력", 상차/배달이면 "배달정보입력",
+ * 직접수령이면 "직접수령정보입력"으로 열린다.
  * 하단 고정 버튼으로만 저장되며, 저장 전 값은 해당 줄에 반영되지 않는다.
  */
 function LineShipSheet({
@@ -3218,6 +3237,9 @@ function LineShipSheet({
   initial,
   minDateIso,
   shipDateLocked,
+  pickupStoreName,
+  ordererName,
+  ordererPhone,
   onCancel,
   onSave,
 }: {
@@ -3229,13 +3251,29 @@ function LineShipSheet({
   minDateIso: string;
   /** 달력에서 고른 납품일이 있으면 날짜 칸을 잠근다 */
   shipDateLocked: boolean;
+  /** 직접수령: 수령 장소(선택한 지부매장) */
+  pickupStoreName: string;
+  /** 직접수령: 수령인 기본값 */
+  ordererName: string;
+  ordererPhone: string;
   onCancel: () => void;
   onSave: (info: LineShipInfo) => void;
 }) {
+  const isPickup = kind === "pickup";
   // 호출부가 lineId로 key를 주므로 줄이 바뀌면 이 컴포넌트가 새로 마운트된다.
-  const [draft, setDraft] = useState<LineShipInfo>(() =>
-    initial ? { ...initial, kind } : emptyLineShipInfo(kind),
-  );
+  const [draft, setDraft] = useState<LineShipInfo>(() => {
+    const base = initial
+      ? { ...initial, kind: toLineShipKind(kind) }
+      : emptyLineShipInfo(toLineShipKind(kind));
+    return isPickup
+      ? {
+          ...base,
+          companyName: PICKUP_COMPANY_NAME,
+          recipientName: base.recipientName || ordererName,
+          recipientPhone: base.recipientPhone || ordererPhone,
+        }
+      : base;
+  });
   const [error, setError] = useState("");
 
   const isDelivery = kind === "delivery";
@@ -3265,6 +3303,21 @@ function LineShipSheet({
   };
 
   const validate = () => {
+    if (isPickup) {
+      if (!pickupStoreName) {
+        return "수령 장소가 될 매장(남부/중부/서부)을 먼저 선택해 주세요.";
+      }
+      if (!draft.deliveryDate) {
+        return "수령일을 선택해 주세요.";
+      }
+      if (!isDateOnOrAfterToday(draft.deliveryDate)) {
+        return "수령일은 오늘 이후 날짜만 선택할 수 있습니다.";
+      }
+      if (!draft.recipientName.trim() || !draft.recipientPhone.trim()) {
+        return "수령인 성함과 전화번호를 입력해 주세요.";
+      }
+      return "";
+    }
     if (!draft.companyName.trim()) {
       return "납품업체명을 입력해 주세요.";
     }
@@ -3311,13 +3364,38 @@ function LineShipSheet({
       setError(message);
       return;
     }
+    if (isPickup) {
+      // 직접수령: 배달 형식으로 싣고 수령 장소(지부매장)를 받는 사람 주소 자리에 둔다
+      onSave({
+        ...draft,
+        kind: "delivery",
+        companyName: PICKUP_COMPANY_NAME,
+        deliveryAmPm: "",
+        deliveryTime: "",
+        recipientAddress: pickupStoreName,
+        recipientAddressDetail: "",
+        contactMode: "address",
+      });
+      return;
+    }
     // 배달은 항상 주소로 수취 (이메일/팩스 선택 없음)
     onSave({
       ...draft,
-      kind,
+      kind: toLineShipKind(kind),
       contactMode: isDelivery ? "address" : draft.contactMode,
     });
   };
+
+  const sheetTitle = isPickup
+    ? "직접수령정보입력"
+    : isDelivery
+      ? "배달정보입력"
+      : "택배정보입력";
+  const saveLabel = isPickup
+    ? "직접수령정보저장"
+    : isDelivery
+      ? "배달정보저장"
+      : "택배정보저장";
 
   const labelClass = "mb-[5px] block text-[12px] font-bold text-[#64748B]";
   const inputClass =
@@ -3328,7 +3406,7 @@ function LineShipSheet({
   return (
     <BottomSheet
       open={open}
-      title={isDelivery ? "하차배송정보입력" : "택배정보입력"}
+      title={sheetTitle}
       subtitle={
         <>
           {productName} <span className="font-semibold text-ink">{qty}개</span>{" "}
@@ -3351,13 +3429,55 @@ function LineShipSheet({
             onClick={handleSave}
             className="flex-1 rounded-[10px] bg-[#1A365D] py-3 text-[14.5px] font-bold text-white"
           >
-            {isDelivery ? "하차배송정보저장" : "택배정보저장"}
+            {saveLabel}
           </button>
         </div>
       }
     >
       <div className="px-5 pb-4">
-        {isDelivery ? (
+        {isPickup ? (
+          <>
+            <label className={labelClass}>수령일 *</label>
+            <MdCalendarPicker
+              valueIso={draft.deliveryDate || null}
+              minIso={minDateIso}
+              placeholder="m/d"
+              title="수령일"
+              disableSundays
+              disabled={shipDateLocked}
+              className={datePickerClass}
+              onChangeIso={(iso) => {
+                if (iso < minDateIso || isSundayIso(iso)) return;
+                patch({ deliveryDate: iso });
+              }}
+            />
+            <label className={labelClass}>수령 장소</label>
+            <input
+              type="text"
+              value={pickupStoreName || "지부매장을 먼저 선택해 주세요"}
+              disabled
+              className={inputClass}
+            />
+            <label className={labelClass}>수령인 성함 *</label>
+            <input
+              type="text"
+              value={draft.recipientName}
+              onChange={(event) => patch({ recipientName: event.target.value })}
+              className={inputClass}
+            />
+            <label className={labelClass}>수령인 전화번호 *</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={13}
+              value={draft.recipientPhone}
+              onChange={(event) =>
+                patch({ recipientPhone: formatPhoneInput(event.target.value) })
+              }
+              className={inputClass}
+            />
+          </>
+        ) : isDelivery ? (
           <>
             <label className={labelClass}>배달일 *</label>
             <MdCalendarPicker
@@ -4056,9 +4176,13 @@ function ProductOrderPanel({
 
         const notes = order.notes ?? "";
         const typeLabel = parseOrderTypeFromNotes(notes);
+        // 직접수령은 notes 를 배달 형식(배달업체명:직접수령 / 배달일)으로 싣는다.
+        const isPickupOrder = typeLabel === "직접수령";
         const isDeliveryOrder =
-          typeLabel === "배달" || typeLabel.startsWith("배달");
-        setOrderType(isDeliveryOrder ? "delivery" : "parcel");
+          isPickupOrder || typeLabel === "배달" || typeLabel.startsWith("배달");
+        setOrderType(
+          isPickupOrder ? "pickup" : isDeliveryOrder ? "delivery" : "parcel",
+        );
         setEditOrderId(order.id);
         setEditOrderStatus(order.status);
         setExtraNote(order.extraNote ?? "");
@@ -4185,7 +4309,11 @@ function ProductOrderPanel({
         }
         onHydratedGreetings?.(greetingMap);
 
-        const orderKind: OrderType = isDeliveryOrder ? "delivery" : "parcel";
+        const orderKind: OrderType = isPickupOrder
+          ? "pickup"
+          : isDeliveryOrder
+            ? "delivery"
+            : "parcel";
         const greetingFor = (productName: string) =>
           greetingMap[productName] ??
           Object.values(greetingMap).find(
@@ -4237,7 +4365,7 @@ function ProductOrderPanel({
               lineId,
               splitGroupId: groupId,
               product: line.product,
-              orderKind: line.ship.kind,
+              orderKind: orderKindFromShip(line.ship),
               qty: line.qty || 1,
               baseQty: line.baseQty || line.qty || 1,
               shipSaved: true,
@@ -4279,10 +4407,12 @@ function ProductOrderPanel({
         } else {
           // 구주문: 주문 단위 배송정보 1벌을 모든 줄에 복사해 둔다.
           const legacyInfo: LineShipInfo = {
-            ...emptyLineShipInfo(orderKind),
-            companyName: isDeliveryOrder
-              ? parseDeliveryCompanyFromNotes(notes)
-              : parseParcelCompanyFromNotes(notes),
+            ...emptyLineShipInfo(toLineShipKind(orderKind)),
+            companyName: isPickupOrder
+              ? PICKUP_COMPANY_NAME
+              : isDeliveryOrder
+                ? parseDeliveryCompanyFromNotes(notes)
+                : parseParcelCompanyFromNotes(notes),
             deliveryDate: isDeliveryOrder ? hydratedDeliveryDate : "",
             deliveryAmPm: isDeliveryOrder ? hydratedDeliveryAmPm : "",
             deliveryTime: isDeliveryOrder ? hydratedDeliveryTime : "",
@@ -4371,7 +4501,7 @@ function ProductOrderPanel({
     presetKind: OrderType | "" = "",
   ) => {
     // 추가 창에서 고른 배송방식을 줄에 미리 넣는다. 안 골랐으면 ""(줄별로 선택).
-    // 하차배송 전용 상품은 택배로 미리 넣지 않는다.
+    // 배달 전용 상품은 택배로 미리 넣지 않는다.
     const kindFor = (item: ProductDialogItem): OrderType | "" =>
       presetKind === "parcel" && item.deliveryOnly ? "" : presetKind;
     const allowedItems = items;
@@ -4436,9 +4566,10 @@ function ProductOrderPanel({
   };
 
   /**
-   * 배송선택 버튼 (🚚 하차배송 / 📦 택배).
+   * 배송선택 버튼 (🏪 직접수령 / 🚚 배달 / 📦 택배).
    * 수량을 baseQty보다 줄여 놓은 상태에서 방식을 고르면, 남은 수량이
    * 반대 방식(택배↔상차)으로 자동 복사되어 바로 아래 줄로 들어간다.
+   * 직접수령은 반대 방식이 없어 남은 줄을 배송방식 미선택으로 만든다.
    */
   const handleLineKindChange = (lineId: string, kind: OrderType | "") => {
     const index = productItems.findIndex((row) => row.lineId === lineId);
@@ -4740,7 +4871,23 @@ function ProductOrderPanel({
     }
     const noKind = productItems.find((item) => !item.orderKind);
     if (noKind) {
-      return `'${noKind.product}'의 배송선택(택배/상차)을 골라 주세요.`;
+      return `'${noKind.product}'의 배송선택(직접수령/배달/택배)을 골라 주세요.`;
+    }
+    // 수정은 주문 단위로 저장한다. [직접수령] 줄이 하나라도 있으면 주문 전체가
+    // 직접수령으로 분류되므로 한 주문 안에서 다른 방식과 섞지 않는다.
+    if (!canSplitLines) {
+      const kindsByOrder = new Map<number, Set<OrderType | "">>();
+      for (const item of productItems) {
+        if (item.statusLocked) continue;
+        const kinds = kindsByOrder.get(item.sourceOrderId) ?? new Set();
+        kinds.add(item.orderKind);
+        kindsByOrder.set(item.sourceOrderId, kinds);
+      }
+      for (const kinds of kindsByOrder.values()) {
+        if (kinds.has("pickup") && kinds.size > 1) {
+          return "한 주문 안에서 직접수령과 다른 배송방식을 섞을 수 없습니다.";
+        }
+      }
     }
     const noShip = productItems.find(
       (item) => !item.shipSaved || !lineShipInfo[item.lineId],
@@ -5036,6 +5183,8 @@ function ProductOrderPanel({
 
         const hasDeliveryItems = Boolean(firstDeliveryShip);
         const hasParcelItems = Boolean(firstParcelShip);
+        // 직접수령은 배달 형식으로 싣되 받는분·배달시간 없이 업체명·수령일만 남긴다 (개인 v2 주문서와 동일).
+        const isPickupGroup = lines.some((item) => item.orderKind === "pickup");
 
         // 줄 단위로 쪼갠 주문은 배송정보가 딱 한 벌이라 아래 값들이 곧 정확한 값이다.
         const shipCompany = (
@@ -5107,10 +5256,12 @@ function ProductOrderPanel({
           `중앙:${churchQuery.trim()}`,
           hasDeliveryItems ? `배달업체명:${shipCompany}` : null,
           hasParcelItems ? `택배업체명:${parcelCompany}` : null,
-          hasDeliveryItems
-            ? `배달일:${shipDeliveryDate} ${shipDeliveryAmPm} ${shipDeliveryTime}`
-            : null,
-          hasDeliveryItems
+          isPickupGroup
+            ? `배달일:${shipDeliveryDate}`
+            : hasDeliveryItems
+              ? `배달일:${shipDeliveryDate} ${shipDeliveryAmPm} ${shipDeliveryTime}`
+              : null,
+          hasDeliveryItems && !isPickupGroup
             ? `받는분:${shipRecipientName} / ${shipRecipientPhone} / ${
                 shipRecipientAddress || "-"
               }`
@@ -5123,11 +5274,13 @@ function ProductOrderPanel({
             ? `보내는분상세주소:${shipSenderAddressDetail}`
             : null,
           // 이메일/팩스는 선택 여부만 기록 (값 입력 없음)
-          `수취연락:${PARCEL_CONTACT_MODE_LABEL[contactMode]}`,
-          contactMode === "address" && contactAddress
+          isPickupGroup
+            ? null
+            : `수취연락:${PARCEL_CONTACT_MODE_LABEL[contactMode]}`,
+          !isPickupGroup && contactMode === "address" && contactAddress
             ? `받는분주소:${contactAddress}`
             : null,
-          contactMode === "address" && contactAddressDetail
+          !isPickupGroup && contactMode === "address" && contactAddressDetail
             ? `받는분상세주소:${contactAddressDetail}`
             : null,
           `주문작업지역:${selectedBranch}`,
@@ -5145,8 +5298,9 @@ function ProductOrderPanel({
           .join(" / ");
 
         const primaryKind = hasDeliveryItems ? "delivery" : "parcel";
-        const deliveryWindowTime =
-          hasDeliveryItems && shipDeliveryAmPm
+        const deliveryWindowTime = isPickupGroup
+          ? "10:00"
+          : hasDeliveryItems && shipDeliveryAmPm
             ? toTwentyFourHour(shipDeliveryAmPm, shipDeliveryTime)
             : null;
         if (hasDeliveryItems && !deliveryWindowTime) {
@@ -5502,7 +5656,7 @@ function ProductOrderPanel({
       {
         key: "lineShip",
         header: "배송선택",
-        className: "w-[270px] px-1",
+        className: "w-[330px] px-1",
         render: (row: ProductLineItem) => {
           return (
             <div className="flex items-center gap-1.5">
@@ -5654,9 +5808,9 @@ function ProductOrderPanel({
       ? (lineShipInfo[shipSheetLine.lineId] ??
         (presetShipDate
           ? {
-              ...emptyLineShipInfo(shipSheetLine.orderKind),
+              ...emptyLineShipInfo(toLineShipKind(shipSheetLine.orderKind)),
               deliveryDate:
-                shipSheetLine.orderKind === "delivery" ? presetShipDate : "",
+                shipSheetLine.orderKind !== "parcel" ? presetShipDate : "",
               parcelShipDate:
                 shipSheetLine.orderKind === "parcel" ? presetShipDate : "",
             }
@@ -5741,7 +5895,7 @@ function ProductOrderPanel({
 
   /**
    * 상품 카드의 수량 / 단가 / 배송선택 줄 (스크린샷 ③④).
-   * 배송선택 버튼(하차배송/택배)과 배송정보입력 버튼을 함께 보여준다.
+   * 배송선택 버튼(직접수령/배달/택배)과 배송정보입력 버튼을 함께 보여준다.
    */
   const renderLineControls = (row: ProductLineItem, rowIndex: number) => {
     // 포장완료·발송완료 전까지는 수량·배송선택을 고칠 수 있다.
@@ -6410,6 +6564,11 @@ function ProductOrderPanel({
           initial={shipSheetInitial}
           minDateIso={todayDateValue()}
           shipDateLocked={shipDateLocked}
+          pickupStoreName={
+            BRANCH_STORES.find((store) => store.id === branchStore)?.name ?? ""
+          }
+          ordererName={displayOrdererName || ordererName.trim()}
+          ordererPhone={ordererPhone.trim()}
           onCancel={() => setShipSheetLineId(null)}
           onSave={(info) => saveLineShipInfo(shipSheetLine.lineId, info)}
         />
@@ -6713,13 +6872,14 @@ function MemberCalendarOrderCard({
   isConfirming: boolean;
 }) {
   const editable = canEditOrderStatus(order.statusCode);
+  const isPickup = order.type === "직접수령";
   const isDelivery = order.type === "배달" || order.type.startsWith("배달");
 
   return (
     <article className="rounded-2xl border border-[#d8e0ea] bg-white px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-[20px] font-bold text-ink">
-          {isDelivery ? "🚚 하차배송" : "📦 택배배송"}
+          {isPickup ? "🏪 직접수령" : isDelivery ? "🚚 배달" : "📦 택배배송"}
         </p>
         <Button
           type="button"
