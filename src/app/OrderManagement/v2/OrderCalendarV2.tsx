@@ -44,6 +44,8 @@ export function OrderCalendarV2({
   onSwitchToClassic,
   onCreateOrder,
   onViewOrder,
+  onEditOrder,
+  onDeleteOrder,
 }: {
   orders: V2Order[];
   isLoading: boolean;
@@ -53,6 +55,8 @@ export function OrderCalendarV2({
   onSwitchToClassic: () => void;
   onCreateOrder: (iso: string) => void;
   onViewOrder: (orderNumber: string) => void;
+  onEditOrder: (order: V2Order) => void;
+  onDeleteOrder: (order: V2Order) => void;
 }) {
   const [month, setMonth] = useState(() => {
     const [year, mon] = filters.date.split("-").map(Number);
@@ -301,32 +305,67 @@ export function OrderCalendarV2({
           <div className="jy-empty jy-err">{error}</div>
         ) : list.length ? (
           list.map((order) => (
-            <button
+            // 카드 안에 수정·삭제 버튼이 있어 카드 자체는 button 대신 div(role=button)
+            <div
               key={order.id}
-              type="button"
-              className="jy-order"
+              role="button"
+              tabIndex={0}
+              className="jy-order jy-order-split"
               onClick={() => onViewOrder(order.orderNumber)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onViewOrder(order.orderNumber);
+                }
+              }}
             >
-              <div className="jy-top">
+              <div className="jy-order-main">
                 <strong>
                   {order.name} <span className="jy-meta">{order.orderNumber}</span>
                 </strong>
+                <div className="jy-meta">
+                  {[
+                    order.date || "-",
+                    order.branch,
+                    displayType(order.type),
+                    order.attachmentCount ? `📎 사진 ${order.attachmentCount}장` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+                <div className="jy-items">{order.summary}</div>
+              </div>
+              <div className="jy-order-side">
                 <span className="jy-badge" data-tone={statusTone(order.status)}>
                   {order.status}
                 </span>
+                {order.canEdit ? (
+                  <button
+                    type="button"
+                    className="jy-btn jy-mini"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEditOrder(order);
+                    }}
+                  >
+                    수정
+                  </button>
+                ) : null}
+                {order.canDelete ? (
+                  <button
+                    type="button"
+                    className="jy-btn jy-mini jy-danger"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDeleteOrder(order);
+                    }}
+                  >
+                    삭제
+                  </button>
+                ) : null}
               </div>
-              <div className="jy-meta">
-                {[
-                  order.date || "-",
-                  order.branch,
-                  displayType(order.type),
-                  order.attachmentCount ? `📎 사진 ${order.attachmentCount}장` : "",
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
-              <div className="jy-items">{order.summary}</div>
-            </button>
+            </div>
           ))
         ) : (
           <div className="jy-empty">
