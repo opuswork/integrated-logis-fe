@@ -32,6 +32,16 @@ const MIN_HEIGHT = 280;
 const EDGE_GAP = 16;
 const UI_STORAGE_KEY = "sanc-chat-ui";
 const DRAG_MIN_WIDTH = 640;
+/** 최소화 버튼 위치·안내 표시 여부 (펼친 창 위치와 따로 저장) */
+const LAUNCHER_STORAGE_KEY = "sanc-chat-launcher";
+const LAUNCHER_HINT_STORAGE_KEY = "sanc-chat-launcher-hint";
+const LAUNCHER_GAP = 12;
+/** 이만큼 움직여야 끌기로 본다. 덜 움직이면 탭(채팅 열기) */
+const LAUNCHER_DRAG_THRESHOLD = 6;
+const LAUNCHER_HINT_MS = 3000;
+
+/** 최소화 버튼은 가장자리(왼/오른쪽)에 붙고 세로 위치만 기억한다 */
+type LauncherSpot = { side: "left" | "right"; y: number };
 
 function maxHeightForViewport() {
   return Math.max(MIN_HEIGHT, window.innerHeight - EDGE_GAP * 2);
@@ -101,6 +111,55 @@ function storeUi(
   }
 }
 
+function clampLauncherY(y: number, buttonHeight: number) {
+  const maxY = Math.max(
+    LAUNCHER_GAP,
+    window.innerHeight - buttonHeight - LAUNCHER_GAP,
+  );
+  return Math.min(Math.max(y, LAUNCHER_GAP), maxY);
+}
+
+function readStoredLauncher(): LauncherSpot | null {
+  try {
+    const raw = window.localStorage.getItem(LAUNCHER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<LauncherSpot>;
+    if (
+      (parsed.side === "left" || parsed.side === "right") &&
+      typeof parsed.y === "number"
+    ) {
+      return { side: parsed.side, y: parsed.y };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function storeLauncher(spot: LauncherSpot) {
+  try {
+    window.localStorage.setItem(LAUNCHER_STORAGE_KEY, JSON.stringify(spot));
+  } catch {
+    // 저장 실패는 무시 (시크릿 모드 등)
+  }
+}
+
+function readLauncherHintSeen() {
+  try {
+    return window.localStorage.getItem(LAUNCHER_HINT_STORAGE_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function storeLauncherHintSeen() {
+  try {
+    window.localStorage.setItem(LAUNCHER_HINT_STORAGE_KEY, "1");
+  } catch {
+    // 저장 실패는 무시
+  }
+}
+
 function formatTime(iso: string) {
   const date = new Date(iso);
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -150,6 +209,28 @@ export function LiveChatWidget() {
     () => typeof window !== "undefined" && window.innerWidth >= DRAG_MIN_WIDTH,
   );
 
+  const [launcher, setLauncher] = useState<LauncherSpot | null>(() => {
+    if (typeof window === "undefined") return null;
+    const stored = readStoredLauncher();
+    return stored ? { ...stored, y: clampLauncherY(stored.y, 48) } : null;
+  });
+  /** 끄는 중인 버튼의 화면 좌표 (놓으면 가장자리로 붙고 null) */
+  const [launcherDragPos, setLauncherDragPos] = useState<Position | null>(null);
+  const [showLauncherHint, setShowLauncherHint] = useState(
+    () => typeof window !== "undefined" && !readLauncherHintSeen(),
+  );
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const launcherHeightRef = useRef(48);
+  const launcherDragRef = useRef<{
+    startX: number;
+    startY: number;
+    offsetX: number;
+    offsetY: number;
+    moved: boolean;
+  } | null>(null);
+  /** 끌기로 끝난 직후의 click 은 채팅을 열지 않는다 */
+  const suppressLauncherClickRef = useRef(false);
+
   const lastIdRef = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef<Position | null>(null);
@@ -178,6 +259,12 @@ export function LiveChatWidget() {
         setPosition((pos) => (pos ? clampPosition(pos, next) : pos));
         return next;
       });
+      // 화면 회전·크기 변경 시 최소화 버튼이 화면 밖으로 나가지 않게
+      setLauncher((spot) =>
+        spot
+          ? { ...spot, y: clampLauncherY(spot.y, launcherHeightRef.current) }
+          : spot,
+      );
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -267,6 +354,85 @@ export function LiveChatWidget() {
   const minimizePanel = () => {
     setIsOpen(false);
     persistUi(false);
+  };
+
+  // 모바일 첫 최소화 때 "끌어서 옮길 수 있어요" 안내를 잠깐 보여 주고 다시 안 띄운다.
+  const launcherHintVisible = showLauncherHint && !isOpen && !canDrag;
+  useEffect(() => {
+    if (!launcherHintVisible) return;
+    const timer = window.setTimeout(() => {
+      setShowLauncherHint(false);
+      storeLauncherHintSeen();
+    }, LAUNCHER_HINT_MS);
+    return () => window.clearTimeout(timer);
+  }, [launcherHintVisible]);
+
+  const handleLauncherPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    launcherHeightRef.current = rect.height;
+    launcherDragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      moved: false,
+    };
+    suppressLauncherClickRef.current = false;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleLauncherPointerMove = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const drag = launcherDragRef.current;
+    if (!drag) return;
+    if (
+      !drag.moved &&
+      Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <
+        LAUNCHER_DRAG_THRESHOLD
+    ) {
+      return;
+    }
+    drag.moved = true;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setLauncherDragPos({
+      x: Math.min(
+        Math.max(event.clientX - drag.offsetX, LAUNCHER_GAP),
+        window.innerWidth - rect.width - LAUNCHER_GAP,
+      ),
+      y: clampLauncherY(event.clientY - drag.offsetY, rect.height),
+    });
+  };
+
+  const handleLauncherPointerEnd = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const drag = launcherDragRef.current;
+    if (!drag) return;
+    launcherDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (!drag.moved) return;
+
+    // 놓은 자리에서 가까운 왼쪽/오른쪽 가장자리에 붙인다 (세로 위치는 유지).
+    suppressLauncherClickRef.current = true;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const spot: LauncherSpot = {
+      side: centerX < window.innerWidth / 2 ? "left" : "right",
+      y: clampLauncherY(rect.top, rect.height),
+    };
+    setLauncher(spot);
+    setLauncherDragPos(null);
+    storeLauncher(spot);
+    if (showLauncherHint) {
+      setShowLauncherHint(false);
+      storeLauncherHintSeen();
+    }
   };
 
   const handleDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -375,19 +541,65 @@ export function LiveChatWidget() {
   }
 
   if (!isOpen) {
+    // 640px 미만은 아이콘만 있는 원형 버튼으로 가리는 면적을 줄인다.
+    const compact = !canDrag;
+    const launcherStyle = launcherDragPos
+      ? { left: launcherDragPos.x, top: launcherDragPos.y }
+      : launcher
+        ? launcher.side === "left"
+          ? { left: LAUNCHER_GAP, top: launcher.y }
+          : { right: LAUNCHER_GAP, top: launcher.y }
+        : undefined;
+    const unreadBadge =
+      unread > 0 ? (
+        <span
+          className={cn(
+            "inline-flex min-w-5 items-center justify-center rounded-full bg-[#E53E3E] px-1.5 py-0.5 text-[11px] leading-none font-bold text-white",
+            compact ? "absolute -top-1 -right-1" : "ml-0.5",
+          )}
+        >
+          {unread > 99 ? "99+" : unread}
+        </span>
+      ) : null;
+
     return (
       <button
+        ref={launcherRef}
         type="button"
-        onClick={openPanel}
-        aria-label="관리자 채팅 열기"
+        onClick={() => {
+          if (suppressLauncherClickRef.current) {
+            suppressLauncherClickRef.current = false;
+            return;
+          }
+          openPanel();
+        }}
+        onPointerDown={handleLauncherPointerDown}
+        onPointerMove={handleLauncherPointerMove}
+        onPointerUp={handleLauncherPointerEnd}
+        onPointerCancel={handleLauncherPointerEnd}
+        aria-label="관리자 채팅 열기 (끌어서 옮길 수 있음)"
+        title="끌어서 옮길 수 있어요"
         data-live-chat
-        className="fixed right-5 bottom-5 z-[60] flex items-center gap-2 rounded-full border border-[#1A365D] bg-[#1A365D] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_28px_rgba(18,38,63,0.28)] hover:bg-[#22456f]"
+        style={launcherStyle}
+        className={cn(
+          "fixed z-[60] flex touch-none items-center justify-center gap-2 rounded-full border border-[#1A365D] bg-[#1A365D] font-bold text-white shadow-[0_12px_28px_rgba(18,38,63,0.28)] select-none hover:bg-[#22456f]",
+          compact ? "size-12" : "px-4 py-3 text-[13px]",
+          launcherStyle ? "" : "right-5 bottom-5",
+          launcherDragPos ? "cursor-grabbing" : "cursor-grab",
+        )}
       >
-        <MessageSquare className="size-4" />
-        관리자 채팅
-        {unread > 0 ? (
-          <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-[#E53E3E] px-1.5 py-0.5 text-[11px] leading-none font-bold text-white">
-            {unread > 99 ? "99+" : unread}
+        <MessageSquare className={compact ? "size-5" : "size-4"} />
+        {compact ? null : "관리자 채팅"}
+        {unreadBadge}
+        {launcherHintVisible ? (
+          <span
+            role="status"
+            className={cn(
+              "pointer-events-none absolute bottom-full mb-2 rounded-lg bg-[#1A202C] px-2.5 py-1.5 text-[12px] font-semibold whitespace-nowrap text-white shadow",
+              launcher?.side === "left" ? "left-0" : "right-0",
+            )}
+          >
+            끌어서 옮길 수 있어요
           </span>
         ) : null}
       </button>
