@@ -2,6 +2,8 @@ import { memberFacingStatusLabel } from "@/lib/order-delivery";
 import {
   parseBranchStoreFromNotes,
   parseDeliveryRequestDateFromNotes,
+  parseGreetingKindFromNotes,
+  parseLineShipmentsFromNotes,
   parseOrderTypeFromNotes,
   parseOrdererFromNotes,
 } from "@/lib/order-notes";
@@ -30,6 +32,10 @@ export type V2Order = {
   date: string;
   summary: string;
   attachmentCount: number;
+  /** 회원이 삭제(취소)할 수 있는지 */
+  canDelete: boolean;
+  /** 삭제 가능하고, 이 주문서 화면으로 내용을 되살릴 수 있는지 */
+  canEdit: boolean;
 };
 
 export type ApiMemberOrder = {
@@ -39,10 +45,38 @@ export type ApiMemberOrder = {
   createdAt: string;
   notes?: string | null;
   orderConfirmedAt?: string | null;
-  items?: Array<{ productName: string; quantity: number }>;
+  items?: Array<{ productName: string; quantity: number; price?: number }>;
   user?: { fullname?: string | null } | null;
   attachments?: Array<{ id: number }>;
+  packagingWorker?: "STORE" | "FACTORY" | null;
+  packDept?: "FACTORY_PACK" | "SOCK_PACK" | null;
+  finalConfirmDone?: boolean | null;
 };
+
+/**
+ * 회원이 주문을 수정·삭제할 수 있는지 (BE order-edit-guard 의 describeMemberOrderLock 과 같은 규칙).
+ * - 접수·접수완료 상태에서만
+ * - 작업자 매장: 배송관리 '발송완료' 전까지 / 작업자 공장: 포장관리 '포장 전' 동안
+ */
+export function canMemberChangeOrder(order: ApiMemberOrder) {
+  if (order.status !== "PLACED" && order.status !== "WAITING_FOR_SHIPMENT") {
+    return false;
+  }
+  if (order.packagingWorker === "STORE" && order.finalConfirmDone) return false;
+  if (order.packagingWorker === "FACTORY" && order.packDept) return false;
+  return true;
+}
+
+/**
+ * 이 화면(새 주문)으로 접수한 모양인지: 상품 한 줄 + 줄별 배송정보 한 줄 + 인사장 없음.
+ * 기본 버전 주문서로 만든 여러 줄·인사장 주문은 여기서 고치면 내용이 빠지므로 수정 버튼을 숨긴다.
+ */
+export function isV2EditableOrder(order: ApiMemberOrder) {
+  if ((order.items?.length ?? 0) !== 1) return false;
+  if (parseLineShipmentsFromNotes(order.notes)?.length !== 1) return false;
+  const greeting = parseGreetingKindFromNotes(order.notes);
+  return !greeting || greeting === "없음";
+}
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -106,6 +140,8 @@ export function mapMemberOrders(data: ApiMemberOrder[]): V2Order[] {
       date: parseDeliveryRequestDateFromNotes(order.notes),
       summary: buildSummary(order.items),
       attachmentCount: order.attachments?.length ?? 0,
+      canDelete: canMemberChangeOrder(order),
+      canEdit: canMemberChangeOrder(order) && isV2EditableOrder(order),
     }));
 }
 

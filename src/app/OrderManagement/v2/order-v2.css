@@ -333,6 +333,62 @@
   gap: 8px;
   align-items: center;
 }
+/* 주문 카드: 왼쪽 내용 + 오른쪽 상태 뱃지 · 수정/삭제 */
+.jy-v2 .jy-order.jy-order-split {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+.jy-v2 .jy-order-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.jy-v2 .jy-order-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.jy-v2 .jy-btn.jy-mini {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.jy-v2 .jy-btn.jy-danger {
+  color: var(--jy-err);
+}
+
+/* 확인 시트 (주문 삭제) */
+.jy-v2 .jy-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(0 0 0 / 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.jy-v2 .jy-confirm {
+  width: 100%;
+  max-width: 480px;
+  background: var(--jy-surface);
+  border-radius: 20px 20px 0 0;
+  padding: 22px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.jy-v2 .jy-confirm p {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
 .jy-v2 .jy-meta {
   color: var(--jy-muted);
   font-size: 13px;

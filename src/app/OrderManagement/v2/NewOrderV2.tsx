@@ -9,6 +9,12 @@ import { isSundayIso } from "@/lib/date-format";
 import {
   emptyLineShipInfo,
   encodeLineShipments,
+  parseBranchStoreFromNotes,
+  parseDeliveryRequestDateFromNotes,
+  parseLineShipmentsFromNotes,
+  parseOrderDateFromNotes,
+  parseOrdererFromNotes,
+  parseOrdererPhoneFromNotes,
   type LineShipInfo,
 } from "@/lib/order-notes";
 
@@ -17,7 +23,13 @@ import {
   ProductAddDialog,
   type ProductDialogItem,
 } from "../OrderListInput";
-import { V2Dock, V2Header, dateLabel, todayIso } from "./order-v2-shared";
+import {
+  V2Dock,
+  V2Header,
+  dateLabel,
+  todayIso,
+  type ApiMemberOrder,
+} from "./order-v2-shared";
 
 type ShipMethod = "delivery" | "pickup" | "parcel";
 type BranchStoreId = (typeof BRANCH_STORES)[number]["id"];
@@ -129,53 +141,141 @@ function AddressInput({
   );
 }
 
+/** 줄 note 에서 "비고: …" / "메모: …" 뒤의 값을 꺼낸다 (값 안에 ", " 가 있어도 끝까지) */
+function noteValueAfter(note: string, label: string) {
+  const index = note.indexOf(`${label}: `);
+  return index >= 0 ? note.slice(index + label.length + 2).trim() : "";
+}
+
+/**
+ * 수정 모드: 이 화면이 접수한 notes · 배송상세로 입력값을 되살린다 (buildOrderBody 의 반대).
+ * isV2EditableOrder 를 통과한 주문(상품 한 줄 + 배송상세 한 줄)만 들어온다.
+ */
+function restoreEditOrder(order: ApiMemberOrder) {
+  const line = parseLineShipmentsFromNotes(order.notes)?.[0];
+  const item = order.items?.[0];
+  const shipInfo = line?.ship ?? emptyLineShipInfo("delivery");
+  const ship: ShipMethod =
+    shipInfo.kind === "parcel"
+      ? "parcel"
+      : shipInfo.companyName === "직접수령"
+        ? "pickup"
+        : "delivery";
+  const note = line?.note ?? "";
+  const ordererPhone = formatPhone(parseOrdererPhoneFromNotes(order.notes));
+  const branchName = parseBranchStoreFromNotes(order.notes);
+  const branch = BRANCH_STORES.find((store) => store.name === branchName)?.id ?? "";
+  const deliveryRequest =
+    DELIVERY_REQUESTS.find((request) => note.startsWith(request)) ??
+    DELIVERY_REQUESTS[0];
+  return {
+    date:
+      (ship === "parcel" ? shipInfo.parcelShipDate : shipInfo.deliveryDate) ||
+      parseDeliveryRequestDateFromNotes(order.notes),
+    orderDate: parseOrderDateFromNotes(order.notes),
+    ordererName: parseOrdererFromNotes(order.notes),
+    ordererPhone,
+    branch: branch as BranchStoreId | "",
+    items: item
+      ? [
+          {
+            product: item.productName,
+            qty: item.quantity,
+            note: "",
+            unitPrice: line?.unitPrice ?? item.price ?? 0,
+            deliveryOnly: line?.deliveryOnly ?? false,
+            lineSection: line?.lineSection ?? "box",
+          } satisfies CartItem,
+        ]
+      : [],
+    ship,
+    address: ship === "delivery" ? shipInfo.recipientAddress : "",
+    addressDetail: ship === "delivery" ? shipInfo.recipientAddressDetail : "",
+    // 받는 분 연락처를 비워 접수했으면 주문자 연락처가 들어가 있다 → 다시 빈칸으로
+    deliveryPhone:
+      ship === "delivery" && formatPhone(shipInfo.recipientPhone) !== ordererPhone
+        ? formatPhone(shipInfo.recipientPhone)
+        : "",
+    deliveryRequest,
+    remark: ship === "delivery" ? noteValueAfter(note, "비고") : "",
+    memo: ship === "delivery" ? "" : noteValueAfter(note, "메모"),
+    senderName: ship === "parcel" ? shipInfo.senderName : "",
+    senderPhone: ship === "parcel" ? shipInfo.senderPhone : "",
+    senderAddress: ship === "parcel" ? shipInfo.senderAddress : "",
+    senderAddressDetail: ship === "parcel" ? shipInfo.senderAddressDetail : "",
+    receiverName: ship === "parcel" ? shipInfo.recipientName : "",
+    receiverPhone: ship === "parcel" ? shipInfo.recipientPhone : "",
+    receiverAddress: ship === "parcel" ? shipInfo.recipientAddress : "",
+    receiverAddressDetail: ship === "parcel" ? shipInfo.recipientAddressDetail : "",
+    existingPhotoCount: order.attachments?.length ?? 0,
+  };
+}
+
 export function NewOrderV2({
   initialDate,
+  editOrder,
   onBackToList,
   onSubmitted,
 }: {
   initialDate: string;
+  /** 있으면 수정 모드: 이 주문 내용을 채워 열고, 저장하면 이 주문을 고친다 */
+  editOrder?: ApiMemberOrder | null;
   onBackToList: () => void;
   /** 주문이 하나라도 접수되면 목록을 다시 불러오도록 알린다 */
   onSubmitted: (date: string) => void;
 }) {
+  const [restored] = useState(() =>
+    editOrder ? restoreEditOrder(editOrder) : null,
+  );
+  const isEdit = Boolean(editOrder && restored);
+  const existingPhotoCount = restored?.existingPhotoCount ?? 0;
+  const photoLimit = Math.max(0, MAX_PHOTOS - existingPhotoCount);
+
   const [view, setView] = useState<View>("form");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState("");
 
-  const [date, setDate] = useState(initialDate);
-  const [name, setName] = useState("");
-  const [proxyPhone, setProxyPhone] = useState("");
-  const [branch, setBranch] = useState<BranchStoreId | "">("");
-  const [items, setItems] = useState<CartItem[]>([]);
+  const [date, setDate] = useState(restored?.date || initialDate);
+  const [name, setName] = useState(restored?.ordererName ?? "");
+  const [proxyPhone, setProxyPhone] = useState(restored?.ordererPhone ?? "");
+  const [branch, setBranch] = useState<BranchStoreId | "">(restored?.branch ?? "");
+  const [items, setItems] = useState<CartItem[]>(restored?.items ?? []);
   /** 수량칸을 고치는 동안의 글자 (품명 → 입력값). 실제 수량과 같아지면 지운다 */
   const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   /** 상품 담기 창에 보일 구분 */
   const [productCategory, setProductCategory] =
     useState<ProductCategory>("일반품");
-  const [ship, setShip] = useState<ShipMethod | "">("");
+  const [ship, setShip] = useState<ShipMethod | "">(restored?.ship ?? "");
 
   // 배달
-  const [address, setAddress] = useState("");
-  const [addressDetail, setAddressDetail] = useState("");
-  const [deliveryPhone, setDeliveryPhone] = useState("");
-  const [deliveryRequest, setDeliveryRequest] = useState(DELIVERY_REQUESTS[0]);
-  const [remark, setRemark] = useState("");
+  const [address, setAddress] = useState(restored?.address ?? "");
+  const [addressDetail, setAddressDetail] = useState(restored?.addressDetail ?? "");
+  const [deliveryPhone, setDeliveryPhone] = useState(restored?.deliveryPhone ?? "");
+  const [deliveryRequest, setDeliveryRequest] = useState(
+    restored?.deliveryRequest ?? DELIVERY_REQUESTS[0],
+  );
+  const [remark, setRemark] = useState(restored?.remark ?? "");
   /** 직접수령·개별택배 메모 (배달은 주소 화면의 비고를 쓴다) */
-  const [memo, setMemo] = useState("");
-  const [addressSaved, setAddressSaved] = useState(false);
+  const [memo, setMemo] = useState(restored?.memo ?? "");
+  const [addressSaved, setAddressSaved] = useState(restored?.ship === "delivery");
   const [addressError, setAddressError] = useState("");
 
   // 개별택배
-  const [senderName, setSenderName] = useState("");
-  const [senderPhone, setSenderPhone] = useState("");
-  const [senderAddress, setSenderAddress] = useState("");
-  const [senderAddressDetail, setSenderAddressDetail] = useState("");
-  const [receiverName, setReceiverName] = useState("");
-  const [receiverPhone, setReceiverPhone] = useState("");
-  const [receiverAddress, setReceiverAddress] = useState("");
-  const [receiverAddressDetail, setReceiverAddressDetail] = useState("");
+  const [senderName, setSenderName] = useState(restored?.senderName ?? "");
+  const [senderPhone, setSenderPhone] = useState(restored?.senderPhone ?? "");
+  const [senderAddress, setSenderAddress] = useState(restored?.senderAddress ?? "");
+  const [senderAddressDetail, setSenderAddressDetail] = useState(
+    restored?.senderAddressDetail ?? "",
+  );
+  const [receiverName, setReceiverName] = useState(restored?.receiverName ?? "");
+  const [receiverPhone, setReceiverPhone] = useState(restored?.receiverPhone ?? "");
+  const [receiverAddress, setReceiverAddress] = useState(
+    restored?.receiverAddress ?? "",
+  );
+  const [receiverAddressDetail, setReceiverAddressDetail] = useState(
+    restored?.receiverAddressDetail ?? "",
+  );
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [photoError, setPhotoError] = useState("");
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -225,7 +325,18 @@ export function NewOrderV2({
           memberType: data.user.memberType ?? "",
         };
         setProfile(next);
-        setName((current) => current || next.name);
+        // 수정 모드: 본인 관장 주문은 "홍길동관" 으로 저장돼 있으니 이름만 되돌린다
+        setName((current) =>
+          current && current === `${next.name}관` ? next.name : current || next.name,
+        );
+        // 수정 모드에서 본인 주문이면 대신 주문 연락처 칸은 비워 둔다
+        if (
+          restored &&
+          (restored.ordererName === next.name ||
+            restored.ordererName === `${next.name}관`)
+        ) {
+          setProxyPhone("");
+        }
         setSenderName((current) => current || next.name);
         setSenderPhone((current) => current || next.phone);
       } catch {
@@ -238,7 +349,8 @@ export function NewOrderV2({
     return () => {
       cancelled = true;
     };
-  }, []);
+    // restored 는 처음 한 번 정해지고 바뀌지 않는다
+  }, [restored]);
 
   const isProxy = Boolean(profile) && name.trim() !== profile?.name;
   const ordererPhone = isProxy ? proxyPhone.trim() : (profile?.phone ?? "");
@@ -332,7 +444,8 @@ export function NewOrderV2({
       accepted.push({ file, url: URL.createObjectURL(file) });
     }
     setPhotos((current) => {
-      const room = MAX_PHOTOS - current.length;
+      // 수정 모드는 이미 붙은 사진도 개수에 넣는다
+      const room = photoLimit - current.length;
       if (accepted.length > room) {
         setPhotoError(`사진은 최대 ${MAX_PHOTOS}장까지 첨부할 수 있어요.`);
         accepted.slice(room).forEach((photo) => URL.revokeObjectURL(photo.url));
@@ -371,7 +484,7 @@ export function NewOrderV2({
         return "보내는 사람의 이름·연락처·주소를 입력해 주세요.";
       }
       if (
-        photos.length === 0 &&
+        photos.length + existingPhotoCount === 0 &&
         (!receiverName.trim() || !receiverPhone.trim() || !receiverAddress.trim())
       ) {
         return "받는 사람의 이름·연락처·주소를 입력하거나 대량 택배 명단 사진을 첨부해 주세요.";
@@ -438,7 +551,7 @@ export function NewOrderV2({
       ship === "delivery"
         ? [clean(deliveryRequest), remark.trim() ? `비고: ${clean(remark)}` : ""]
         : [
-            ship === "parcel" && photos.length > 0
+            ship === "parcel" && photos.length + existingPhotoCount > 0
               ? "대량 택배 명단 사진 첨부"
               : "",
             memoNote,
@@ -482,7 +595,8 @@ export function NewOrderV2({
     const notes = [
       `주문자:${clean(ordererDisplay)}`,
       `연락처:${clean(ordererPhone)}`,
-      `주문일자:${todayIso()}`,
+      // 수정해도 처음 주문한 날짜는 그대로 둔다
+      `주문일자:${restored?.orderDate || todayIso()}`,
       `중앙:${clean(profile?.churchName ?? "")}`,
       ...shipSegments,
       `주문작업지역:${branchName}`,
@@ -543,6 +657,42 @@ export function NewOrderV2({
     return response.ok;
   };
 
+  /** 수정 모드 저장: 같은 주문(id)의 내용만 바꾼다. 특이사항(extraNote)은 건드리지 않는다 */
+  const saveEdit = async (order: ApiMemberOrder, item: CartItem) => {
+    setIsSubmitting(true);
+    setFormError("");
+    const { totalAmount, notes, items: orderItems, shipment } = buildOrderBody(item);
+    try {
+      const response = await apiFetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ totalAmount, notes, items: orderItems, shipment }),
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          message?: string | string[];
+        } | null;
+        const raw = data?.message;
+        throw new Error(
+          (Array.isArray(raw) ? raw[0] : raw) || "주문을 수정하지 못했습니다.",
+        );
+      }
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "주문을 수정하지 못했습니다.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    let uploadFailed = false;
+    if (ship === "parcel" && photos.length > 0) {
+      uploadFailed = !(await uploadPhotos([order.id]).catch(() => false));
+    }
+    setResult({ orderNumbers: [order.orderNumber], orderIds: [order.id], uploadFailed });
+    setIsSubmitting(false);
+    onSubmitted(date);
+    setView("done");
+    window.scrollTo(0, 0);
+  };
+
   const handleSubmit = async () => {
     if (isSubmitting) return;
     const message = validate();
@@ -554,6 +704,11 @@ export function NewOrderV2({
     const auth = getAuthUser();
     if (!auth?.id) {
       setFormError("로그인이 필요합니다.");
+      return;
+    }
+
+    if (editOrder && items[0]) {
+      await saveEdit(editOrder, items[0]);
       return;
     }
 
@@ -764,7 +919,7 @@ export function NewOrderV2({
       <div className="jy-wrap">
         <V2Header title="주문 확인" onBack={() => setView("form")} />
         <section className="jy-card">
-          <h2>아래 내용으로 주문할까요?</h2>
+          <h2>{isEdit ? "아래 내용으로 수정할까요?" : "아래 내용으로 주문할까요?"}</h2>
           <dl className="jy-dl">
             <dt>날짜</dt>
             <dd>{dateLabel(date)}</dd>
@@ -812,10 +967,10 @@ export function NewOrderV2({
                     ? `${receiverName} / ${receiverPhone} / ${joinAddress(receiverAddress, receiverAddressDetail)}`
                     : "명단 사진 참고"}
                 </dd>
-                {photos.length ? (
+                {photos.length + existingPhotoCount ? (
                   <>
                     <dt>명단 사진</dt>
-                    <dd>{photos.length}장</dd>
+                    <dd>{photos.length + existingPhotoCount}장</dd>
                   </>
                 ) : null}
               </>
@@ -846,9 +1001,11 @@ export function NewOrderV2({
               ))}
             </tbody>
           </table>
-          <p className="jy-hint">
-            상품마다 주문서가 따로 만들어져요 (총 {items.length}건).
-          </p>
+          {isEdit ? null : (
+            <p className="jy-hint">
+              상품마다 주문서가 따로 만들어져요 (총 {items.length}건).
+            </p>
+          )}
         </section>
         {formError ? <div className="jy-err">{formError}</div> : null}
         <V2Dock>
@@ -869,7 +1026,13 @@ export function NewOrderV2({
               aria-busy={isSubmitting}
               onClick={() => void handleSubmit()}
             >
-              {isSubmitting ? "접수 중…" : "주문 완료"}
+              {isEdit
+                ? isSubmitting
+                  ? "저장 중…"
+                  : "수정 완료"
+                : isSubmitting
+                  ? "접수 중…"
+                  : "주문 완료"}
             </button>
           </div>
         </V2Dock>
@@ -881,7 +1044,7 @@ export function NewOrderV2({
     return (
       <div className="jy-wrap">
         <div className="jy-logo">✓</div>
-        <p className="jy-title-c">주문이 접수됐어요</p>
+        <p className="jy-title-c">{isEdit ? "주문이 수정됐어요" : "주문이 접수됐어요"}</p>
         <p className="jy-sub">
           주문번호 {result.orderNumbers.filter(Boolean).join(", ") || "-"}
         </p>
@@ -889,7 +1052,7 @@ export function NewOrderV2({
           <div className="jy-info">
             <b>!</b>
             <span>
-              주문은 접수됐지만 명단 사진을 올리지 못했어요.{" "}
+              주문은 {isEdit ? "수정됐" : "접수됐"}지만 명단 사진을 올리지 못했어요.{" "}
               <button
                 type="button"
                 className="jy-btn"
@@ -906,9 +1069,11 @@ export function NewOrderV2({
           <button type="button" className="jy-btn jy-primary jy-big" onClick={onBackToList}>
             주문 달력 보기
           </button>
-          <button type="button" className="jy-btn jy-big" onClick={resetForNewOrder}>
-            새 주문 등록
-          </button>
+          {isEdit ? null : (
+            <button type="button" className="jy-btn jy-big" onClick={resetForNewOrder}>
+              새 주문 등록
+            </button>
+          )}
         </div>
       </div>
     );
@@ -916,7 +1081,7 @@ export function NewOrderV2({
 
   return (
     <div className="jy-wrap">
-      <V2Header title="새 주문" onBack={onBackToList} />
+      <V2Header title={isEdit ? "주문 수정" : "새 주문"} onBack={onBackToList} />
 
       {profileError ? <div className="jy-err">{profileError}</div> : null}
 
@@ -987,31 +1152,40 @@ export function NewOrderV2({
       </section>
 
       <section className="jy-card">
-        <h2>상품 등록</h2>
-        <div>
-          <span className="jy-label">구분</span>
-          <div className="jy-chips jy-half">
-            {PRODUCT_CATEGORIES.map((category) => (
-              <button
-                key={category}
-                type="button"
-                className="jy-btn jy-chip"
-                aria-pressed={category === productCategory}
-                onClick={() => setProductCategory(category)}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button
-          type="button"
-          className="jy-btn jy-dark"
-          style={{ height: 50 }}
-          onClick={() => setProductDialogOpen(true)}
-        >
-          + 상품 담기
-        </button>
+        <h2>{isEdit ? "주문 상품" : "상품 등록"}</h2>
+        {/* 수정 모드: 주문 한 건 = 상품 한 줄이라 수량만 바꾼다 */}
+        {isEdit ? (
+          <p className="jy-hint">
+            수량만 바꿀 수 있어요. 다른 상품은 새 주문으로 등록해 주세요.
+          </p>
+        ) : (
+          <>
+            <div>
+              <span className="jy-label">구분</span>
+              <div className="jy-chips jy-half">
+                {PRODUCT_CATEGORIES.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    className="jy-btn jy-chip"
+                    aria-pressed={category === productCategory}
+                    onClick={() => setProductCategory(category)}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="jy-btn jy-dark"
+              style={{ height: 50 }}
+              onClick={() => setProductDialogOpen(true)}
+            >
+              + 상품 담기
+            </button>
+          </>
+        )}
         {items.length ? (
           items.map((item, index) => {
             const qtyInvalid = isQtyInvalid(item.product);
@@ -1057,18 +1231,20 @@ export function NewOrderV2({
                   >
                     +
                   </button>
-                  <button
-                    type="button"
-                    className="jy-btn jy-link"
-                    onClick={() => {
-                      clearQtyDraft(item.product);
-                      setItems((current) =>
-                        current.filter((row) => row.product !== item.product),
-                      );
-                    }}
-                  >
-                    삭제
-                  </button>
+                  {isEdit ? null : (
+                    <button
+                      type="button"
+                      className="jy-btn jy-link"
+                      onClick={() => {
+                        clearQtyDraft(item.product);
+                        setItems((current) =>
+                          current.filter((row) => row.product !== item.product),
+                        );
+                      }}
+                    >
+                      삭제
+                    </button>
+                  )}
                 </span>
               </div>
             );
@@ -1224,7 +1400,7 @@ export function NewOrderV2({
                     </button>
                   </div>
                 ))}
-                {photos.length < MAX_PHOTOS ? (
+                {photos.length < photoLimit ? (
                   <button
                     type="button"
                     className="jy-photo-add"
@@ -1249,6 +1425,11 @@ export function NewOrderV2({
                   event.target.value = "";
                 }}
               />
+              {existingPhotoCount ? (
+                <p className="jy-hint" style={{ marginTop: 6 }}>
+                  이미 첨부된 사진 {existingPhotoCount}장은 그대로 있어요. 새로 찍은 사진만 추가돼요.
+                </p>
+              ) : null}
               <p className="jy-hint" style={{ marginTop: 6 }}>
                 명단 종이를 찍어 올리면 받는 사람 입력을 생략할 수 있어요. 최대{" "}
                 {MAX_PHOTOS}장.
