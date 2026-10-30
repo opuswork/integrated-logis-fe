@@ -7,6 +7,12 @@ import { getAuthUser } from "@/lib/auth";
 import { openDaumPostcode } from "@/lib/daum-postcode";
 import { isSundayIso } from "@/lib/date-format";
 import {
+  ORDER_ATTACHMENT_ACCEPT,
+  orderAttachmentIcon,
+  orderAttachmentKindOfFile,
+  type OrderAttachmentKind,
+} from "@/lib/order-attachment";
+import {
   emptyLineShipInfo,
   encodeLineShipments,
   parseBranchStoreFromNotes,
@@ -79,7 +85,8 @@ type Profile = {
   memberType: string;
 };
 
-type Photo = { file: File; url: string };
+/** 명단 첨부 파일 (사진·PDF·엑셀). url 은 미리보기·key 용 object URL */
+type Photo = { file: File; url: string; kind: OrderAttachmentKind };
 
 /** notes 는 " / " 로 필드를 나누므로 입력값의 '/' 는 바꿔 둔다 */
 function clean(value: string) {
@@ -295,6 +302,7 @@ export function NewOrderV2({
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [photoError, setPhotoError] = useState("");
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef<Photo[]>([]);
 
   const [formError, setFormError] = useState("");
@@ -489,21 +497,22 @@ export function NewOrderV2({
     if (!files || files.length === 0) return;
     const accepted: Photo[] = [];
     for (const file of Array.from(files)) {
-      if (!file.type.startsWith("image/")) {
-        setPhotoError("사진(이미지) 파일만 첨부할 수 있어요.");
+      const kind = orderAttachmentKindOfFile(file);
+      if (!kind) {
+        setPhotoError("사진·PDF·엑셀 파일만 첨부할 수 있어요.");
         continue;
       }
       if (file.size > MAX_PHOTO_BYTES) {
-        setPhotoError("사진 한 장은 10MB 이하만 첨부할 수 있어요.");
+        setPhotoError("파일 하나는 10MB 이하만 첨부할 수 있어요.");
         continue;
       }
-      accepted.push({ file, url: URL.createObjectURL(file) });
+      accepted.push({ file, url: URL.createObjectURL(file), kind });
     }
     setPhotos((current) => {
-      // 수정 모드는 이미 붙은 사진도 개수에 넣는다
+      // 수정 모드는 이미 붙은 파일도 개수에 넣는다
       const room = photoLimit - current.length;
       if (accepted.length > room) {
-        setPhotoError(`사진은 최대 ${MAX_PHOTOS}장까지 첨부할 수 있어요.`);
+        setPhotoError(`파일은 최대 ${MAX_PHOTOS}개까지 첨부할 수 있어요.`);
         accepted.slice(room).forEach((photo) => URL.revokeObjectURL(photo.url));
       }
       return [...current, ...accepted.slice(0, Math.max(0, room))];
@@ -543,7 +552,7 @@ export function NewOrderV2({
         photos.length + existingPhotoCount === 0 &&
         (!receiverName.trim() || !receiverPhone.trim() || !receiverAddress.trim())
       ) {
-        return "받는 사람의 이름·연락처·주소를 입력하거나 대량 택배 명단 사진을 첨부해 주세요.";
+        return "받는 사람의 이름·연락처·주소를 입력하거나 대량 택배 명단 파일을 첨부해 주세요.";
       }
     }
     return "";
@@ -621,7 +630,7 @@ export function NewOrderV2({
         ? [clean(deliveryRequest), remark.trim() ? `비고: ${clean(remark)}` : ""]
         : [
             ship === "parcel" && photos.length + existingPhotoCount > 0
-              ? "대량 택배 명단 사진 첨부"
+              ? "대량 택배 명단 파일 첨부"
               : "",
             memoNote,
           ]
@@ -1105,12 +1114,12 @@ export function NewOrderV2({
                 <dd>
                   {receiverName.trim() || receiverAddress.trim()
                     ? `${receiverName} / ${receiverPhone} / ${joinAddress(receiverAddress, receiverAddressDetail)}`
-                    : "명단 사진 참고"}
+                    : "명단 파일 참고"}
                 </dd>
                 {photos.length + existingPhotoCount ? (
                   <>
-                    <dt>명단 사진</dt>
-                    <dd>{photos.length + existingPhotoCount}장</dd>
+                    <dt>명단 파일</dt>
+                    <dd>{photos.length + existingPhotoCount}개</dd>
                   </>
                 ) : null}
               </>
@@ -1204,7 +1213,7 @@ export function NewOrderV2({
           <div className="jy-info">
             <b>!</b>
             <span>
-              주문은 {isEdit ? "수정됐" : "접수됐"}지만 명단 사진을 올리지 못했어요.{" "}
+              주문은 {isEdit ? "수정됐" : "접수됐"}지만 명단 파일을 올리지 못했어요.{" "}
               <button
                 type="button"
                 className="jy-btn"
@@ -1212,7 +1221,7 @@ export function NewOrderV2({
                 disabled={isRetryingUpload}
                 onClick={() => void retryUpload()}
               >
-                {isRetryingUpload ? "올리는 중…" : "사진 다시 올리기"}
+                {isRetryingUpload ? "올리는 중…" : "파일 다시 올리기"}
               </button>
             </span>
           </div>
@@ -1525,7 +1534,7 @@ export function NewOrderV2({
             <h2 style={{ fontSize: 14 }}>
               받는 사람{" "}
               {photos.length ? (
-                <span className="jy-meta">(명단 사진이 있으면 선택)</span>
+                <span className="jy-meta">(명단 파일이 있으면 선택)</span>
               ) : null}
             </h2>
             <div className="jy-row">
@@ -1562,15 +1571,22 @@ export function NewOrderV2({
             />
 
             <div>
-              <span className="jy-label">대량 택배 명단 첨부 (사진촬영)</span>
+              <span className="jy-label">대량 택배 명단 첨부 (사진촬영·파일)</span>
               <div className="jy-photos">
                 {photos.map((photo) => (
                   <div key={photo.url} className="jy-photo">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photo.url} alt="첨부한 명단 사진" />
+                    {photo.kind === "image" ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={photo.url} alt="첨부한 명단 사진" />
+                    ) : (
+                      <div className="jy-photo-file" title={photo.file.name}>
+                        <span aria-hidden>{orderAttachmentIcon(photo.kind)}</span>
+                        <span className="jy-photo-file-name">{photo.file.name}</span>
+                      </div>
+                    )}
                     <button
                       type="button"
-                      aria-label="사진 삭제"
+                      aria-label={`${photo.file.name} 삭제`}
                       onClick={() => removePhoto(photo.url)}
                     >
                       ×
@@ -1578,16 +1594,28 @@ export function NewOrderV2({
                   </div>
                 ))}
                 {photos.length < photoLimit ? (
-                  <button
-                    type="button"
-                    className="jy-photo-add"
-                    onClick={() => photoInputRef.current?.click()}
-                  >
-                    <span style={{ fontSize: 22 }} aria-hidden>
-                      📷
-                    </span>
-                    사진 촬영
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="jy-photo-add"
+                      onClick={() => photoInputRef.current?.click()}
+                    >
+                      <span style={{ fontSize: 22 }} aria-hidden>
+                        📷
+                      </span>
+                      사진 촬영
+                    </button>
+                    <button
+                      type="button"
+                      className="jy-photo-add"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <span style={{ fontSize: 22 }} aria-hidden>
+                        📁
+                      </span>
+                      파일 업로드
+                    </button>
+                  </>
                 ) : null}
               </div>
               <input
@@ -1602,14 +1630,25 @@ export function NewOrderV2({
                   event.target.value = "";
                 }}
               />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ORDER_ATTACHMENT_ACCEPT}
+                multiple
+                hidden
+                onChange={(event) => {
+                  addPhotos(event.target.files);
+                  event.target.value = "";
+                }}
+              />
               {existingPhotoCount ? (
                 <p className="jy-hint" style={{ marginTop: 6 }}>
-                  이미 첨부된 사진 {existingPhotoCount}장은 그대로 있어요. 새로 찍은 사진만 추가돼요.
+                  이미 첨부된 파일 {existingPhotoCount}개는 그대로 있어요. 새로 올린 파일만 추가돼요.
                 </p>
               ) : null}
               <p className="jy-hint" style={{ marginTop: 6 }}>
-                명단 종이를 찍어 올리면 받는 사람 입력을 생략할 수 있어요. 최대{" "}
-                {MAX_PHOTOS}장.
+                명단 종이를 찍거나 명단 파일(사진·PDF·엑셀)을 올리면 받는 사람 입력을 생략할 수
+                있어요. 최대 {MAX_PHOTOS}개.
               </p>
               {photoError ? <div className="jy-err">{photoError}</div> : null}
             </div>
