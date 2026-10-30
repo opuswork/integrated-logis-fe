@@ -11,6 +11,10 @@ import { apiFetch } from "@/lib/api";
 import { getAuthUser, isSuperAdmin } from "@/lib/auth";
 import { toLocalIsoDate } from "@/lib/date-format";
 import {
+  orderAttachmentIcon,
+  orderAttachmentKindOfUrl,
+} from "@/lib/order-attachment";
+import {
   parseBranchStoreFromNotes,
   parseChurchFromNotes,
   parseDeliveryCompanyFromNotes,
@@ -92,7 +96,7 @@ type ApiOrder = {
     includeSelf?: boolean | null;
     businessCard?: string | null;
   }>;
-  /** 회원이 첨부한 사진 (대량 택배 명단 등) */
+  /** 회원이 첨부한 파일 — 사진·PDF·엑셀 (대량 택배 명단 등) */
   attachments?: Array<{
     id: number;
     imageUrl: string;
@@ -1291,26 +1295,43 @@ export function OrderPrintPreview({
       {selectedOrder?.attachments?.length ? (
         <section className="mt-3 rounded-lg border border-line bg-white p-3 print:hidden">
           <h4 className="mb-2 text-sm font-bold text-ink">
-            첨부 사진 (대량 택배 명단) · {selectedOrder.attachments.length}장
+            첨부 파일 (대량 택배 명단) · {selectedOrder.attachments.length}개
           </h4>
           <div className="flex flex-wrap gap-2">
-            {selectedOrder.attachments.map((attachment) => (
-              <a
-                key={attachment.id}
-                href={attachment.imageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block"
-                title={attachment.originalName ?? "첨부 사진"}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={attachment.imageUrl}
-                  alt={attachment.originalName ?? "첨부 사진"}
-                  className="h-24 w-24 rounded border border-line bg-[#f8fafc] object-cover"
-                />
-              </a>
-            ))}
+            {selectedOrder.attachments.map((attachment) => {
+              const kind = orderAttachmentKindOfUrl(attachment.imageUrl);
+              const name = attachment.originalName ?? "첨부 파일";
+              return (
+                <a
+                  key={attachment.id}
+                  href={attachment.imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  // 엑셀은 브라우저가 열 수 없으니 원래 이름으로 내려받는다
+                  download={kind === "sheet" ? name : undefined}
+                  className="block"
+                  title={name}
+                >
+                  {kind === "image" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={attachment.imageUrl}
+                      alt={name}
+                      className="h-24 w-24 rounded border border-line bg-[#f8fafc] object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded border border-line bg-[#f8fafc] p-1.5 text-center">
+                      <span className="text-2xl" aria-hidden>
+                        {orderAttachmentIcon(kind)}
+                      </span>
+                      <span className="line-clamp-2 break-all text-[11px] leading-tight text-ink">
+                        {name}
+                      </span>
+                    </span>
+                  )}
+                </a>
+              );
+            })}
           </div>
         </section>
       ) : null}
