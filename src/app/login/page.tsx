@@ -177,11 +177,12 @@ function LoginForm() {
             >
               <div>
                 <label htmlFor="username" className={LABEL_CLASS}>
-                  아이디 (휴대폰 가운데 4자리)
+                  아이디
                 </label>
                 <input
                   id="username"
                   type="text"
+                  placeholder="(휴대폰 가운데 4자리)"
                   className={INPUT_CLASS}
                   autoComplete="username"
                   value={username}
