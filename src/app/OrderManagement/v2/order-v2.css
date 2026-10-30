@@ -219,6 +219,16 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+/* 두 칸을 반반 꽉 채우는 선택 버튼 (상품 등록 구분) */
+.jy-v2 .jy-chips.jy-half {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.jy-v2 .jy-chips.jy-half .jy-chip {
+  height: 46px;
+  border-radius: 12px;
+  font-size: 15px;
+}
 .jy-v2 .jy-chips.jy-scroll {
   flex-wrap: nowrap;
   overflow-x: auto;

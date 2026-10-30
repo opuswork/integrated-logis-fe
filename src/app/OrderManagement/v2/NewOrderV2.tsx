@@ -36,6 +36,9 @@ const DELIVERY_REQUESTS = [
   "경비실에 맡겨주세요",
 ];
 
+type ProductCategory = "일반품" | "선물세트";
+const PRODUCT_CATEGORIES: ProductCategory[] = ["일반품", "선물세트"];
+
 /** 시안 순서: 중부 · 서부 · 남부 */
 const BRANCH_ORDER: BranchStoreId[] = ["jungbu", "seobu", "nambu"];
 
@@ -140,6 +143,9 @@ export function NewOrderV2({
   const [branch, setBranch] = useState<BranchStoreId | "">("");
   const [items, setItems] = useState<CartItem[]>([]);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  /** 상품 담기 창에 보일 구분 */
+  const [productCategory, setProductCategory] =
+    useState<ProductCategory>("일반품");
   const [ship, setShip] = useState<ShipMethod | "">("");
 
   // 배달
@@ -942,6 +948,22 @@ export function NewOrderV2({
 
       <section className="jy-card">
         <h2>상품 등록</h2>
+        <div>
+          <span className="jy-label">구분</span>
+          <div className="jy-chips jy-half">
+            {PRODUCT_CATEGORIES.map((category) => (
+              <button
+                key={category}
+                type="button"
+                className="jy-btn jy-chip"
+                aria-pressed={category === productCategory}
+                onClick={() => setProductCategory(category)}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+        </div>
         <button
           type="button"
           className="jy-btn jy-dark"
@@ -997,8 +1019,8 @@ export function NewOrderV2({
           ))
         ) : (
           <div className="jy-hint">
-            상품 담기를 누르고 공개된 상품 중에서 고른 뒤 수량을 넣어 주세요. 일반품과
-            선물세트를 함께 담을 수 있어요.
+            구분을 고르고 상품 담기를 누른 뒤 수량을 넣어 주세요. 일반품과 선물세트를
+            함께 담을 수 있어요.
           </div>
         )}
       </section>
@@ -1219,6 +1241,7 @@ export function NewOrderV2({
         openStockOnly
         presentation="sheet"
         unifiedCatalog
+        fixedCategory={productCategory}
       />
     </div>
   );
