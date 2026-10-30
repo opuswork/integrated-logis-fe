@@ -86,35 +86,39 @@ function AddressInput({
   placeholder: string;
 }) {
   const [searching, setSearching] = useState(false);
+  const searchAddress = async () => {
+    if (searching) return;
+    setSearching(true);
+    try {
+      await openDaumPostcode((address) => onChange(address));
+    } catch {
+      window.alert("주소 검색을 불러오지 못했습니다. 잠시 후 다시 눌러 주세요.");
+    } finally {
+      setSearching(false);
+    }
+  };
   return (
     <div>
       <label className="jy-label" htmlFor={id}>
         {label}
       </label>
       <div style={{ display: "flex", gap: 8 }}>
+        {/* 주소는 주소 검색으로만 넣는다. 칸을 눌러도 검색이 열린다 */}
         <input
           id={id}
           className="jy-input"
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          readOnly
+          onClick={() => void searchAddress()}
           placeholder={placeholder}
-          autoComplete="street-address"
+          style={{ cursor: "pointer" }}
         />
         <button
           type="button"
           className="jy-btn"
           style={{ height: 50, flex: "none" }}
           disabled={searching}
-          onClick={async () => {
-            setSearching(true);
-            try {
-              await openDaumPostcode((address) => onChange(address));
-            } catch {
-              window.alert("주소 검색을 불러오지 못했습니다. 직접 입력해 주세요.");
-            } finally {
-              setSearching(false);
-            }
-          }}
+          onClick={() => void searchAddress()}
         >
           주소 검색
         </button>
@@ -661,8 +665,11 @@ export function NewOrderV2({
             inputMode="tel"
             value={deliveryPhone}
             onChange={(event) => setDeliveryPhone(formatPhone(event.target.value))}
-            placeholder={ordererPhone || "010-0000-0000"}
+            placeholder="010-1234-5678"
           />
+          <p className="jy-hint" style={{ marginTop: 4 }}>
+            비워 두면 주문자 연락처로 접수돼요.
+          </p>
         </div>
         <div>
           <label className="jy-label" htmlFor="jy-areq">
