@@ -182,7 +182,7 @@ function LoginForm() {
                 <input
                   id="username"
                   type="text"
-                  placeholder="(휴대폰 가운데 4자리)"
+                  placeholder="휴대폰 가운데 4자리"
                   className={INPUT_CLASS}
                   autoComplete="username"
                   value={username}
