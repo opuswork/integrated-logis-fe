@@ -1571,7 +1571,9 @@ export function NewOrderV2({
             />
 
             <div>
-              <span className="jy-label">대량 택배 명단 첨부 (사진촬영·파일)</span>
+              <span className="jy-label">
+                택배관련 파일업로드(사진촬영 및 PDF,엑셀등 최대 {MAX_PHOTOS}개까지 업로드가능)
+              </span>
               <div className="jy-photos">
                 {photos.map((photo) => (
                   <div key={photo.url} className="jy-photo">
@@ -1646,10 +1648,6 @@ export function NewOrderV2({
                   이미 첨부된 파일 {existingPhotoCount}개는 그대로 있어요. 새로 올린 파일만 추가돼요.
                 </p>
               ) : null}
-              <p className="jy-hint" style={{ marginTop: 6 }}>
-                명단 종이를 찍거나 명단 파일(사진·PDF·엑셀)을 올리면 받는 사람 입력을 생략할 수
-                있어요. 최대 {MAX_PHOTOS}개.
-              </p>
               {photoError ? <div className="jy-err">{photoError}</div> : null}
             </div>
           </>
