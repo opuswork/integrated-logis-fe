@@ -41,6 +41,9 @@ export type V2Order = {
 export type ApiMemberOrder = {
   id: number;
   orderNumber: string;
+  /** 분할 형제가 같이 쓰는 키 (구 번호 주문은 없을 수 있음) */
+  orderGroupKey?: string | null;
+  splitIndex?: number | null;
   status: string;
   createdAt: string;
   notes?: string | null;
@@ -143,6 +146,11 @@ export function mapMemberOrders(data: ApiMemberOrder[]): V2Order[] {
       canDelete: canMemberChangeOrder(order),
       canEdit: canMemberChangeOrder(order) && isV2EditableOrder(order),
     }));
+}
+
+/** 59000 → "59,000원" */
+export function formatWon(value: number) {
+  return `${Math.round(value).toLocaleString("ko-KR")}원`;
 }
 
 export function BackIcon() {

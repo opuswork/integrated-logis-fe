@@ -27,6 +27,7 @@ import {
   V2Dock,
   V2Header,
   dateLabel,
+  formatWon,
   todayIso,
   type ApiMemberOrder,
 } from "./order-v2-shared";
@@ -183,6 +184,8 @@ function restoreEditOrder(order: ApiMemberOrder) {
             qty: item.quantity,
             note: "",
             unitPrice: line?.unitPrice ?? item.price ?? 0,
+            // notes 에는 소매가가 없어 화면을 열 때 상품 목록에서 채운다
+            retailPrice: null,
             deliveryOnly: line?.deliveryOnly ?? false,
             lineSection: line?.lineSection ?? "box",
           } satisfies CartItem,
@@ -214,12 +217,15 @@ function restoreEditOrder(order: ApiMemberOrder) {
 export function NewOrderV2({
   initialDate,
   editOrder,
+  editNextSplitIndex,
   onBackToList,
   onSubmitted,
 }: {
   initialDate: string;
   /** 있으면 수정 모드: 이 주문 내용을 채워 열고, 저장하면 이 주문을 고친다 */
   editOrder?: ApiMemberOrder | null;
+  /** 수정 모드에서 상품을 더 담았을 때 새 형제 주문이 쓸 첫 순번 */
+  editNextSplitIndex?: number;
   onBackToList: () => void;
   /** 주문이 하나라도 접수되면 목록을 다시 불러오도록 알린다 */
   onSubmitted: (date: string) => void;
@@ -352,6 +358,37 @@ export function NewOrderV2({
     // restored 는 처음 한 번 정해지고 바뀌지 않는다
   }, [restored]);
 
+  // 수정 모드: 저장된 단가는 도매가라, 표시할 소매가를 공개 상품 목록에서 찾아 채운다
+  useEffect(() => {
+    if (!restored) return;
+    let cancelled = false;
+    const loadRetail = async () => {
+      try {
+        const response = await apiFetch("/api/stock-inventory?openOnly=true");
+        const data = (await response.json()) as
+          | Array<{ productName: string; retailPrice?: number | null }>
+          | { message?: string };
+        if (cancelled || !response.ok || !Array.isArray(data)) return;
+        const retailByName = new Map(
+          data.map((row) => [row.productName, row.retailPrice ?? null]),
+        );
+        setItems((current) =>
+          current.map((row) =>
+            row.retailPrice == null && retailByName.get(row.product) != null
+              ? { ...row, retailPrice: retailByName.get(row.product) }
+              : row,
+          ),
+        );
+      } catch {
+        // 못 불러오면 저장된 단가로 보여준다
+      }
+    };
+    void loadRetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [restored]);
+
   const isProxy = Boolean(profile) && name.trim() !== profile?.name;
   const ordererPhone = isProxy ? proxyPhone.trim() : (profile?.phone ?? "");
   /** 본인 주문이면 관장 직분은 이름 뒤에 '관'을 붙인다 (기존 주문서와 동일) */
@@ -364,6 +401,12 @@ export function NewOrderV2({
   const branchInfo = BRANCH_STORES.find((store) => store.id === branch);
   const hasDeliveryOnly = items.some((item) => item.deliveryOnly);
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0);
+  /** 화면에는 소매가(없으면 도매가)로 보여준다. 주문 금액은 도매가(unitPrice)로 저장한다 */
+  const displayUnitPrice = (item: CartItem) => item.retailPrice ?? item.unitPrice ?? 0;
+  const totalDisplayAmount = items.reduce(
+    (sum, item) => sum + displayUnitPrice(item) * item.qty,
+    0,
+  );
 
   const addItems = (added: ProductDialogItem[]) => {
     added.forEach((item) => clearQtyDraft(item.product));
@@ -657,24 +700,30 @@ export function NewOrderV2({
     return response.ok;
   };
 
-  /** 수정 모드 저장: 같은 주문(id)의 내용만 바꾼다. 특이사항(extraNote)은 건드리지 않는다 */
-  const saveEdit = async (order: ApiMemberOrder, item: CartItem) => {
+  /**
+   * 수정 모드 저장. 특이사항(extraNote)은 건드리지 않는다.
+   * - 목록 첫 줄 → 이 주문(id)을 고친다 (상품을 바꿨으면 상품도 바뀐다, 번호 유지)
+   * - 나머지 줄 → 같은 그룹에 새 형제 주문으로 만든다 (순번은 editNextSplitIndex 부터)
+   */
+  const saveEdit = async (order: ApiMemberOrder, first: CartItem, extras: CartItem[]) => {
     setIsSubmitting(true);
     setFormError("");
-    const { totalAmount, notes, items: orderItems, shipment } = buildOrderBody(item);
+    const errorMessage = async (response: Response, fallback: string) => {
+      const data = (await response.json().catch(() => null)) as {
+        message?: string | string[];
+      } | null;
+      const raw = data?.message;
+      return (Array.isArray(raw) ? raw[0] : raw) || fallback;
+    };
+
+    const { totalAmount, notes, items: orderItems, shipment } = buildOrderBody(first);
     try {
       const response = await apiFetch(`/api/orders/${order.id}`, {
         method: "PATCH",
         body: JSON.stringify({ totalAmount, notes, items: orderItems, shipment }),
       });
       if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as {
-          message?: string | string[];
-        } | null;
-        const raw = data?.message;
-        throw new Error(
-          (Array.isArray(raw) ? raw[0] : raw) || "주문을 수정하지 못했습니다.",
-        );
+        throw new Error(await errorMessage(response, "주문을 수정하지 못했습니다."));
       }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "주문을 수정하지 못했습니다.");
@@ -682,11 +731,75 @@ export function NewOrderV2({
       return;
     }
 
+    const created: Array<{ id: number; orderNumber: string }> = [];
+    if (extras.length) {
+      try {
+        let groupKey = order.orderGroupKey?.trim() ?? "";
+        if (!groupKey) {
+          // 구 번호 주문: 그룹키가 없으니 더한 상품은 새 그룹으로 묶는다
+          const keyResponse = await apiFetch("/api/orders/new-group-key");
+          const issued = (await keyResponse.json().catch(() => null)) as {
+            orderGroupKey?: string;
+          } | null;
+          if (!keyResponse.ok || !issued?.orderGroupKey) {
+            throw new Error("주문번호를 발급하지 못했습니다. 다시 시도해 주세요.");
+          }
+          groupKey = issued.orderGroupKey;
+        }
+        const startIndex = order.orderGroupKey ? (editNextSplitIndex ?? 2) : 1;
+        const lastIndex = startIndex + extras.length - 1;
+        for (const [offset, item] of extras.entries()) {
+          const response = await apiFetch("/api/orders", {
+            method: "POST",
+            body: JSON.stringify({
+              orderGroupKey: groupKey,
+              splitIndex: startIndex + offset,
+              // 2 이상이면 번호에 -순번 이 붙는다
+              splitCount: Math.max(2, lastIndex),
+              userId: getAuthUser()?.id,
+              status: "PLACED",
+              ...buildOrderBody(item),
+            }),
+          });
+          const data = (await response.clone().json().catch(() => null)) as {
+            id?: number;
+            orderNumber?: string;
+          } | null;
+          if (!response.ok || !data?.id) {
+            throw new Error(await errorMessage(response, "추가한 상품을 접수하지 못했습니다."));
+          }
+          created.push({ id: data.id, orderNumber: data.orderNumber ?? "" });
+        }
+      } catch (err) {
+        await Promise.all(
+          created.map((row) =>
+            apiFetch(`/api/orders/${row.id}/delivery-action`, {
+              method: "PATCH",
+              body: JSON.stringify({ action: "CANCEL_ORDER" }),
+            }).catch(() => null),
+          ),
+        );
+        setFormError(
+          `주문 ${order.orderNumber} 은 수정됐지만 ` +
+            (err instanceof Error ? err.message : "추가한 상품을 접수하지 못했습니다.") +
+            (created.length ? ` 먼저 접수된 ${created.length}건은 취소했습니다.` : ""),
+        );
+        setIsSubmitting(false);
+        onSubmitted(date);
+        return;
+      }
+    }
+
+    const orderIds = [order.id, ...created.map((row) => row.id)];
     let uploadFailed = false;
     if (ship === "parcel" && photos.length > 0) {
-      uploadFailed = !(await uploadPhotos([order.id]).catch(() => false));
+      uploadFailed = !(await uploadPhotos(orderIds).catch(() => false));
     }
-    setResult({ orderNumbers: [order.orderNumber], orderIds: [order.id], uploadFailed });
+    setResult({
+      orderNumbers: [order.orderNumber, ...created.map((row) => row.orderNumber)],
+      orderIds,
+      uploadFailed,
+    });
     setIsSubmitting(false);
     onSubmitted(date);
     setView("done");
@@ -708,7 +821,7 @@ export function NewOrderV2({
     }
 
     if (editOrder && items[0]) {
-      await saveEdit(editOrder, items[0]);
+      await saveEdit(editOrder, items[0], items.slice(1));
       return;
     }
 
@@ -990,6 +1103,7 @@ export function NewOrderV2({
               <tr>
                 <th>상품</th>
                 <th>수량</th>
+                <th>금액</th>
               </tr>
             </thead>
             <tbody>
@@ -997,10 +1111,21 @@ export function NewOrderV2({
                 <tr key={item.product}>
                   <td>{item.product}</td>
                   <td className="jy-num">{item.qty}</td>
+                  <td className="jy-num">{formatWon(displayUnitPrice(item) * item.qty)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <div className="jy-total">
+            <span>총금액</span>
+            <strong className="jy-num">{formatWon(totalDisplayAmount)}</strong>
+          </div>
+          {isEdit && items.length > 1 ? (
+            <p className="jy-hint">
+              첫 상품은 이 주문({editOrder?.orderNumber})에 저장되고, 더한 상품{" "}
+              {items.length - 1}건은 새 주문번호로 접수돼요.
+            </p>
+          ) : null}
           {isEdit ? null : (
             <p className="jy-hint">
               상품마다 주문서가 따로 만들어져요 (총 {items.length}건).
@@ -1153,11 +1278,16 @@ export function NewOrderV2({
 
       <section className="jy-card">
         <h2>{isEdit ? "주문 상품" : "상품 등록"}</h2>
-        {/* 수정 모드: 주문 한 건 = 상품 한 줄이라 수량만 바꾼다 */}
+        {/* 수정 모드: 첫 줄은 이 주문, 더 담은 상품은 같은 그룹의 새 주문이 된다 */}
         {isEdit ? (
-          <p className="jy-hint">
-            수량만 바꿀 수 있어요. 다른 상품은 새 주문으로 등록해 주세요.
-          </p>
+          <button
+            type="button"
+            className="jy-btn jy-dark"
+            style={{ height: 50 }}
+            onClick={() => setProductDialogOpen(true)}
+          >
+            상품 변경 및 추가
+          </button>
         ) : (
           <>
             <div>
@@ -1198,7 +1328,12 @@ export function NewOrderV2({
                     <div id={qtyErrorId} className="jy-err" role="alert">
                       {QTY_ERROR}
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="jy-meta jy-num">
+                      {formatWon(displayUnitPrice(item))} × {item.qty} ={" "}
+                      {formatWon(displayUnitPrice(item) * item.qty)}
+                    </div>
+                  )}
                 </div>
                 <span className="jy-qty">
                   <button
@@ -1231,7 +1366,8 @@ export function NewOrderV2({
                   >
                     +
                   </button>
-                  {isEdit ? null : (
+                  {/* 수정 모드는 상품이 0개가 되지 않게 2줄 이상일 때만 */}
+                  {isEdit && items.length < 2 ? null : (
                     <button
                       type="button"
                       className="jy-btn jy-link"
@@ -1255,6 +1391,12 @@ export function NewOrderV2({
             함께 담을 수 있어요.
           </div>
         )}
+        {items.length ? (
+          <div className="jy-total">
+            <span>총금액</span>
+            <strong className="jy-num">{formatWon(totalDisplayAmount)}</strong>
+          </div>
+        ) : null}
       </section>
 
       <section className="jy-card">
@@ -1478,7 +1620,7 @@ export function NewOrderV2({
         openStockOnly
         presentation="sheet"
         unifiedCatalog
-        fixedCategory={productCategory}
+        fixedCategory={isEdit ? undefined : productCategory}
       />
     </div>
   );

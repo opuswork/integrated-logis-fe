@@ -411,8 +411,22 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.jy-v2 .jy-item-name .jy-err {
+.jy-v2 .jy-item-name .jy-err,
+.jy-v2 .jy-item-name .jy-meta {
   margin-top: 4px;
+}
+/* 상품 목록 아래 총금액 */
+.jy-v2 .jy-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-top: 12px;
+  border-top: 1px solid var(--jy-line2);
+  font-weight: 700;
+}
+.jy-v2 .jy-total strong {
+  color: var(--jy-accent);
+  font-size: 18px;
 }
 .jy-v2 .jy-qty {
   display: inline-flex;
