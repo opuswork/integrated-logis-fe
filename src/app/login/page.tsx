@@ -182,7 +182,6 @@ function LoginForm() {
                 <input
                   id="username"
                   type="text"
-                  placeholder="예: 010-4463-1440 → 4463"
                   className={INPUT_CLASS}
                   autoComplete="username"
                   value={username}
@@ -197,7 +196,7 @@ function LoginForm() {
                 <input
                   id="password"
                   type="password"
-                  placeholder="휴대폰 가운데+뒷자리 8자리 (예: 44631440)"
+                  placeholder="휴대폰 가운데+뒷자리 8자리"
                   className={INPUT_CLASS}
                   autoComplete="current-password"
                   value={password}
