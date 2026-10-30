@@ -269,6 +269,11 @@ const LINE_SHIP_OPTIONS = [
 /** 직접수령은 notes·배송상세에 배달 형식으로 싣고 업체명 자리에 이 값을 넣는다 (개인 v2 주문서와 동일) */
 const PICKUP_COMPANY_NAME = "직접수령";
 
+/** notes 는 " / " 로 나뉘므로 줄 메모의 '/' 는 '·' 로 바꾼다 (개인 v2 주문서 clean 과 동일) */
+function cleanLineNote(note: string) {
+  return note.replace(/\//g, "·").replace(/\s+/g, " ").trim();
+}
+
 /** 줄 배송방식 → 배송상세(LineShipInfo) kind. 직접수령은 배달 형식으로 저장한다 */
 function toLineShipKind(kind: OrderType): LineShipInfo["kind"] {
   return kind === "parcel" ? "parcel" : "delivery";
@@ -3225,8 +3230,8 @@ function GreetingViewModal({
 
 /**
  * 줄별 배송정보 입력 시트 (스크린샷 ⑤⑥).
- * 배송선택이 택배면 "택배정보입력", 상차/배달이면 "배달정보입력",
- * 직접수령이면 "직접수령정보입력"으로 열린다.
+ * 배송선택이 택배면 "택배정보입력", 상차/배달이면 "배달정보입력"으로 열린다.
+ * 직접수령은 이 시트 없이 줄 아래 메모 칸만 쓴다.
  * 하단 고정 버튼으로만 저장되며, 저장 전 값은 해당 줄에 반영되지 않는다.
  */
 function LineShipSheet({
@@ -3237,43 +3242,24 @@ function LineShipSheet({
   initial,
   minDateIso,
   shipDateLocked,
-  pickupStoreName,
-  ordererName,
-  ordererPhone,
   onCancel,
   onSave,
 }: {
   open: boolean;
-  kind: OrderType;
+  kind: LineShipInfo["kind"];
   productName: string;
   qty: number;
   initial: LineShipInfo | null;
   minDateIso: string;
   /** 달력에서 고른 납품일이 있으면 날짜 칸을 잠근다 */
   shipDateLocked: boolean;
-  /** 직접수령: 수령 장소(선택한 지부매장) */
-  pickupStoreName: string;
-  /** 직접수령: 수령인 기본값 */
-  ordererName: string;
-  ordererPhone: string;
   onCancel: () => void;
   onSave: (info: LineShipInfo) => void;
 }) {
-  const isPickup = kind === "pickup";
   // 호출부가 lineId로 key를 주므로 줄이 바뀌면 이 컴포넌트가 새로 마운트된다.
-  const [draft, setDraft] = useState<LineShipInfo>(() => {
-    const base = initial
-      ? { ...initial, kind: toLineShipKind(kind) }
-      : emptyLineShipInfo(toLineShipKind(kind));
-    return isPickup
-      ? {
-          ...base,
-          companyName: PICKUP_COMPANY_NAME,
-          recipientName: base.recipientName || ordererName,
-          recipientPhone: base.recipientPhone || ordererPhone,
-        }
-      : base;
-  });
+  const [draft, setDraft] = useState<LineShipInfo>(() =>
+    initial ? { ...initial, kind } : emptyLineShipInfo(kind),
+  );
   const [error, setError] = useState("");
 
   const isDelivery = kind === "delivery";
@@ -3303,21 +3289,6 @@ function LineShipSheet({
   };
 
   const validate = () => {
-    if (isPickup) {
-      if (!pickupStoreName) {
-        return "수령 장소가 될 매장(남부/중부/서부)을 먼저 선택해 주세요.";
-      }
-      if (!draft.deliveryDate) {
-        return "수령일을 선택해 주세요.";
-      }
-      if (!isDateOnOrAfterToday(draft.deliveryDate)) {
-        return "수령일은 오늘 이후 날짜만 선택할 수 있습니다.";
-      }
-      if (!draft.recipientName.trim() || !draft.recipientPhone.trim()) {
-        return "수령인 성함과 전화번호를 입력해 주세요.";
-      }
-      return "";
-    }
     if (!draft.companyName.trim()) {
       return "납품업체명을 입력해 주세요.";
     }
@@ -3364,38 +3335,13 @@ function LineShipSheet({
       setError(message);
       return;
     }
-    if (isPickup) {
-      // 직접수령: 배달 형식으로 싣고 수령 장소(지부매장)를 받는 사람 주소 자리에 둔다
-      onSave({
-        ...draft,
-        kind: "delivery",
-        companyName: PICKUP_COMPANY_NAME,
-        deliveryAmPm: "",
-        deliveryTime: "",
-        recipientAddress: pickupStoreName,
-        recipientAddressDetail: "",
-        contactMode: "address",
-      });
-      return;
-    }
     // 배달은 항상 주소로 수취 (이메일/팩스 선택 없음)
     onSave({
       ...draft,
-      kind: toLineShipKind(kind),
+      kind,
       contactMode: isDelivery ? "address" : draft.contactMode,
     });
   };
-
-  const sheetTitle = isPickup
-    ? "직접수령정보입력"
-    : isDelivery
-      ? "배달정보입력"
-      : "택배정보입력";
-  const saveLabel = isPickup
-    ? "직접수령정보저장"
-    : isDelivery
-      ? "배달정보저장"
-      : "택배정보저장";
 
   const labelClass = "mb-[5px] block text-[12px] font-bold text-[#64748B]";
   const inputClass =
@@ -3406,7 +3352,7 @@ function LineShipSheet({
   return (
     <BottomSheet
       open={open}
-      title={sheetTitle}
+      title={isDelivery ? "배달정보입력" : "택배정보입력"}
       subtitle={
         <>
           {productName} <span className="font-semibold text-ink">{qty}개</span>{" "}
@@ -3429,55 +3375,13 @@ function LineShipSheet({
             onClick={handleSave}
             className="flex-1 rounded-[10px] bg-[#1A365D] py-3 text-[14.5px] font-bold text-white"
           >
-            {saveLabel}
+            {isDelivery ? "배달정보저장" : "택배정보저장"}
           </button>
         </div>
       }
     >
       <div className="px-5 pb-4">
-        {isPickup ? (
-          <>
-            <label className={labelClass}>수령일 *</label>
-            <MdCalendarPicker
-              valueIso={draft.deliveryDate || null}
-              minIso={minDateIso}
-              placeholder="m/d"
-              title="수령일"
-              disableSundays
-              disabled={shipDateLocked}
-              className={datePickerClass}
-              onChangeIso={(iso) => {
-                if (iso < minDateIso || isSundayIso(iso)) return;
-                patch({ deliveryDate: iso });
-              }}
-            />
-            <label className={labelClass}>수령 장소</label>
-            <input
-              type="text"
-              value={pickupStoreName || "지부매장을 먼저 선택해 주세요"}
-              disabled
-              className={inputClass}
-            />
-            <label className={labelClass}>수령인 성함 *</label>
-            <input
-              type="text"
-              value={draft.recipientName}
-              onChange={(event) => patch({ recipientName: event.target.value })}
-              className={inputClass}
-            />
-            <label className={labelClass}>수령인 전화번호 *</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={13}
-              value={draft.recipientPhone}
-              onChange={(event) =>
-                patch({ recipientPhone: formatPhoneInput(event.target.value) })
-              }
-              className={inputClass}
-            />
-          </>
-        ) : isDelivery ? (
+        {isDelivery ? (
           <>
             <label className={labelClass}>배달일 *</label>
             <MdCalendarPicker
@@ -4496,6 +4400,39 @@ function ProductOrderPanel({
     }
   }, [churchQuery, churchId, churches]);
 
+  /**
+   * 직접수령 줄의 배송상세. 입력 시트 없이 접수할 때마다 지금의 주문자·지부매장으로 만든다.
+   * 수령일 등은 줄 메모(note)에 적고, 달력에서 고른 납품일이 있을 때만 수령일로 싣는다.
+   */
+  const buildPickupShipInfo = (): LineShipInfo => ({
+    ...emptyLineShipInfo("delivery"),
+    companyName: PICKUP_COMPANY_NAME,
+    deliveryDate: presetShipDate ?? "",
+    recipientName: displayOrdererName || ordererName.trim(),
+    recipientPhone: ordererPhone.trim(),
+    recipientAddress:
+      BRANCH_STORES.find((store) => store.id === branchStore)?.name ?? "",
+  });
+
+  /** 직접수령메모 칸 펼침. 값이 없으면 메모가 있는 줄만 펼친 상태로 본다 */
+  const [pickupMemoOpen, setPickupMemoOpen] = useState<Record<string, boolean>>(
+    {},
+  );
+  const isPickupMemoOpen = (row: ProductLineItem) =>
+    pickupMemoOpen[row.lineId] ?? Boolean(row.note);
+  const togglePickupMemo = (row: ProductLineItem) => {
+    setPickupMemoOpen((current) => ({
+      ...current,
+      [row.lineId]: !isPickupMemoOpen(row),
+    }));
+  };
+
+  const updateProductNote = (lineId: string, note: string) => {
+    setProductItems((current) =>
+      current.map((row) => (row.lineId === lineId ? { ...row, note } : row)),
+    );
+  };
+
   const addProductItems = (
     items: ProductDialogItem[],
     presetKind: OrderType | "" = "",
@@ -4889,8 +4826,11 @@ function ProductOrderPanel({
         }
       }
     }
+    // 직접수령은 배송정보를 접수 때 만들어 싣는다 (입력할 것 없음).
     const noShip = productItems.find(
-      (item) => !item.shipSaved || !lineShipInfo[item.lineId],
+      (item) =>
+        item.orderKind !== "pickup" &&
+        (!item.shipSaved || !lineShipInfo[item.lineId]),
     );
     if (noShip) {
       return `'${noShip.product}'의 배송정보를 입력해 주세요.`;
@@ -5158,14 +5098,26 @@ function ProductOrderPanel({
       /** 줄 묶음 하나 → notes + payload 한 벌 */
       const buildOrderBody = (lines: ProductLineItem[]) => {
         const lineShipments: LineShipment[] = lines.flatMap((item) => {
-          const ship = lineShipInfo[item.lineId];
+          // 직접수령: 지금 값으로 새로 만든다. 수정 모드는 이미 저장된 수령일(관리자가
+          // 나중에 넣은 납품요청일 포함)을 지키도록 notes 에서 읽은 값을 이어 쓴다.
+          const ship =
+            item.orderKind === "pickup"
+              ? {
+                  ...buildPickupShipInfo(),
+                  deliveryDate:
+                    presetShipDate ||
+                    (isEditMode ? deliveryDate : "") ||
+                    lineShipInfo[item.lineId]?.deliveryDate ||
+                    "",
+                }
+              : lineShipInfo[item.lineId];
           return ship
             ? [
                 {
                   product: item.product,
                   qty: item.qty,
                   baseQty: item.baseQty,
-                  note: item.note,
+                  note: cleanLineNote(item.note),
                   unitPrice: item.unitPrice || 0,
                   lineSection: item.lineSection,
                   deliveryOnly: item.deliveryOnly,
@@ -5256,8 +5208,11 @@ function ProductOrderPanel({
           `중앙:${churchQuery.trim()}`,
           hasDeliveryItems ? `배달업체명:${shipCompany}` : null,
           hasParcelItems ? `택배업체명:${parcelCompany}` : null,
+          // 직접수령 수령일은 없을 수 있다 (메모에 적음). 관리자가 납품요청일로 나중에 넣는다.
           isPickupGroup
-            ? `배달일:${shipDeliveryDate}`
+            ? shipDeliveryDate
+              ? `배달일:${shipDeliveryDate}`
+              : null
             : hasDeliveryItems
               ? `배달일:${shipDeliveryDate} ${shipDeliveryAmPm} ${shipDeliveryTime}`
               : null,
@@ -5289,7 +5244,7 @@ function ProductOrderPanel({
           attachedGreetingNotes,
           ...lines.map(
             (item) =>
-              `[${orderKindLabel(item.orderKind || selectedOrderType)}] ${item.product} ${item.qty}개${item.note ? `(${item.note})` : ""}`,
+              `[${orderKindLabel(item.orderKind || selectedOrderType)}] ${item.product} ${item.qty}개${cleanLineNote(item.note) ? `(${cleanLineNote(item.note)})` : ""}`,
           ),
           // 줄별 배송정보 원본 (주문서 수정 시 그대로 복원)
           encodeLineShipments(lineShipments),
@@ -5333,7 +5288,8 @@ function ProductOrderPanel({
                   : shipSenderAddress,
               estimatedWindow:
                 primaryKind === "delivery"
-                  ? `${shipDeliveryDate}T${deliveryWindowTime}:00.000Z`
+                  ? // 수령일 없는 직접수령은 주문일자로 채운다 (필수 칸)
+                    `${shipDeliveryDate || orderDate || todayDateValue()}T${deliveryWindowTime}:00.000Z`
                   : `${shipParcelDate}T09:00:00.000Z`,
             },
           },
@@ -5593,6 +5549,30 @@ function ProductOrderPanel({
     }
   };
 
+  /** 직접수령메모 버튼을 누르면 배송선택 바로 아래 펼쳐지는 메모 칸 (값은 줄 요청사항) */
+  const renderPickupMemoInput = (row: ProductLineItem, locked: boolean) => {
+    if (row.orderKind !== "pickup" || !isPickupMemoOpen(row)) {
+      return null;
+    }
+    return (
+      <input
+        type="text"
+        autoFocus={!row.note}
+        maxLength={100}
+        readOnly={locked}
+        aria-label={`${row.product} 직접수령메모`}
+        value={row.note}
+        onChange={(event) => updateProductNote(row.lineId, event.target.value)}
+        onClick={(event) => event.stopPropagation()}
+        placeholder="예: 매장입구 자판기 앞에 놓아주세요. (수령일 등도 여기에)"
+        className={cn(
+          "mt-1.5 h-9 w-full rounded-md border border-[#E2E8F0] px-2.5 text-[12.5px] text-[#1A202C] placeholder:text-[#A0AEC0] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
+          locked ? "bg-[#EDF2F7]" : "bg-white",
+        )}
+      />
+    );
+  };
+
   const buildProductColumns = (
     includeGreeting: boolean,
   ): TableColumn<ProductLineItem>[] => {
@@ -5658,31 +5638,45 @@ function ProductOrderPanel({
         header: "배송선택",
         className: "w-[330px] px-1",
         render: (row: ProductLineItem) => {
+          const isPickup = row.orderKind === "pickup";
+          const done = isPickup ? Boolean(row.note.trim()) : row.shipSaved;
           return (
-            <div className="flex items-center gap-1.5">
-              <ShipKindButtons
-                size="table"
-                labelPrefix={row.product}
-                value={row.orderKind}
-                disabled={row.statusLocked}
-                parcelDisabled={row.deliveryOnly}
-                onChange={(kind) => handleLineKindChange(row.lineId, kind)}
-              />
-              <button
-                type="button"
-                disabled={!row.orderKind}
-                onClick={() => setShipSheetLineId(row.lineId)}
-                className={cn(
-                  "shrink-0 rounded border px-1.5 py-1 text-[11px] font-bold",
-                  !row.orderKind
-                    ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
+            <div>
+              <div className="flex items-center gap-1.5">
+                <ShipKindButtons
+                  size="table"
+                  labelPrefix={row.product}
+                  value={row.orderKind}
+                  disabled={row.statusLocked}
+                  parcelDisabled={row.deliveryOnly}
+                  onChange={(kind) => handleLineKindChange(row.lineId, kind)}
+                />
+                <button
+                  type="button"
+                  disabled={!row.orderKind}
+                  aria-expanded={isPickup ? isPickupMemoOpen(row) : undefined}
+                  onClick={() =>
+                    isPickup
+                      ? togglePickupMemo(row)
+                      : setShipSheetLineId(row.lineId)
+                  }
+                  className={cn(
+                    "shrink-0 rounded border px-1.5 py-1 text-[11px] font-bold",
+                    !row.orderKind
+                      ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
+                      : done
+                        ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
+                        : "border-[#1A365D] bg-white text-[#1A365D]",
+                  )}
+                >
+                  {isPickup
+                    ? "직접수령메모"
                     : row.shipSaved
-                      ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
-                      : "border-[#1A365D] bg-white text-[#1A365D]",
-                )}
-              >
-                {row.shipSaved ? "배송정보수정" : "배송정보입력"}
-              </button>
+                      ? "배송정보수정"
+                      : "배송정보입력"}
+                </button>
+              </div>
+              {renderPickupMemoInput(row, row.statusLocked)}
             </div>
           );
         },
@@ -5810,7 +5804,7 @@ function ProductOrderPanel({
           ? {
               ...emptyLineShipInfo(toLineShipKind(shipSheetLine.orderKind)),
               deliveryDate:
-                shipSheetLine.orderKind !== "parcel" ? presetShipDate : "",
+                shipSheetLine.orderKind === "delivery" ? presetShipDate : "",
               parcelShipDate:
                 shipSheetLine.orderKind === "parcel" ? presetShipDate : "",
             }
@@ -5900,6 +5894,7 @@ function ProductOrderPanel({
   const renderLineControls = (row: ProductLineItem, rowIndex: number) => {
     // 포장완료·발송완료 전까지는 수량·배송선택을 고칠 수 있다.
     const locked = row.statusLocked;
+    const isPickup = row.orderKind === "pickup";
 
     return (
       <div
@@ -5967,17 +5962,28 @@ function ProductOrderPanel({
             <button
               type="button"
               disabled={!row.orderKind}
-              onClick={() => setShipSheetLineId(row.lineId)}
+              aria-expanded={isPickup ? isPickupMemoOpen(row) : undefined}
+              onClick={() =>
+                isPickup
+                  ? togglePickupMemo(row)
+                  : setShipSheetLineId(row.lineId)
+              }
               className={cn(
                 "shrink-0 rounded-md border px-2 py-1 text-[11px] font-bold leading-tight",
                 !row.orderKind
                   ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
-                  : row.shipSaved
+                  : (isPickup ? row.note.trim() : row.shipSaved)
                     ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
                     : "border-[#1A365D] bg-white text-[#1A365D]",
               )}
             >
-              {row.shipSaved ? (
+              {isPickup ? (
+                <>
+                  직접수령
+                  <br />
+                  메모
+                </>
+              ) : row.shipSaved ? (
                 <>
                   배송정보
                   <br />
@@ -5992,6 +5998,7 @@ function ProductOrderPanel({
               )}
             </button>
           </div>
+          {renderPickupMemoInput(row, locked)}
         </div>
       </div>
     );
@@ -6554,7 +6561,9 @@ function ProductOrderPanel({
       />
 
       {/* 줄별 배송정보 입력 (스크린샷 ⑤⑥) */}
-      {shipSheetLine && shipSheetLine.orderKind ? (
+      {shipSheetLine &&
+      shipSheetLine.orderKind &&
+      shipSheetLine.orderKind !== "pickup" ? (
         <LineShipSheet
           key={shipSheetLine.lineId}
           open
@@ -6564,11 +6573,6 @@ function ProductOrderPanel({
           initial={shipSheetInitial}
           minDateIso={todayDateValue()}
           shipDateLocked={shipDateLocked}
-          pickupStoreName={
-            BRANCH_STORES.find((store) => store.id === branchStore)?.name ?? ""
-          }
-          ordererName={displayOrdererName || ordererName.trim()}
-          ordererPhone={ordererPhone.trim()}
           onCancel={() => setShipSheetLineId(null)}
           onSave={(info) => saveLineShipInfo(shipSheetLine.lineId, info)}
         />
