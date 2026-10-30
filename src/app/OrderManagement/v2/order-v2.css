@@ -350,9 +350,13 @@
   background: var(--jy-soft);
   border-radius: 12px;
 }
-.jy-v2 .jy-item-line > span {
+.jy-v2 .jy-item-line > span,
+.jy-v2 .jy-item-line > .jy-item-name {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.jy-v2 .jy-item-name .jy-err {
+  margin-top: 4px;
 }
 .jy-v2 .jy-qty {
   display: inline-flex;
@@ -376,6 +380,9 @@
   text-align: center;
   font: inherit;
   font-weight: 700;
+}
+.jy-v2 .jy-qty input[aria-invalid="true"] {
+  border-color: var(--jy-err);
 }
 .jy-v2 .jy-empty {
   color: var(--jy-muted);

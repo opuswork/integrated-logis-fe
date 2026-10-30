@@ -42,6 +42,8 @@ const PRODUCT_CATEGORIES: ProductCategory[] = ["일반품", "선물세트"];
 /** 시안 순서: 중부 · 서부 · 남부 */
 const BRANCH_ORDER: BranchStoreId[] = ["jungbu", "seobu", "nambu"];
 
+const QTY_ERROR = "수량은 1이상이어야 합니다.";
+
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
@@ -146,6 +148,8 @@ export function NewOrderV2({
   const [proxyPhone, setProxyPhone] = useState("");
   const [branch, setBranch] = useState<BranchStoreId | "">("");
   const [items, setItems] = useState<CartItem[]>([]);
+  /** 수량칸을 고치는 동안의 글자 (품명 → 입력값). 실제 수량과 같아지면 지운다 */
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   /** 상품 담기 창에 보일 구분 */
   const [productCategory, setProductCategory] =
@@ -250,6 +254,7 @@ export function NewOrderV2({
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0);
 
   const addItems = (added: ProductDialogItem[]) => {
+    added.forEach((item) => clearQtyDraft(item.product));
     setItems((current) => {
       const next = [...current];
       for (const item of added) {
@@ -267,12 +272,39 @@ export function NewOrderV2({
     });
   };
 
+  const clearQtyDraft = (product: string) => {
+    setQtyDrafts((current) => {
+      if (!(product in current)) return current;
+      const next = { ...current };
+      delete next[product];
+      return next;
+    });
+  };
+
   const setItemQty = (product: string, qty: number) => {
+    clearQtyDraft(product);
     setItems((current) =>
       current.map((row) =>
         row.product === product ? { ...row, qty: Math.max(1, qty) } : row,
       ),
     );
+  };
+
+  /** 지우는 중 빈칸·0 도 칸에는 보이게 두고, 1 이상일 때만 실제 수량에 넣는다 */
+  const typeItemQty = (product: string, raw: string) => {
+    const digits = raw.replace(/\D/g, "");
+    setQtyDrafts((current) => ({ ...current, [product]: digits }));
+    const qty = Number(digits);
+    if (qty >= 1) {
+      setItems((current) =>
+        current.map((row) => (row.product === product ? { ...row, qty } : row)),
+      );
+    }
+  };
+
+  const isQtyInvalid = (product: string) => {
+    const draft = qtyDrafts[product];
+    return draft !== undefined && !(Number(draft) >= 1);
   };
 
   const chooseShip = (next: ShipMethod) => {
@@ -328,6 +360,7 @@ export function NewOrderV2({
     }
     if (!branch) return "작업매장(중부·서부·남부)을 선택해 주세요.";
     if (items.length === 0) return "상품을 1개 이상 담아 주세요.";
+    if (items.some((item) => isQtyInvalid(item.product))) return QTY_ERROR;
     if (!ship) return "배송 방법을 선택해 주세요.";
     if (ship === "delivery" && !addressSaved) return "배달 주소를 입력해 주세요.";
     if (ship === "parcel") {
@@ -980,50 +1013,66 @@ export function NewOrderV2({
           + 상품 담기
         </button>
         {items.length ? (
-          items.map((item) => (
-            <div key={item.product} className="jy-item-line">
-              <span>{item.product}</span>
-              <span className="jy-qty">
-                <button
-                  type="button"
-                  className="jy-btn"
-                  aria-label={`${item.product} 수량 줄이기`}
-                  onClick={() => setItemQty(item.product, item.qty - 1)}
-                >
-                  −
-                </button>
-                <input
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  aria-label={`${item.product} 수량`}
-                  value={item.qty}
-                  onChange={(event) =>
-                    setItemQty(item.product, Number(event.target.value) || 1)
-                  }
-                />
-                <button
-                  type="button"
-                  className="jy-btn"
-                  aria-label={`${item.product} 수량 늘리기`}
-                  onClick={() => setItemQty(item.product, item.qty + 1)}
-                >
-                  +
-                </button>
-                <button
-                  type="button"
-                  className="jy-btn jy-link"
-                  onClick={() =>
-                    setItems((current) =>
-                      current.filter((row) => row.product !== item.product),
-                    )
-                  }
-                >
-                  삭제
-                </button>
-              </span>
-            </div>
-          ))
+          items.map((item, index) => {
+            const qtyInvalid = isQtyInvalid(item.product);
+            const qtyErrorId = `jy-qty-err-${index}`;
+            return (
+              <div key={item.product} className="jy-item-line">
+                <div className="jy-item-name">
+                  <span>{item.product}</span>
+                  {qtyInvalid ? (
+                    <div id={qtyErrorId} className="jy-err" role="alert">
+                      {QTY_ERROR}
+                    </div>
+                  ) : null}
+                </div>
+                <span className="jy-qty">
+                  <button
+                    type="button"
+                    className="jy-btn"
+                    aria-label={`${item.product} 수량 줄이기`}
+                    onClick={() => setItemQty(item.product, item.qty - 1)}
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    aria-label={`${item.product} 수량`}
+                    value={qtyDrafts[item.product] ?? String(item.qty)}
+                    aria-invalid={qtyInvalid || undefined}
+                    aria-describedby={qtyInvalid ? qtyErrorId : undefined}
+                    onChange={(event) => typeItemQty(item.product, event.target.value)}
+                    onBlur={() => {
+                      // 올바른 값이면 입력 중 글자를 지우고, 빈칸·0 이면 에러와 함께 그대로 둔다
+                      if (!isQtyInvalid(item.product)) clearQtyDraft(item.product);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="jy-btn"
+                    aria-label={`${item.product} 수량 늘리기`}
+                    onClick={() => setItemQty(item.product, item.qty + 1)}
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    className="jy-btn jy-link"
+                    onClick={() => {
+                      clearQtyDraft(item.product);
+                      setItems((current) =>
+                        current.filter((row) => row.product !== item.product),
+                      );
+                    }}
+                  >
+                    삭제
+                  </button>
+                </span>
+              </div>
+            );
+          })
         ) : (
           <div className="jy-hint">
             구분을 고르고 상품 담기를 누른 뒤 수량을 넣어 주세요. 일반품과 선물세트를
