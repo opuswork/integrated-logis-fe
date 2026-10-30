@@ -56,6 +56,16 @@ const PRODUCT_CATEGORIES: ProductCategory[] = ["일반품", "선물세트"];
 const BRANCH_ORDER: BranchStoreId[] = ["jungbu", "seobu", "nambu"];
 
 const QTY_ERROR = "수량은 1이상이어야 합니다.";
+const BRANCH_ERROR = "작업매장(중부·서부·남부)을 선택해 주세요.";
+/** 주문 정보 칸의 오류: 화면 맨 아래가 아니라 주문 정보 섹션 바로 아래에 보여준다 */
+const ORDER_INFO_ERRORS = new Set([
+  "날짜를 선택해 주세요.",
+  "지난 날짜에는 주문할 수 없어요.",
+  "일요일에는 주문할 수 없어요.",
+  "주문자 성명을 입력해 주세요.",
+  "대신 주문하는 분의 연락처를 입력해 주세요.",
+  BRANCH_ERROR,
+]);
 
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
@@ -288,6 +298,9 @@ export function NewOrderV2({
   const photosRef = useRef<Photo[]>([]);
 
   const [formError, setFormError] = useState("");
+  const infoErrorRef = useRef<HTMLDivElement>(null);
+  const bottomErrorRef = useRef<HTMLDivElement>(null);
+  const isInfoError = ORDER_INFO_ERRORS.has(formError);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{
     orderNumbers: string[];
@@ -514,7 +527,7 @@ export function NewOrderV2({
     if (isProxy && proxyPhone.replace(/\D/g, "").length < 10) {
       return "대신 주문하는 분의 연락처를 입력해 주세요.";
     }
-    if (!branch) return "작업매장(중부·서부·남부)을 선택해 주세요.";
+    if (!branch) return BRANCH_ERROR;
     if (items.length === 0) return "상품을 1개 이상 담아 주세요.";
     if (items.some((item) => isQtyInvalid(item.product))) return QTY_ERROR;
     if (!ship) return "배송 방법을 선택해 주세요.";
@@ -536,10 +549,23 @@ export function NewOrderV2({
     return "";
   };
 
+  /** 오류 문구가 보이도록 그 자리로 스크롤한다 (아래쪽에 있으면 안 보여서 버튼이 안 눌리는 것처럼 보인다) */
+  const revealFormError = (message: string) => {
+    window.requestAnimationFrame(() => {
+      const target = ORDER_INFO_ERRORS.has(message)
+        ? infoErrorRef.current
+        : bottomErrorRef.current;
+      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  };
+
   const goConfirm = () => {
     const message = validate();
     setFormError(message);
-    if (message) return;
+    if (message) {
+      revealFormError(message);
+      return;
+    }
     setView("confirm");
     window.scrollTo(0, 0);
   };
@@ -812,6 +838,7 @@ export function NewOrderV2({
     if (message) {
       setFormError(message);
       setView("form");
+      revealFormError(message);
       return;
     }
     const auth = getAuthUser();
@@ -1267,13 +1294,21 @@ export function NewOrderV2({
                 type="button"
                 className="jy-btn jy-chip"
                 aria-pressed={store.id === branch}
-                onClick={() => setBranch(store.id)}
+                onClick={() => {
+                  setBranch(store.id);
+                  if (formError === BRANCH_ERROR) setFormError("");
+                }}
               >
                 {store.name.slice(0, 2)}
               </button>
             ))}
           </div>
         </div>
+        {isInfoError ? (
+          <div ref={infoErrorRef} className="jy-err" role="alert">
+            {formError}
+          </div>
+        ) : null}
       </section>
 
       <section className="jy-card">
@@ -1597,7 +1632,12 @@ export function NewOrderV2({
         ) : null}
       </section>
 
-      {formError ? <div className="jy-err">{formError}</div> : null}
+      {/* 주문 정보 칸의 오류는 그 섹션 아래에 보인다 */}
+      {formError && !isInfoError ? (
+        <div ref={bottomErrorRef} className="jy-err" role="alert">
+          {formError}
+        </div>
+      ) : null}
 
       <V2Dock>
         <div className="jy-cartbar">
