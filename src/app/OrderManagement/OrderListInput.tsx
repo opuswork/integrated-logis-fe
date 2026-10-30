@@ -4447,59 +4447,64 @@ function ProductOrderPanel({
       return;
     }
 
-    setProductItems((current) => {
-      const next = [...current];
+    // 업데이터 대신 지금 목록으로 만든다: 담긴 줄 id 를 알아야 배송정보 시트를 바로 열 수 있다.
+    const next = [...productItems];
+    const touchedIds: string[] = [];
+    for (const item of allowedItems) {
+      const selectedOrderType = kindFor(item);
+      // 배송정보가 저장된 줄이나 배송방식이 다른 줄에는 합치지 않는다 (분할 정보 보호).
+      const existingIndex = next.findIndex(
+        (row) =>
+          row.product === item.product &&
+          !row.shipSaved &&
+          row.orderKind === selectedOrderType,
+      );
 
-      for (const item of allowedItems) {
-        const selectedOrderType = kindFor(item);
-        // 배송정보가 저장된 줄이나 배송방식이 다른 줄에는 합치지 않는다 (분할 정보 보호).
-        const existingIndex = next.findIndex(
-          (row) =>
-            row.product === item.product &&
-            !row.shipSaved &&
-            row.orderKind === selectedOrderType,
-        );
-
-        if (existingIndex >= 0) {
-          const existing = next[existingIndex];
-          const mergedQty = existing.qty + item.qty;
-          next[existingIndex] = {
-            ...existing,
-            qty: mergedQty,
-            baseQty: mergedQty,
-            unitPrice: item.unitPrice,
-            orderKind: selectedOrderType,
-            deliveryOnly: existing.deliveryOnly || item.deliveryOnly,
-            lineSection: item.lineSection,
-          };
-        } else {
-          const lineId = nextLineId();
-          next.push({
-            lineId,
-            splitGroupId: lineId,
-            product: item.product,
-            qty: item.qty,
-            baseQty: item.qty,
-            shipSaved: false,
-            note: item.note,
-            unitPrice: item.unitPrice,
-            orderKind: selectedOrderType,
-            greeting: savedGreetingsByProduct[item.product]?.id
-              ? "인사장보기"
-              : "",
-            deliveryOnly: item.deliveryOnly,
-            lineSection: item.lineSection,
-            // 새로 담은 줄은 아직 주문이 없다. 접수 후 주문번호가 정해진다.
-            sourceOrderId: 0,
-            sourceOrderNumber: "",
-            statusLocked: false,
-            lockReason: "",
-          });
-        }
+      if (existingIndex >= 0) {
+        const existing = next[existingIndex];
+        const mergedQty = existing.qty + item.qty;
+        next[existingIndex] = {
+          ...existing,
+          qty: mergedQty,
+          baseQty: mergedQty,
+          unitPrice: item.unitPrice,
+          orderKind: selectedOrderType,
+          deliveryOnly: existing.deliveryOnly || item.deliveryOnly,
+          lineSection: item.lineSection,
+        };
+        touchedIds.push(existing.lineId);
+      } else {
+        const lineId = nextLineId();
+        touchedIds.push(lineId);
+        next.push({
+          lineId,
+          splitGroupId: lineId,
+          product: item.product,
+          qty: item.qty,
+          baseQty: item.qty,
+          shipSaved: false,
+          note: item.note,
+          unitPrice: item.unitPrice,
+          orderKind: selectedOrderType,
+          greeting: savedGreetingsByProduct[item.product]?.id
+            ? "인사장보기"
+            : "",
+          deliveryOnly: item.deliveryOnly,
+          lineSection: item.lineSection,
+          // 새로 담은 줄은 아직 주문이 없다. 접수 후 주문번호가 정해진다.
+          sourceOrderId: 0,
+          sourceOrderNumber: "",
+          statusLocked: false,
+          lockReason: "",
+        });
       }
+    }
 
-      return next;
-    });
+    setProductItems(next);
+    // 배달/택배로 담았으면 배송정보 시트를 바로 열고, 저장할 때마다 다음 줄로 이어 연다.
+    startShipSheetQueue(
+      next.filter((row) => touchedIds.includes(row.lineId)),
+    );
   };
 
   /**
@@ -4507,8 +4512,23 @@ function ProductOrderPanel({
    * 수량을 baseQty보다 줄여 놓은 상태에서 방식을 고르면, 남은 수량이
    * 반대 방식(택배↔상차)으로 자동 복사되어 바로 아래 줄로 들어간다.
    * 직접수령은 반대 방식이 없어 남은 줄을 배송방식 미선택으로 만든다.
+   * 배달/택배로 바꾸면 그 줄의 배송정보 시트를 바로 연다.
    */
   const handleLineKindChange = (lineId: string, kind: OrderType | "") => {
+    const target = productItems.find((row) => row.lineId === lineId);
+    applyLineKindChange(lineId, kind);
+    if (
+      target &&
+      target.orderKind !== kind &&
+      (kind === "delivery" || kind === "parcel") &&
+      !target.statusLocked
+    ) {
+      setShipSheetQueue([]);
+      setShipSheetLineId(lineId);
+    }
+  };
+
+  const applyLineKindChange = (lineId: string, kind: OrderType | "") => {
     const index = productItems.findIndex((row) => row.lineId === lineId);
     if (index < 0) {
       return;
@@ -4728,6 +4748,27 @@ function ProductOrderPanel({
     }
   };
 
+  /** 저장하면 이어서 열 배송정보 시트 줄 (방금 담은 줄들). 취소하면 비운다 */
+  const [shipSheetQueue, setShipSheetQueue] = useState<string[]>([]);
+
+  const needsShipSheet = (row: ProductLineItem) =>
+    (row.orderKind === "delivery" || row.orderKind === "parcel") &&
+    !row.shipSaved &&
+    !row.statusLocked;
+
+  /** 배송정보가 필요한 첫 줄의 시트를 바로 열고 나머지는 저장할 때마다 이어 연다 */
+  const startShipSheetQueue = (rows: ProductLineItem[]) => {
+    const ids = rows.filter(needsShipSheet).map((row) => row.lineId);
+    if (ids.length === 0) return;
+    setShipSheetQueue(ids.slice(1));
+    setShipSheetLineId(ids[0]);
+  };
+
+  const closeShipSheet = () => {
+    setShipSheetQueue([]);
+    setShipSheetLineId(null);
+  };
+
   /** 배송정보입력 시트 저장 */
   const saveLineShipInfo = (lineId: string, info: LineShipInfo) => {
     setLineShipInfo((current) => ({ ...current, [lineId]: info }));
@@ -4736,7 +4777,15 @@ function ProductOrderPanel({
         row.lineId === lineId ? { ...row, shipSaved: true } : row,
       ),
     );
-    setShipSheetLineId(null);
+    // 이어 열 줄: 그새 지워졌거나 방식이 바뀌었거나 이미 저장된 줄은 건너뛴다.
+    const nextIndex = shipSheetQueue.findIndex((candidate) => {
+      const row = productItems.find((item) => item.lineId === candidate);
+      return candidate !== lineId && row !== undefined && needsShipSheet(row);
+    });
+    setShipSheetQueue(
+      nextIndex >= 0 ? shipSheetQueue.slice(nextIndex + 1) : [],
+    );
+    setShipSheetLineId(nextIndex >= 0 ? shipSheetQueue[nextIndex] : null);
   };
 
   const openGreetingForm = (targetProduct: string) => {
@@ -6402,17 +6451,18 @@ function ProductOrderPanel({
                     </div>
                     {renderLineControls(row, rowIndex)}
                     <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#E2E8F0] pt-2.5">
-                      <span className="text-[11px] font-bold text-[#64748B]">
+                      <span className="text-[12px] font-bold text-[#64748B]">
                         인사장
                       </span>
                       <div className="flex items-center gap-1">
+                        {/* 현장 피드백: 작아서 안 보인다 → PC 인사장주문 버튼과 같은 색, 36px 높이 */}
                         <button
                           type="button"
                           className={cn(
-                            "inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+                            "inline-flex h-9 items-center rounded-lg border px-4 text-[13px] font-bold",
                             isSaved
-                              ? "bg-[#DCF0DC] text-[#2F855A]"
-                              : "bg-[#EDF2F7] text-[#64748B]",
+                              ? "border-[#2F855A] bg-[#DCF0DC] text-[#2F855A]"
+                              : "border-green bg-green text-white hover:bg-[#128a52]",
                           )}
                           onClick={() => {
                             if (isSaved) {
@@ -6429,10 +6479,10 @@ function ProductOrderPanel({
                           <button
                             type="button"
                             aria-label={`${row.product} 인사장 제거`}
-                            className="inline-flex size-7 items-center justify-center rounded text-red hover:bg-[#fee2e2]"
+                            className="inline-flex size-9 items-center justify-center rounded-lg text-red hover:bg-[#fee2e2]"
                             onClick={() => onRemoveGreeting?.(row.product)}
                           >
-                            <X className="size-4" strokeWidth={2.5} />
+                            <X className="size-5" strokeWidth={2.5} />
                           </button>
                         ) : null}
                       </div>
@@ -6573,7 +6623,7 @@ function ProductOrderPanel({
           initial={shipSheetInitial}
           minDateIso={todayDateValue()}
           shipDateLocked={shipDateLocked}
-          onCancel={() => setShipSheetLineId(null)}
+          onCancel={closeShipSheet}
           onSave={(info) => saveLineShipInfo(shipSheetLine.lineId, info)}
         />
       ) : null}
