@@ -881,7 +881,7 @@ export function NewOrderV2({
       {profileError ? <div className="jy-err">{profileError}</div> : null}
 
       <section className="jy-card">
-        <h2>주문 정보(대신 주문하기)</h2>
+        <h2>주문 정보</h2>
         <div className="jy-row">
           <div>
             <label className="jy-label" htmlFor="jy-date">
@@ -912,7 +912,7 @@ export function NewOrderV2({
         {isProxy ? (
           <div>
             <label className="jy-label" htmlFor="jy-proxy-phone">
-              주문자 연락처 (대신 주문)
+              주문자 연락처
             </label>
             <input
               id="jy-proxy-phone"
