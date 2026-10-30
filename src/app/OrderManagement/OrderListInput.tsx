@@ -1527,6 +1527,8 @@ type StockCatalogItem = {
   stock?: number | null;
   stockMax?: number | null;
   wholesalePrice: number;
+  /** 소매가 (비어 있을 수 있음). 개인앱 화면 표시용 */
+  retailPrice?: number | null;
   category: string;
 };
 
@@ -1585,6 +1587,8 @@ export interface ProductDialogItem {
   qty: number;
   note: string;
   unitPrice: number;
+  /** 소매가 (표시용, 저장 금액은 unitPrice=도매가) */
+  retailPrice?: number | null;
   deliveryOnly: boolean;
   lineSection: "box" | "giftUnit";
 }
@@ -1800,6 +1804,7 @@ export function ProductAddDialog({
           qty: quantities[item.id] ?? 0,
           note: "",
           unitPrice: item.wholesalePrice,
+          retailPrice: item.retailPrice ?? null,
           deliveryOnly,
           lineSection,
         };

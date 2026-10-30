@@ -16,6 +16,18 @@ import {
 
 import "./order-v2.css";
 
+/**
+ * 주문 수정에서 상품을 더 담으면 같은 그룹에 새 형제 주문을 만든다.
+ * 그 순번: 그룹의 마지막 순번 다음 (취소된 형제 번호도 피한다 — rawOrders 에는 취소 건도 있다).
+ */
+function nextSplitIndex(rawOrders: ApiMemberOrder[], order: ApiMemberOrder) {
+  const key = order.orderGroupKey;
+  const siblings = key
+    ? rawOrders.filter((row) => row.orderGroupKey === key)
+    : [order];
+  return Math.max(...siblings.map((row) => row.splitIndex ?? 1), 1) + 1;
+}
+
 /** 주문목록포함버전: 주문 달력 + 새 주문 (시안 fe/장유 주문 7.html) */
 export function OrderAppV2({
   onSwitchToClassic,
@@ -161,6 +173,11 @@ export function OrderAppV2({
           key={editingOrder ? `edit-${editingOrder.id}` : newOrderDate}
           initialDate={newOrderDate}
           editOrder={editingOrder}
+          editNextSplitIndex={
+            editingOrder
+              ? nextSplitIndex(rawOrders, editingOrder)
+              : undefined
+          }
           onBackToList={backToCalendar}
           onSubmitted={(date) => {
             setFilters((current) => ({ ...current, date, q: "" }));
