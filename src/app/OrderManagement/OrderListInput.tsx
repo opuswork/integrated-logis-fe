@@ -1602,6 +1602,7 @@ export function ProductAddDialog({
   onReplaceItems,
   presentation = "dialog",
   unifiedCatalog = false,
+  fixedCategory,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1623,6 +1624,8 @@ export function ProductAddDialog({
    * 배송방식은 주문서에서 한 번만 고르므로 여기서 묻지 않는다.
    */
   unifiedCatalog?: boolean;
+  /** 개인앱 새 주문: 주문서에서 고른 구분(일반품/선물세트)만 보인다 */
+  fixedCategory?: "일반품" | "선물세트";
   /** editList 시 미리 채울 수량 (품명 → 수량) */
   initialQuantities?: Record<string, number>;
   /** editList 확정. catalogProducts = 카탈로그에 있는 품명(없는 행은 유지 판단용) */
@@ -1672,7 +1675,7 @@ export function ProductAddDialog({
       setIsLoading(true);
       setLoadError("");
       setKeyword("");
-      setCategoryFilter("all");
+      setCategoryFilter(fixedCategory ?? "all");
       setPresetKind("");
 
       try {
@@ -1713,7 +1716,7 @@ export function ProductAddDialog({
             mode,
             defaultOrderKind,
             keyword: "",
-            categoryFilter: "all",
+            categoryFilter: fixedCategory ?? "all",
           }),
         );
         const firstSelected = visible.findIndex(
@@ -1737,7 +1740,7 @@ export function ProductAddDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, openStockOnly, mode, defaultOrderKind]);
+  }, [open, openStockOnly, mode, defaultOrderKind, fixedCategory]);
 
   const isSheet = presentation === "sheet";
 
@@ -1878,7 +1881,9 @@ export function ProductAddDialog({
         ? "선물세트 낱개 추가"
         : "상품 추가";
 
-  const scopeLabel = unifiedCatalog
+  const scopeLabel = fixedCategory
+    ? `${fixedCategory}만 표시`
+    : unifiedCatalog
     ? ""
     : mode === "box"
       ? "박스 상품만 표시"
