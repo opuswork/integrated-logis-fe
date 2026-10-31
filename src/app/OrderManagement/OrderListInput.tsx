@@ -287,7 +287,7 @@ function orderKindFromShip(ship: LineShipInfo): OrderType {
 
 /**
  * 배송선택 버튼 (🏪 직접수령 / 🚚 배달 / 📦 택배).
- * 상품 줄(모바일 카드·PC 표)과 박스상품 추가 창에서 같이 쓴다.
+ * 상품 줄(모바일 카드·PC 표)과 일반품 추가 창에서 같이 쓴다.
  */
 function ShipKindButtons({
   value,
@@ -370,7 +370,7 @@ function isGiftSetCategory(category: string) {
   return normalized === "선물세트" || normalized === "선물셋트";
 }
 
-/** 품명에 '박스' 포함 → ① 박스상품 */
+/** 품명에 '박스' 포함 (선물세트 박스 = 배달 전용 판단에 쓴다) */
 function isBoxProduct(productName: string) {
   return productName.includes("박스");
 }
@@ -390,8 +390,21 @@ function isGiftUnitProduct(
   );
 }
 
-function inferLineSection(productName: string): "box" | "giftUnit" {
-  return isBoxProduct(productName) ? "box" : "giftUnit";
+/**
+ * 줄 구분. 내부 값 "box" 는 저장된 배송상세에도 들어 있어 그대로 두고, 뜻은 ① 일반품이다.
+ * 카테고리를 알면 선물세트 → ② / 그 밖 → ①.
+ * 품명만 아는 예전 주문 복원: '(개)' 이고 '박스' 가 아니면 ② 선물세트 낱개, 나머지는 ①.
+ */
+function inferLineSection(
+  productName: string,
+  category?: string,
+): "box" | "giftUnit" {
+  if (category !== undefined) {
+    return isGiftSetCategory(category) ? "giftUnit" : "box";
+  }
+  return productName.includes("(개)") && !isBoxProduct(productName)
+    ? "giftUnit"
+    : "box";
 }
 
 /** 선물세트 + 품명에 '박스' 포함 → 배달 전용 (택배 목록에서 제외) */
@@ -1550,7 +1563,8 @@ function catalogItemMatches(
   const normalizedKeyword = filter.keyword.trim().toLowerCase();
 
   if (mode === "box") {
-    if (!isBoxProduct(item.productName)) {
+    // ① 일반품: 선물세트가 아닌 상품 전부 ('(개)'·박스 모두)
+    if (isGiftSetCategory(item.category)) {
       return false;
     }
   } else if (mode === "giftUnit") {
@@ -1798,7 +1812,7 @@ export function ProductAddDialog({
             ? "box"
             : mode === "giftUnit"
               ? "giftUnit"
-              : inferLineSection(item.productName);
+              : inferLineSection(item.productName, item.category);
         return {
           product: item.productName,
           qty: quantities[item.id] ?? 0,
@@ -1881,7 +1895,7 @@ export function ProductAddDialog({
   const dialogTitle = editList
     ? "상품목록수정"
     : mode === "box"
-      ? "박스상품 추가"
+      ? "일반품 추가"
       : mode === "giftUnit"
         ? "선물세트 낱개 추가"
         : "상품 추가";
@@ -1891,7 +1905,7 @@ export function ProductAddDialog({
     : unifiedCatalog
     ? ""
     : mode === "box"
-      ? "박스 상품만 표시"
+      ? "일반품만 표시"
       : mode === "giftUnit"
         ? "선물세트 (개)만 표시"
         : "(현재 배달/택배 탭 기준)";
@@ -2137,7 +2151,7 @@ export function ProductAddDialog({
                 )}
               >
                 {item.unit} · {item.category}
-                {/* 개인앱 박스상품 추가 창은 상품 단가를 숨긴다 (합계는 그대로 표시) */}
+                {/* 개인앱 일반품 추가 창은 상품 단가를 숨긴다 (합계는 그대로 표시) */}
                 {isSheet && mode === "box"
                   ? null
                   : ` · ${formatPrice(item.wholesalePrice)}`}
@@ -4363,7 +4377,9 @@ function ProductOrderPanel({
               ),
               greeting: greetingFor(item.productName)?.id ? "인사장보기" : "",
               unitPrice: item.price || 0,
-              deliveryOnly: lineSection === "box",
+              // 카테고리를 모르는 예전 주문: 품명에 '박스' 가 있는 ① 줄만 배달 전용으로 본다
+              deliveryOnly:
+                lineSection === "box" && isBoxProduct(item.productName),
               lineSection,
               ...originOf(order),
             };
@@ -5846,7 +5862,7 @@ function ProductOrderPanel({
   const boxProductItems = productItems.filter(
     (item) => item.lineSection === "box",
   );
-  const boxAddLabel = "+ 박스상품 추가";
+  const boxAddLabel = "+ 일반품 추가";
   const giftUnitProductItems = productItems.filter(
     (item) => item.lineSection !== "box",
   );
@@ -6314,11 +6330,11 @@ function ProductOrderPanel({
             택배·상차로 나누시려면 주문서를 새로 작성해 주세요.
           </p>
         ) : null}
-        {/* ① 박스상품 */}
+        {/* ① 일반품 */}
         <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-[13px] font-bold text-[#1A202C]">
-              ① 박스 상품
+              ① 일반품
             </h4>
             <button
               type="button"
@@ -6334,17 +6350,17 @@ function ProductOrderPanel({
           {isWideProductList ? (
             <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
               <Table
-                caption="박스 상품 목록"
+                caption="일반품 목록"
                 columns={boxProductColumns}
                 data={boxProductItems}
-                emptyMessage={`박스단위로만 주문 가능합니다 (인사장 없음). '${boxAddLabel}'로 담아주세요.`}
+                emptyMessage={`일반품을 담아주세요 (인사장 없음). '${boxAddLabel}'로 담아주세요.`}
                 scrollable={!isDesktop}
                 visibleRows={isDesktop ? undefined : 4}
               />
             </div>
           ) : boxProductItems.length === 0 ? (
             <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
-              박스단위로만 주문 가능합니다 (인사장 없음). &apos;{boxAddLabel}
+              일반품을 담아주세요 (인사장 없음). &apos;{boxAddLabel}
               &apos;로 담아주세요.
             </p>
           ) : (
@@ -6613,7 +6629,8 @@ function ProductOrderPanel({
         defaultOrderKind={orderType ?? "delivery"}
         // 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다.
         showOrderKind={false}
-        openStockOnly={openStockOnly}
+        // ① 일반품은 관리자도 공개 상품만 고른다
+        openStockOnly={openStockOnly || productDialogMode === "box"}
         presentation={productDialogPresentation}
         mode={productDialogMode}
         onClose={() => setIsProductDialogOpen(false)}
