@@ -415,6 +415,69 @@
 .jy-v2 .jy-item-name .jy-meta {
   margin-top: 4px;
 }
+/* 상품 줄 = 배송 한 건: 상품·수량 + 배송선택 + 배송정보 요약 */
+.jy-v2 .jy-line {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--jy-soft);
+  border-radius: 12px;
+}
+.jy-v2 .jy-line > .jy-item-line {
+  padding: 0;
+  background: transparent;
+}
+.jy-v2 .jy-line-ship {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.jy-v2 .jy-line-ship .jy-chips {
+  gap: 6px;
+}
+.jy-v2 .jy-line-ship .jy-chip {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.jy-v2 .jy-line-ship .jy-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.jy-v2 .jy-line > .jy-input {
+  height: 42px;
+}
+.jy-v2 .jy-btn.jy-mini.jy-ok {
+  color: var(--jy-done);
+  background: var(--jy-done-bg);
+  border-color: var(--jy-done);
+}
+/* 주문 확인: 상품 줄마다 배송정보 */
+.jy-v2 .jy-confirm-line {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--jy-line2);
+}
+.jy-v2 .jy-confirm-line-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.jy-v2 .jy-confirm-line-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.jy-v2 .jy-confirm-line-head span {
+  flex: none;
+  color: var(--jy-muted);
+  font-size: 13px;
+}
 /* 상품 목록 아래 총금액 */
 .jy-v2 .jy-total {
   display: flex;

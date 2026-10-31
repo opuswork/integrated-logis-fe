@@ -40,12 +40,13 @@ import {
 
 type ShipMethod = "delivery" | "pickup" | "parcel";
 type BranchStoreId = (typeof BRANCH_STORES)[number]["id"];
-type View = "form" | "delivery" | "confirm" | "done";
+type View = "form" | "ship" | "confirm" | "done";
 
+/** 관리자 제품주문서와 같은 순서·이름: 직접수령 / 배달 / 택배 */
 const SHIP_OPTIONS: Array<{ id: ShipMethod; label: string }> = [
-  { id: "delivery", label: "배달" },
   { id: "pickup", label: "직접수령" },
-  { id: "parcel", label: "개별택배" },
+  { id: "delivery", label: "배달" },
+  { id: "parcel", label: "택배" },
 ];
 
 const DELIVERY_REQUESTS = [
@@ -63,6 +64,8 @@ const BRANCH_ORDER: BranchStoreId[] = ["jungbu", "seobu", "nambu"];
 
 const QTY_ERROR = "수량은 1이상이어야 합니다.";
 const BRANCH_ERROR = "작업매장(중부·서부·남부)을 선택해 주세요.";
+const DELIVERY_ONLY_ERROR =
+  "선물세트 박스 상품은 택배로 보낼 수 없어요. 배달 또는 직접수령을 선택해 주세요.";
 /** 주문 정보 칸의 오류: 화면 맨 아래가 아니라 주문 정보 섹션 바로 아래에 보여준다 */
 const ORDER_INFO_ERRORS = new Set([
   "날짜를 선택해 주세요.",
@@ -88,6 +91,194 @@ type Profile = {
 /** 명단 첨부 파일 (사진·PDF·엑셀). url 은 미리보기·key 용 object URL */
 type Photo = { file: File; url: string; kind: OrderAttachmentKind };
 
+type DeliveryInfo = {
+  address: string;
+  addressDetail: string;
+  /** 받는 분 연락처 (비우면 주문자 연락처) */
+  phone: string;
+  request: string;
+  remark: string;
+};
+
+type ParcelInfo = {
+  senderName: string;
+  senderPhone: string;
+  senderAddress: string;
+  senderAddressDetail: string;
+  receiverName: string;
+  receiverPhone: string;
+  receiverAddress: string;
+  receiverAddressDetail: string;
+  /** 이 줄(=이 주문)에만 올리는 명단 파일 */
+  photos: Photo[];
+};
+
+/**
+ * 상품 줄 = 배송 한 건 = 주문 한 건.
+ * 관리자 제품주문서처럼 배송방식을 고른 뒤 수량을 줄이면 나머지가 반대 방식 줄로 나뉜다.
+ * 같은 splitGroupId 줄들의 수량 합은 baseQty 로 고정된다.
+ */
+type OrderLine = CartItem & {
+  lineId: string;
+  splitGroupId: string;
+  baseQty: number;
+  ship: ShipMethod | "";
+  /** 방식을 바꿨다 돌아와도 입력값이 남도록 배달·택배 정보를 따로 둔다 */
+  delivery: DeliveryInfo | null;
+  parcel: ParcelInfo | null;
+  /** 직접수령·택배 메모 */
+  memo: string;
+  /** 수정 모드: 이 줄(=수정하는 주문)에 이미 붙은 첨부 수 */
+  existingPhotoCount: number;
+};
+
+type UploadTarget = { orderId: number; photos: Photo[] };
+
+let lineSeq = 0;
+function nextLineId() {
+  lineSeq += 1;
+  return `line-${lineSeq}`;
+}
+
+function newLine(item: CartItem): OrderLine {
+  const lineId = nextLineId();
+  return {
+    ...item,
+    lineId,
+    splitGroupId: lineId,
+    baseQty: item.qty,
+    ship: "",
+    delivery: null,
+    parcel: null,
+    memo: "",
+    existingPhotoCount: 0,
+  };
+}
+
+function emptyDelivery(): DeliveryInfo {
+  return {
+    address: "",
+    addressDetail: "",
+    phone: "",
+    request: DELIVERY_REQUESTS[0],
+    remark: "",
+  };
+}
+
+/** 배달 ↔ 택배. 직접수령은 반대 방식이 없다 */
+function oppositeShip(ship: ShipMethod | ""): ShipMethod | "" {
+  if (ship === "delivery") return "parcel";
+  if (ship === "parcel") return "delivery";
+  return "";
+}
+
+/** 나머지를 반대 방식으로 나눌 수 있는 줄 (선물세트 박스는 배달 전용이라 택배 줄을 만들 수 없다) */
+function canSplitLine(line: OrderLine, isEdit: boolean) {
+  return (
+    !isEdit &&
+    (line.ship === "delivery" || line.ship === "parcel") &&
+    !line.deliveryOnly
+  );
+}
+
+function siblingOf(lines: OrderLine[], line: OrderLine) {
+  return lines.find(
+    (row) => row.lineId !== line.lineId && row.splitGroupId === line.splitGroupId,
+  );
+}
+
+function isParcelComplete(parcel: ParcelInfo | null, existingPhotoCount: number) {
+  if (!parcel) return false;
+  if (
+    !parcel.senderName.trim() ||
+    !parcel.senderPhone.trim() ||
+    !parcel.senderAddress.trim()
+  ) {
+    return false;
+  }
+  return (
+    parcel.photos.length + existingPhotoCount > 0 ||
+    Boolean(
+      parcel.receiverName.trim() &&
+        parcel.receiverPhone.trim() &&
+        parcel.receiverAddress.trim(),
+    )
+  );
+}
+
+/** 배송정보까지 다 넣은 줄인지 (직접수령은 메모만 있어 따로 넣을 정보가 없다) */
+function isLineShipDone(line: OrderLine) {
+  if (line.ship === "pickup") return true;
+  if (line.ship === "delivery") return Boolean(line.delivery?.address.trim());
+  if (line.ship === "parcel") {
+    return !line.deliveryOnly && isParcelComplete(line.parcel, line.existingPhotoCount);
+  }
+  return false;
+}
+
+/**
+ * 수량 변경 (관리자 updateProductQty 와 같은 규칙).
+ * - 나뉜 줄: 합계 baseQty 고정, 형제 줄이 나머지 (각 줄 최소 1)
+ * - 배송방식을 고른 줄을 줄이면 → 나머지가 반대 방식 줄로 바로 생긴다
+ * - 그 밖(방식 전·직접수령·선물세트 박스·수정 모드): 수량만 바뀌고 baseQty 도 따라간다
+ */
+function changeLineQty(
+  lines: OrderLine[],
+  lineId: string,
+  qty: number,
+  isEdit: boolean,
+): OrderLine[] {
+  const target = lines.find((row) => row.lineId === lineId);
+  if (!target) return lines;
+  const sibling = siblingOf(lines, target);
+  if (sibling) {
+    const nextQty = Math.min(Math.max(1, qty), target.baseQty - 1);
+    return lines.map((row) =>
+      row.lineId === lineId
+        ? { ...row, qty: nextQty }
+        : row.lineId === sibling.lineId
+          ? { ...row, qty: target.baseQty - nextQty }
+          : row,
+    );
+  }
+  const nextQty = Math.max(1, qty);
+  if (nextQty < target.baseQty && canSplitLine(target, isEdit)) {
+    const remainder: OrderLine = {
+      ...target,
+      lineId: nextLineId(),
+      qty: target.baseQty - nextQty,
+      ship: oppositeShip(target.ship),
+      delivery: null,
+      parcel: null,
+      memo: "",
+      existingPhotoCount: 0,
+    };
+    const next = lines.map((row) =>
+      row.lineId === lineId ? { ...row, qty: nextQty } : row,
+    );
+    next.splice(next.findIndex((row) => row.lineId === lineId) + 1, 0, remainder);
+    return next;
+  }
+  return lines.map((row) =>
+    row.lineId === lineId ? { ...row, qty: nextQty, baseQty: nextQty } : row,
+  );
+}
+
+/** 배송방식 변경. 나뉜 형제 줄이 아직 배송정보 전이면 반대 방식으로 맞춰 준다 (관리자와 같음) */
+function changeLineShip(lines: OrderLine[], lineId: string, ship: ShipMethod) {
+  const target = lines.find((row) => row.lineId === lineId);
+  if (!target || target.ship === ship) return lines;
+  const sibling = siblingOf(lines, target);
+  const opposite = oppositeShip(ship);
+  return lines.map((row) => {
+    if (row.lineId === lineId) return { ...row, ship };
+    if (sibling && row.lineId === sibling.lineId && opposite && !isLineShipDone(row)) {
+      return { ...row, ship: opposite };
+    }
+    return row;
+  });
+}
+
 /** notes 는 " / " 로 필드를 나누므로 입력값의 '/' 는 바꿔 둔다 */
 function clean(value: string) {
   return value.replace(/\//g, "·").replace(/\s+/g, " ").trim();
@@ -102,6 +293,10 @@ function formatPhone(value: string) {
   if (digits.length <= 3) return digits;
   if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+}
+
+function shipLabelOf(ship: ShipMethod | "") {
+  return SHIP_OPTIONS.find((option) => option.id === ship)?.label ?? "-";
 }
 
 function AddressInput({
@@ -159,6 +354,375 @@ function AddressInput({
   );
 }
 
+/** 한 줄의 배달 정보 입력 화면 */
+function DeliveryInfoView({
+  product,
+  initial,
+  onBack,
+  onSave,
+}: {
+  product: string;
+  initial: DeliveryInfo;
+  onBack: () => void;
+  onSave: (info: DeliveryInfo) => void;
+}) {
+  const [info, setInfo] = useState(initial);
+  const [error, setError] = useState("");
+  const update = (patch: Partial<DeliveryInfo>) =>
+    setInfo((current) => ({ ...current, ...patch }));
+
+  return (
+    <div className="jy-wrap">
+      <V2Header title="배달 주소" onBack={onBack} />
+      <p className="jy-meta">{product}</p>
+      <AddressInput
+        id="jy-addr"
+        label="도로명 · 지번 주소"
+        value={info.address}
+        onChange={(address) => update({ address })}
+        placeholder="예: 김해시 장유로 123"
+      />
+      <div>
+        <label className="jy-label" htmlFor="jy-addr2">
+          상세 주소
+        </label>
+        <input
+          id="jy-addr2"
+          className="jy-input"
+          value={info.addressDetail}
+          onChange={(event) => update({ addressDetail: event.target.value })}
+          placeholder="동, 호수, 층 등"
+        />
+      </div>
+      <div>
+        <label className="jy-label" htmlFor="jy-aphone">
+          받는 분 연락처
+        </label>
+        <input
+          id="jy-aphone"
+          className="jy-input"
+          type="tel"
+          inputMode="tel"
+          value={info.phone}
+          onChange={(event) => update({ phone: formatPhone(event.target.value) })}
+          placeholder="010-1234-5678"
+        />
+        <p className="jy-hint" style={{ marginTop: 4 }}>
+          비워 두면 주문자 연락처로 접수돼요.
+        </p>
+      </div>
+      <div>
+        <label className="jy-label" htmlFor="jy-areq">
+          배달 요청사항
+        </label>
+        <select
+          id="jy-areq"
+          className="jy-input"
+          value={info.request}
+          onChange={(event) => update({ request: event.target.value })}
+        >
+          {DELIVERY_REQUESTS.map((request) => (
+            <option key={request}>{request}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="jy-label" htmlFor="jy-remark">
+          비고
+        </label>
+        <input
+          id="jy-remark"
+          className="jy-input"
+          value={info.remark}
+          onChange={(event) => update({ remark: event.target.value })}
+          placeholder="배송 관련 요청 사항"
+        />
+      </div>
+      <div className="jy-info">
+        <b>i</b>
+        <span>배달 가능 지역과 배달 일정은 주문 확인 후 지점에서 따로 안내해요.</span>
+      </div>
+      {error ? <div className="jy-err">{error}</div> : null}
+      <V2Dock>
+        <button
+          type="button"
+          className="jy-btn jy-primary jy-big"
+          onClick={() => {
+            if (!info.address.trim()) {
+              setError("주소를 입력해 주세요.");
+              return;
+            }
+            onSave(info);
+          }}
+        >
+          이 주소로 배달하기
+        </button>
+      </V2Dock>
+    </div>
+  );
+}
+
+/** 한 줄의 택배 정보 입력 화면 (보내는 사람 · 받는 사람 · 명단 파일 · 메모) */
+function ParcelInfoView({
+  product,
+  initial,
+  initialMemo,
+  existingPhotoCount,
+  onBack,
+  onSave,
+}: {
+  product: string;
+  initial: ParcelInfo;
+  initialMemo: string;
+  existingPhotoCount: number;
+  onBack: () => void;
+  onSave: (info: ParcelInfo, memo: string) => void;
+}) {
+  const [info, setInfo] = useState(initial);
+  const [memo, setMemo] = useState(initialMemo);
+  const [photoError, setPhotoError] = useState("");
+  const [error, setError] = useState("");
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoLimit = Math.max(0, MAX_PHOTOS - existingPhotoCount);
+  const update = (patch: Partial<ParcelInfo>) =>
+    setInfo((current) => ({ ...current, ...patch }));
+
+  const addPhotos = (files: FileList | null) => {
+    setPhotoError("");
+    if (!files || files.length === 0) return;
+    const accepted: Photo[] = [];
+    for (const file of Array.from(files)) {
+      const kind = orderAttachmentKindOfFile(file);
+      if (!kind) {
+        setPhotoError("사진·PDF·엑셀 파일만 첨부할 수 있어요.");
+        continue;
+      }
+      if (file.size > MAX_PHOTO_BYTES) {
+        setPhotoError("파일 하나는 10MB 이하만 첨부할 수 있어요.");
+        continue;
+      }
+      accepted.push({ file, url: URL.createObjectURL(file), kind });
+    }
+    // 수정 모드는 이미 붙은 파일도 개수에 넣는다
+    const room = photoLimit - info.photos.length;
+    if (accepted.length > room) {
+      setPhotoError(`파일은 최대 ${MAX_PHOTOS}개까지 첨부할 수 있어요.`);
+      accepted.slice(room).forEach((photo) => URL.revokeObjectURL(photo.url));
+    }
+    update({ photos: [...info.photos, ...accepted.slice(0, Math.max(0, room))] });
+  };
+
+  const removePhoto = (photo: Photo) => {
+    // 저장 전 화면이라, 처음부터 있던 파일은 저장할 때 정리한다 (뒤로가면 그대로 남는다)
+    if (!initial.photos.includes(photo)) URL.revokeObjectURL(photo.url);
+    update({ photos: info.photos.filter((row) => row !== photo) });
+  };
+
+  const goBack = () => {
+    info.photos
+      .filter((photo) => !initial.photos.includes(photo))
+      .forEach((photo) => URL.revokeObjectURL(photo.url));
+    onBack();
+  };
+
+  const save = () => {
+    if (!info.senderName.trim() || !info.senderPhone.trim() || !info.senderAddress.trim()) {
+      setError("보내는 사람의 이름·연락처·주소를 입력해 주세요.");
+      return;
+    }
+    if (!isParcelComplete(info, existingPhotoCount)) {
+      setError("받는 사람의 이름·연락처·주소를 입력하거나 대량 택배 명단 파일을 첨부해 주세요.");
+      return;
+    }
+    initial.photos
+      .filter((photo) => !info.photos.includes(photo))
+      .forEach((photo) => URL.revokeObjectURL(photo.url));
+    onSave(info, memo);
+  };
+
+  return (
+    <div className="jy-wrap">
+      <V2Header title="택배 정보" onBack={goBack} />
+      <p className="jy-meta">{product}</p>
+      <section className="jy-card">
+        <h2 style={{ fontSize: 14 }}>보내는 사람</h2>
+        <div className="jy-row">
+          <input
+            className="jy-input"
+            aria-label="보내는 사람 이름"
+            value={info.senderName}
+            onChange={(event) => update({ senderName: event.target.value })}
+            placeholder="이름"
+          />
+          <input
+            className="jy-input"
+            aria-label="보내는 사람 연락처"
+            type="tel"
+            inputMode="tel"
+            value={info.senderPhone}
+            onChange={(event) => update({ senderPhone: formatPhone(event.target.value) })}
+            placeholder="연락처"
+          />
+        </div>
+        <AddressInput
+          id="jy-send-addr"
+          label="보내는 사람 주소"
+          value={info.senderAddress}
+          onChange={(senderAddress) => update({ senderAddress })}
+          placeholder="주소"
+        />
+        <input
+          className="jy-input"
+          aria-label="보내는 사람 상세 주소"
+          value={info.senderAddressDetail}
+          onChange={(event) => update({ senderAddressDetail: event.target.value })}
+          placeholder="상세 주소"
+        />
+
+        <h2 style={{ fontSize: 14 }}>
+          받는 사람{" "}
+          {info.photos.length + existingPhotoCount ? (
+            <span className="jy-meta">(명단 파일이 있으면 선택)</span>
+          ) : null}
+        </h2>
+        <div className="jy-row">
+          <input
+            className="jy-input"
+            aria-label="받는 사람 이름"
+            value={info.receiverName}
+            onChange={(event) => update({ receiverName: event.target.value })}
+            placeholder="이름"
+          />
+          <input
+            className="jy-input"
+            aria-label="받는 사람 연락처"
+            type="tel"
+            inputMode="tel"
+            value={info.receiverPhone}
+            onChange={(event) => update({ receiverPhone: formatPhone(event.target.value) })}
+            placeholder="연락처"
+          />
+        </div>
+        <AddressInput
+          id="jy-recv-addr"
+          label="받는 사람 주소"
+          value={info.receiverAddress}
+          onChange={(receiverAddress) => update({ receiverAddress })}
+          placeholder="주소"
+        />
+        <input
+          className="jy-input"
+          aria-label="받는 사람 상세 주소"
+          value={info.receiverAddressDetail}
+          onChange={(event) => update({ receiverAddressDetail: event.target.value })}
+          placeholder="상세 주소"
+        />
+
+        <div>
+          <span className="jy-label">
+            택배관련 파일업로드(사진촬영 및 PDF,엑셀등 최대 {MAX_PHOTOS}개까지 업로드가능)
+          </span>
+          <div className="jy-photos">
+            {info.photos.map((photo) => (
+              <div key={photo.url} className="jy-photo">
+                {photo.kind === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photo.url} alt="첨부한 명단 사진" />
+                ) : (
+                  <div className="jy-photo-file" title={photo.file.name}>
+                    <span aria-hidden>{orderAttachmentIcon(photo.kind)}</span>
+                    <span className="jy-photo-file-name">{photo.file.name}</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  aria-label={`${photo.file.name} 삭제`}
+                  onClick={() => removePhoto(photo)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {info.photos.length < photoLimit ? (
+              <>
+                <button
+                  type="button"
+                  className="jy-photo-add"
+                  onClick={() => photoInputRef.current?.click()}
+                >
+                  <span style={{ fontSize: 22 }} aria-hidden>
+                    📷
+                  </span>
+                  사진 촬영
+                </button>
+                <button
+                  type="button"
+                  className="jy-photo-add"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <span style={{ fontSize: 22 }} aria-hidden>
+                    📁
+                  </span>
+                  파일 업로드
+                </button>
+              </>
+            ) : null}
+          </div>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            hidden
+            onChange={(event) => {
+              addPhotos(event.target.files);
+              event.target.value = "";
+            }}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ORDER_ATTACHMENT_ACCEPT}
+            multiple
+            hidden
+            onChange={(event) => {
+              addPhotos(event.target.files);
+              event.target.value = "";
+            }}
+          />
+          {existingPhotoCount ? (
+            <p className="jy-hint" style={{ marginTop: 6 }}>
+              이미 첨부된 파일 {existingPhotoCount}개는 그대로 있어요. 새로 올린 파일만 추가돼요.
+            </p>
+          ) : null}
+          {photoError ? <div className="jy-err">{photoError}</div> : null}
+        </div>
+
+        <div>
+          <label className="jy-label" htmlFor="jy-memo">
+            메모
+          </label>
+          <textarea
+            id="jy-memo"
+            className="jy-input"
+            value={memo}
+            onChange={(event) => setMemo(event.target.value)}
+            placeholder="전달할 내용을 적어 주세요"
+          />
+        </div>
+      </section>
+      {error ? <div className="jy-err">{error}</div> : null}
+      <V2Dock>
+        <button type="button" className="jy-btn jy-primary jy-big" onClick={save}>
+          이 정보로 택배 보내기
+        </button>
+      </V2Dock>
+    </div>
+  );
+}
+
 /** 줄 note 에서 "비고: …" / "메모: …" 뒤의 값을 꺼낸다 (값 안에 ", " 가 있어도 끝까지) */
 function noteValueAfter(note: string, label: string) {
   const index = note.indexOf(`${label}: `);
@@ -183,9 +747,58 @@ function restoreEditOrder(order: ApiMemberOrder) {
   const ordererPhone = formatPhone(parseOrdererPhoneFromNotes(order.notes));
   const branchName = parseBranchStoreFromNotes(order.notes);
   const branch = BRANCH_STORES.find((store) => store.name === branchName)?.id ?? "";
-  const deliveryRequest =
-    DELIVERY_REQUESTS.find((request) => note.startsWith(request)) ??
-    DELIVERY_REQUESTS[0];
+  const delivery: DeliveryInfo | null =
+    ship === "delivery"
+      ? {
+          address: shipInfo.recipientAddress,
+          addressDetail: shipInfo.recipientAddressDetail,
+          // 받는 분 연락처를 비워 접수했으면 주문자 연락처가 들어가 있다 → 다시 빈칸으로
+          phone:
+            formatPhone(shipInfo.recipientPhone) !== ordererPhone
+              ? formatPhone(shipInfo.recipientPhone)
+              : "",
+          request:
+            DELIVERY_REQUESTS.find((request) => note.startsWith(request)) ??
+            DELIVERY_REQUESTS[0],
+          remark: noteValueAfter(note, "비고"),
+        }
+      : null;
+  const parcel: ParcelInfo | null =
+    ship === "parcel"
+      ? {
+          senderName: shipInfo.senderName,
+          senderPhone: shipInfo.senderPhone,
+          senderAddress: shipInfo.senderAddress,
+          senderAddressDetail: shipInfo.senderAddressDetail,
+          receiverName: shipInfo.recipientName,
+          receiverPhone: shipInfo.recipientPhone,
+          receiverAddress: shipInfo.recipientAddress,
+          receiverAddressDetail: shipInfo.recipientAddressDetail,
+          photos: [],
+        }
+      : null;
+  const lines: OrderLine[] = item
+    ? [
+        {
+          product: item.productName,
+          qty: item.quantity,
+          note: "",
+          unitPrice: line?.unitPrice ?? item.price ?? 0,
+          // notes 에는 소매가가 없어 화면을 열 때 상품 목록에서 채운다
+          retailPrice: null,
+          deliveryOnly: line?.deliveryOnly ?? false,
+          lineSection: line?.lineSection ?? "box",
+          lineId: "edit-1",
+          splitGroupId: "edit-1",
+          baseQty: item.quantity,
+          ship,
+          delivery,
+          parcel,
+          memo: ship === "delivery" ? "" : noteValueAfter(note, "메모"),
+          existingPhotoCount: order.attachments?.length ?? 0,
+        },
+      ]
+    : [];
   return {
     date:
       (ship === "parcel" ? shipInfo.parcelShipDate : shipInfo.deliveryDate) ||
@@ -194,40 +807,7 @@ function restoreEditOrder(order: ApiMemberOrder) {
     ordererName: parseOrdererFromNotes(order.notes),
     ordererPhone,
     branch: branch as BranchStoreId | "",
-    items: item
-      ? [
-          {
-            product: item.productName,
-            qty: item.quantity,
-            note: "",
-            unitPrice: line?.unitPrice ?? item.price ?? 0,
-            // notes 에는 소매가가 없어 화면을 열 때 상품 목록에서 채운다
-            retailPrice: null,
-            deliveryOnly: line?.deliveryOnly ?? false,
-            lineSection: line?.lineSection ?? "box",
-          } satisfies CartItem,
-        ]
-      : [],
-    ship,
-    address: ship === "delivery" ? shipInfo.recipientAddress : "",
-    addressDetail: ship === "delivery" ? shipInfo.recipientAddressDetail : "",
-    // 받는 분 연락처를 비워 접수했으면 주문자 연락처가 들어가 있다 → 다시 빈칸으로
-    deliveryPhone:
-      ship === "delivery" && formatPhone(shipInfo.recipientPhone) !== ordererPhone
-        ? formatPhone(shipInfo.recipientPhone)
-        : "",
-    deliveryRequest,
-    remark: ship === "delivery" ? noteValueAfter(note, "비고") : "",
-    memo: ship === "delivery" ? "" : noteValueAfter(note, "메모"),
-    senderName: ship === "parcel" ? shipInfo.senderName : "",
-    senderPhone: ship === "parcel" ? shipInfo.senderPhone : "",
-    senderAddress: ship === "parcel" ? shipInfo.senderAddress : "",
-    senderAddressDetail: ship === "parcel" ? shipInfo.senderAddressDetail : "",
-    receiverName: ship === "parcel" ? shipInfo.recipientName : "",
-    receiverPhone: ship === "parcel" ? shipInfo.recipientPhone : "",
-    receiverAddress: ship === "parcel" ? shipInfo.recipientAddress : "",
-    receiverAddressDetail: ship === "parcel" ? shipInfo.recipientAddressDetail : "",
-    existingPhotoCount: order.attachments?.length ?? 0,
+    lines,
   };
 }
 
@@ -251,10 +831,10 @@ export function NewOrderV2({
     editOrder ? restoreEditOrder(editOrder) : null,
   );
   const isEdit = Boolean(editOrder && restored);
-  const existingPhotoCount = restored?.existingPhotoCount ?? 0;
-  const photoLimit = Math.max(0, MAX_PHOTOS - existingPhotoCount);
 
   const [view, setView] = useState<View>("form");
+  /** 배송정보 입력 화면에서 고치는 줄 */
+  const [shipLineId, setShipLineId] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState("");
 
@@ -262,68 +842,45 @@ export function NewOrderV2({
   const [name, setName] = useState(restored?.ordererName ?? "");
   const [proxyPhone, setProxyPhone] = useState(restored?.ordererPhone ?? "");
   const [branch, setBranch] = useState<BranchStoreId | "">(restored?.branch ?? "");
-  const [items, setItems] = useState<CartItem[]>(restored?.items ?? []);
-  /** 수량칸을 고치는 동안의 글자 (품명 → 입력값). 실제 수량과 같아지면 지운다 */
+  const [lines, setLines] = useState<OrderLine[]>(restored?.lines ?? []);
+  /** 수량칸을 고치는 동안의 글자 (줄 → 입력값). 칸을 벗어날 때 수량에 넣는다 */
   const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   /** 상품 담기 창에 보일 구분 */
   const [productCategory, setProductCategory] =
     useState<ProductCategory>("일반품");
-  const [ship, setShip] = useState<ShipMethod | "">(restored?.ship ?? "");
-
-  // 배달
-  const [address, setAddress] = useState(restored?.address ?? "");
-  const [addressDetail, setAddressDetail] = useState(restored?.addressDetail ?? "");
-  const [deliveryPhone, setDeliveryPhone] = useState(restored?.deliveryPhone ?? "");
-  const [deliveryRequest, setDeliveryRequest] = useState(
-    restored?.deliveryRequest ?? DELIVERY_REQUESTS[0],
+  /** 다른 줄의 배송정보 화면을 열 때 미리 채워 줄 마지막 입력값 */
+  const [lastDelivery, setLastDelivery] = useState<DeliveryInfo | null>(
+    restored?.lines[0]?.delivery ?? null,
   );
-  const [remark, setRemark] = useState(restored?.remark ?? "");
-  /** 직접수령·개별택배 메모 (배달은 주소 화면의 비고를 쓴다) */
-  const [memo, setMemo] = useState(restored?.memo ?? "");
-  const [addressSaved, setAddressSaved] = useState(restored?.ship === "delivery");
-  const [addressError, setAddressError] = useState("");
-
-  // 개별택배
-  const [senderName, setSenderName] = useState(restored?.senderName ?? "");
-  const [senderPhone, setSenderPhone] = useState(restored?.senderPhone ?? "");
-  const [senderAddress, setSenderAddress] = useState(restored?.senderAddress ?? "");
-  const [senderAddressDetail, setSenderAddressDetail] = useState(
-    restored?.senderAddressDetail ?? "",
+  const [lastParcel, setLastParcel] = useState<ParcelInfo | null>(
+    restored?.lines[0]?.parcel ?? null,
   );
-  const [receiverName, setReceiverName] = useState(restored?.receiverName ?? "");
-  const [receiverPhone, setReceiverPhone] = useState(restored?.receiverPhone ?? "");
-  const [receiverAddress, setReceiverAddress] = useState(
-    restored?.receiverAddress ?? "",
-  );
-  const [receiverAddressDetail, setReceiverAddressDetail] = useState(
-    restored?.receiverAddressDetail ?? "",
-  );
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [photoError, setPhotoError] = useState("");
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const photosRef = useRef<Photo[]>([]);
+  const linesRef = useRef<OrderLine[]>([]);
 
   const [formError, setFormError] = useState("");
+  /** 오류가 특정 줄 것이면 그 줄 아래에 보여준다 */
+  const [errorLineId, setErrorLineId] = useState("");
   const infoErrorRef = useRef<HTMLDivElement>(null);
   const bottomErrorRef = useRef<HTMLDivElement>(null);
-  const isInfoError = ORDER_INFO_ERRORS.has(formError);
+  const isInfoError = !errorLineId && ORDER_INFO_ERRORS.has(formError);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{
     orderNumbers: string[];
-    orderIds: number[];
-    uploadFailed: boolean;
+    failedUploads: UploadTarget[];
   } | null>(null);
   const [isRetryingUpload, setIsRetryingUpload] = useState(false);
 
   useEffect(() => {
-    photosRef.current = photos;
-  }, [photos]);
+    linesRef.current = lines;
+  }, [lines]);
 
   // 화면을 떠날 때 미리보기 URL 정리
   useEffect(
-    () => () => photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url)),
+    () => () =>
+      linesRef.current.forEach((line) =>
+        line.parcel?.photos.forEach((photo) => URL.revokeObjectURL(photo.url)),
+      ),
     [],
   );
 
@@ -364,8 +921,6 @@ export function NewOrderV2({
         ) {
           setProxyPhone("");
         }
-        setSenderName((current) => current || next.name);
-        setSenderPhone((current) => current || next.phone);
       } catch {
         if (!cancelled) {
           setProfileError("회원 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
@@ -393,7 +948,7 @@ export function NewOrderV2({
         const retailByName = new Map(
           data.map((row) => [row.productName, row.retailPrice ?? null]),
         );
-        setItems((current) =>
+        setLines((current) =>
           current.map((row) =>
             row.retailPrice == null && retailByName.get(row.product) != null
               ? { ...row, retailPrice: retailByName.get(row.product) }
@@ -420,182 +975,195 @@ export function NewOrderV2({
       ? `${name.trim()}관`
       : name.trim();
   const branchInfo = BRANCH_STORES.find((store) => store.id === branch);
-  const hasDeliveryOnly = items.some((item) => item.deliveryOnly);
-  const totalQty = items.reduce((sum, item) => sum + item.qty, 0);
+  const totalQty = lines.reduce((sum, line) => sum + line.qty, 0);
   /** 화면에는 소매가(없으면 도매가)로 보여준다. 주문 금액은 도매가(unitPrice)로 저장한다 */
   const displayUnitPrice = (item: CartItem) => item.retailPrice ?? item.unitPrice ?? 0;
-  const totalDisplayAmount = items.reduce(
-    (sum, item) => sum + displayUnitPrice(item) * item.qty,
+  const totalDisplayAmount = lines.reduce(
+    (sum, line) => sum + displayUnitPrice(line) * line.qty,
     0,
   );
+  const shipLine = lines.find((line) => line.lineId === shipLineId) ?? null;
 
+  const clearError = () => {
+    setFormError("");
+    setErrorLineId("");
+  };
+
+  /**
+   * 담기: 같은 상품이 아직 나뉘지 않은 줄로 있으면 수량을 더하고,
+   * 이미 나뉜 상품이면 새 줄로 담는다.
+   */
   const addItems = (added: ProductDialogItem[]) => {
-    added.forEach((item) => clearQtyDraft(item.product));
-    setItems((current) => {
-      const next = [...current];
-      for (const item of added) {
-        const existing = next.findIndex((row) => row.product === item.product);
-        if (existing >= 0) {
-          next[existing] = {
-            ...next[existing],
-            qty: next[existing].qty + item.qty,
-          };
-        } else {
-          next.push({ ...item });
-        }
-      }
-      return next;
-    });
-  };
-
-  const clearQtyDraft = (product: string) => {
-    setQtyDrafts((current) => {
-      if (!(product in current)) return current;
-      const next = { ...current };
-      delete next[product];
-      return next;
-    });
-  };
-
-  const setItemQty = (product: string, qty: number) => {
-    clearQtyDraft(product);
-    setItems((current) =>
-      current.map((row) =>
-        row.product === product ? { ...row, qty: Math.max(1, qty) } : row,
-      ),
-    );
-  };
-
-  /** 지우는 중 빈칸·0 도 칸에는 보이게 두고, 1 이상일 때만 실제 수량에 넣는다 */
-  const typeItemQty = (product: string, raw: string) => {
-    const digits = raw.replace(/\D/g, "");
-    setQtyDrafts((current) => ({ ...current, [product]: digits }));
-    const qty = Number(digits);
-    if (qty >= 1) {
-      setItems((current) =>
-        current.map((row) => (row.product === product ? { ...row, qty } : row)),
+    const next = [...lines];
+    for (const item of added) {
+      const existing = next.findIndex(
+        (row) => row.product === item.product && !siblingOf(next, row),
       );
+      if (existing >= 0) {
+        clearQtyDraft(next[existing].lineId);
+        next[existing] = {
+          ...next[existing],
+          qty: next[existing].qty + item.qty,
+          baseQty: next[existing].baseQty + item.qty,
+        };
+      } else {
+        next.push(newLine(item));
+      }
     }
+    setLines(next);
   };
 
-  const isQtyInvalid = (product: string) => {
-    const draft = qtyDrafts[product];
+  const clearQtyDraft = (lineId: string) => {
+    setQtyDrafts((current) => {
+      if (!(lineId in current)) return current;
+      const next = { ...current };
+      delete next[lineId];
+      return next;
+    });
+  };
+
+  const setLineQty = (lineId: string, qty: number) => {
+    clearQtyDraft(lineId);
+    setLines(changeLineQty(lines, lineId, qty, isEdit));
+  };
+
+  /** 입력 중에는 글자만 둔다 (한 글자씩 칠 때마다 줄이 나뉘지 않게). 칸을 벗어날 때 수량에 넣는다 */
+  const typeLineQty = (lineId: string, raw: string) => {
+    setQtyDrafts((current) => ({ ...current, [lineId]: raw.replace(/\D/g, "") }));
+  };
+
+  const commitQtyDraft = (lineId: string) => {
+    const draft = qtyDrafts[lineId];
+    if (draft === undefined || !(Number(draft) >= 1)) return;
+    setLineQty(lineId, Number(draft));
+  };
+
+  const isQtyInvalid = (lineId: string) => {
+    const draft = qtyDrafts[lineId];
     return draft !== undefined && !(Number(draft) >= 1);
   };
 
-  const chooseShip = (next: ShipMethod) => {
-    setFormError("");
-    setShip(next);
-    if (next === "delivery" && !addressSaved) {
-      setView("delivery");
-      window.scrollTo(0, 0);
+  const removeLine = (lineId: string) => {
+    const target = lines.find((line) => line.lineId === lineId);
+    if (!target) return;
+    clearQtyDraft(lineId);
+    target.parcel?.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+    if (errorLineId === lineId) clearError();
+    // 나뉜 형제가 남으면 남은 줄 수량이 새 기준이 된다
+    setLines(
+      lines
+        .filter((line) => line.lineId !== lineId)
+        .map((line) =>
+          line.splitGroupId === target.splitGroupId
+            ? { ...line, baseQty: line.qty }
+            : line,
+        ),
+    );
+  };
+
+  const updateLine = (lineId: string, patch: Partial<OrderLine>) => {
+    setLines((current) =>
+      current.map((line) => (line.lineId === lineId ? { ...line, ...patch } : line)),
+    );
+  };
+
+  const openShipView = (lineId: string) => {
+    setShipLineId(lineId);
+    setView("ship");
+    window.scrollTo(0, 0);
+  };
+
+  const chooseLineShip = (line: OrderLine, ship: ShipMethod) => {
+    if (errorLineId === line.lineId) clearError();
+    const next = changeLineShip(lines, line.lineId, ship);
+    setLines(next);
+    // 배달·택배는 정보가 없으면 바로 입력 화면을 연다
+    const updated = next.find((row) => row.lineId === line.lineId);
+    if (updated && ship !== "pickup" && !isLineShipDone(updated)) {
+      openShipView(line.lineId);
     }
   };
 
-  const addPhotos = (files: FileList | null) => {
-    setPhotoError("");
-    if (!files || files.length === 0) return;
-    const accepted: Photo[] = [];
-    for (const file of Array.from(files)) {
-      const kind = orderAttachmentKindOfFile(file);
-      if (!kind) {
-        setPhotoError("사진·PDF·엑셀 파일만 첨부할 수 있어요.");
-        continue;
-      }
-      if (file.size > MAX_PHOTO_BYTES) {
-        setPhotoError("파일 하나는 10MB 이하만 첨부할 수 있어요.");
-        continue;
-      }
-      accepted.push({ file, url: URL.createObjectURL(file), kind });
-    }
-    setPhotos((current) => {
-      // 수정 모드는 이미 붙은 파일도 개수에 넣는다
-      const room = photoLimit - current.length;
-      if (accepted.length > room) {
-        setPhotoError(`파일은 최대 ${MAX_PHOTOS}개까지 첨부할 수 있어요.`);
-        accepted.slice(room).forEach((photo) => URL.revokeObjectURL(photo.url));
-      }
-      return [...current, ...accepted.slice(0, Math.max(0, room))];
-    });
+  const backToForm = () => {
+    setView("form");
+    setShipLineId("");
   };
 
-  const removePhoto = (url: string) => {
-    URL.revokeObjectURL(url);
-    setPhotos((current) => current.filter((photo) => photo.url !== url));
-  };
-
-  const validate = () => {
-    if (!profile) return profileError || "회원 정보를 불러오는 중이에요.";
+  const validate = (): { message: string; lineId?: string } => {
+    if (!profile) return { message: profileError || "회원 정보를 불러오는 중이에요." };
     if (!profile.churchName) {
-      return "회원 정보에 중앙이 없어 주문할 수 없어요. 기본 버전 주문서를 이용해 주세요.";
+      return {
+        message: "회원 정보에 중앙이 없어 주문할 수 없어요. 기본 버전 주문서를 이용해 주세요.",
+      };
     }
-    if (!date) return "날짜를 선택해 주세요.";
-    if (date < todayIso()) return "지난 날짜에는 주문할 수 없어요.";
-    if (isSundayIso(date)) return "일요일에는 주문할 수 없어요.";
-    if (!name.trim()) return "주문자 성명을 입력해 주세요.";
+    if (!date) return { message: "날짜를 선택해 주세요." };
+    if (date < todayIso()) return { message: "지난 날짜에는 주문할 수 없어요." };
+    if (isSundayIso(date)) return { message: "일요일에는 주문할 수 없어요." };
+    if (!name.trim()) return { message: "주문자 성명을 입력해 주세요." };
     if (isProxy && proxyPhone.replace(/\D/g, "").length < 10) {
-      return "대신 주문하는 분의 연락처를 입력해 주세요.";
+      return { message: "대신 주문하는 분의 연락처를 입력해 주세요." };
     }
-    if (!branch) return BRANCH_ERROR;
-    if (items.length === 0) return "상품을 1개 이상 담아 주세요.";
-    if (items.some((item) => isQtyInvalid(item.product))) return QTY_ERROR;
-    if (!ship) return "배송 방법을 선택해 주세요.";
-    if (ship === "delivery" && !addressSaved) return "배달 주소를 입력해 주세요.";
-    if (ship === "parcel") {
-      if (hasDeliveryOnly) {
-        return "선물세트 박스 상품은 개별택배로 보낼 수 없어요. 배달 또는 직접수령을 선택해 주세요.";
+    if (!branch) return { message: BRANCH_ERROR };
+    if (lines.length === 0) return { message: "상품을 1개 이상 담아 주세요." };
+    if (lines.some((line) => isQtyInvalid(line.lineId))) return { message: QTY_ERROR };
+    for (const line of lines) {
+      if (!line.ship) {
+        return { message: `'${line.product}' 배송방식을 선택해 주세요.`, lineId: line.lineId };
       }
-      if (!senderName.trim() || !senderPhone.trim() || !senderAddress.trim()) {
-        return "보내는 사람의 이름·연락처·주소를 입력해 주세요.";
+      if (line.ship === "parcel" && line.deliveryOnly) {
+        return { message: DELIVERY_ONLY_ERROR, lineId: line.lineId };
       }
-      if (
-        photos.length + existingPhotoCount === 0 &&
-        (!receiverName.trim() || !receiverPhone.trim() || !receiverAddress.trim())
-      ) {
-        return "받는 사람의 이름·연락처·주소를 입력하거나 대량 택배 명단 파일을 첨부해 주세요.";
+      if (!isLineShipDone(line)) {
+        return { message: `'${line.product}' 배송정보를 입력해 주세요.`, lineId: line.lineId };
       }
     }
-    return "";
+    return { message: "" };
   };
 
   /** 오류 문구가 보이도록 그 자리로 스크롤한다 (아래쪽에 있으면 안 보여서 버튼이 안 눌리는 것처럼 보인다) */
-  const revealFormError = (message: string) => {
+  const revealFormError = (message: string, lineId?: string) => {
     window.requestAnimationFrame(() => {
-      const target = ORDER_INFO_ERRORS.has(message)
-        ? infoErrorRef.current
-        : bottomErrorRef.current;
+      const target = lineId
+        ? document.getElementById(`jy-line-${lineId}`)
+        : ORDER_INFO_ERRORS.has(message)
+          ? infoErrorRef.current
+          : bottomErrorRef.current;
       target?.scrollIntoView({ block: "center", behavior: "smooth" });
     });
   };
 
-  const goConfirm = () => {
-    const message = validate();
+  const showValidation = () => {
+    const { message, lineId } = validate();
     setFormError(message);
-    if (message) {
-      revealFormError(message);
-      return;
-    }
+    setErrorLineId(lineId ?? "");
+    if (message) revealFormError(message, lineId);
+    return message;
+  };
+
+  const goConfirm = () => {
+    if (showValidation()) return;
     setView("confirm");
     window.scrollTo(0, 0);
   };
 
-  const buildLineShip = (): LineShipInfo => {
-    if (ship === "parcel") {
+  const buildLineShip = (line: OrderLine): LineShipInfo => {
+    if (line.ship === "parcel") {
+      const parcel = line.parcel;
       return {
         ...emptyLineShipInfo("parcel"),
         companyName: "-",
         parcelShipDate: date,
-        senderName: senderName.trim(),
-        senderPhone: senderPhone.trim(),
-        senderAddress: senderAddress.trim(),
-        senderAddressDetail: senderAddressDetail.trim(),
-        recipientName: receiverName.trim(),
-        recipientPhone: receiverPhone.trim(),
-        recipientAddress: receiverAddress.trim(),
-        recipientAddressDetail: receiverAddressDetail.trim(),
+        senderName: parcel?.senderName.trim() ?? "",
+        senderPhone: parcel?.senderPhone.trim() ?? "",
+        senderAddress: parcel?.senderAddress.trim() ?? "",
+        senderAddressDetail: parcel?.senderAddressDetail.trim() ?? "",
+        recipientName: parcel?.receiverName.trim() ?? "",
+        recipientPhone: parcel?.receiverPhone.trim() ?? "",
+        recipientAddress: parcel?.receiverAddress.trim() ?? "",
+        recipientAddressDetail: parcel?.receiverAddressDetail.trim() ?? "",
       };
     }
-    if (ship === "pickup") {
+    if (line.ship === "pickup") {
       return {
         ...emptyLineShipInfo("delivery"),
         companyName: "직접수령",
@@ -605,31 +1173,39 @@ export function NewOrderV2({
         recipientAddress: branchInfo?.name ?? "",
       };
     }
+    const delivery = line.delivery ?? emptyDelivery();
     return {
       ...emptyLineShipInfo("delivery"),
       companyName: "-",
       deliveryDate: date,
       recipientName: ordererDisplay,
-      recipientPhone: deliveryPhone.trim() || ordererPhone,
-      recipientAddress: address.trim(),
-      recipientAddressDetail: addressDetail.trim(),
+      recipientPhone: delivery.phone.trim() || ordererPhone,
+      recipientAddress: delivery.address.trim(),
+      recipientAddressDetail: delivery.addressDetail.trim(),
     };
   };
 
-  /** 기존 제품주문서와 같은 notes 형식으로 상품 줄 하나 = 주문 하나를 만든다 */
-  const buildOrderBody = (item: CartItem) => {
+  /** 기존 제품주문서와 같은 notes 형식으로 상품 줄 하나 = 주문 하나를 만든다 (줄마다 자기 배송방식) */
+  const buildOrderBody = (line: OrderLine) => {
     const branchName = branchInfo?.name ?? "";
-    const lineShip = buildLineShip();
+    const ship = line.ship;
+    const lineShip = buildLineShip(line);
+    const delivery = line.delivery ?? emptyDelivery();
+    const parcel = line.parcel;
     const tag = ship === "parcel" ? "택배" : ship === "pickup" ? "직접수령" : "배달";
     // 메모는 줄 note 괄호 안에 들어가므로 괄호도 바꿔 둔다
-    const memoNote = memo.trim()
-      ? `메모: ${clean(memo.replace(/[()]/g, " "))}`
+    const memoNote = line.memo.trim()
+      ? `메모: ${clean(line.memo.replace(/[()]/g, " "))}`
       : "";
     const lineNote = (
       ship === "delivery"
-        ? [clean(deliveryRequest), remark.trim() ? `비고: ${clean(remark)}` : ""]
+        ? [
+            clean(delivery.request),
+            delivery.remark.trim() ? `비고: ${clean(delivery.remark)}` : "",
+          ]
         : [
-            ship === "parcel" && photos.length + existingPhotoCount > 0
+            ship === "parcel" &&
+            (parcel?.photos.length ?? 0) + line.existingPhotoCount > 0
               ? "대량 택배 명단 파일 첨부"
               : "",
             memoNote,
@@ -638,23 +1214,29 @@ export function NewOrderV2({
       .filter(Boolean)
       .join(", ");
 
-    const deliveryAddress = joinAddress(address, addressDetail);
-    const senderFull = joinAddress(senderAddress, senderAddressDetail);
-    const receiverFull = joinAddress(receiverAddress, receiverAddressDetail);
+    const deliveryAddress = joinAddress(delivery.address, delivery.addressDetail);
+    const senderFull = joinAddress(
+      parcel?.senderAddress ?? "",
+      parcel?.senderAddressDetail ?? "",
+    );
+    const receiverFull = joinAddress(
+      parcel?.receiverAddress ?? "",
+      parcel?.receiverAddressDetail ?? "",
+    );
 
     const shipSegments =
       ship === "parcel"
         ? [
             `택배업체명:-`,
             `택배발송일:${date}`,
-            `보내는사람:${clean(senderName)} / ${clean(senderPhone)} / ${clean(senderFull)}`,
-            senderAddressDetail.trim()
-              ? `보내는분상세주소:${clean(senderAddressDetail)}`
+            `보내는사람:${clean(parcel?.senderName ?? "")} / ${clean(parcel?.senderPhone ?? "")} / ${clean(senderFull)}`,
+            parcel?.senderAddressDetail.trim()
+              ? `보내는분상세주소:${clean(parcel.senderAddressDetail)}`
               : null,
             `수취연락:주소`,
             receiverFull ? `받는분주소:${clean(receiverFull)}` : null,
-            receiverAddressDetail.trim()
-              ? `받는분상세주소:${clean(receiverAddressDetail)}`
+            parcel?.receiverAddressDetail.trim()
+              ? `받는분상세주소:${clean(parcel.receiverAddressDetail)}`
               : null,
           ]
         : ship === "pickup"
@@ -665,8 +1247,8 @@ export function NewOrderV2({
               `받는분:${clean(ordererDisplay)} / ${clean(lineShip.recipientPhone)} / ${clean(deliveryAddress)}`,
               `수취연락:주소`,
               `받는분주소:${clean(deliveryAddress)}`,
-              addressDetail.trim()
-                ? `받는분상세주소:${clean(addressDetail)}`
+              delivery.addressDetail.trim()
+                ? `받는분상세주소:${clean(delivery.addressDetail)}`
                 : null,
             ];
 
@@ -680,16 +1262,16 @@ export function NewOrderV2({
       `주문작업지역:${branchName}`,
       `지부매장:${branchName}`,
       `인사장종류:없음`,
-      `[${tag}] ${item.product} ${item.qty}개${lineNote ? `(${lineNote})` : ""}`,
+      `[${tag}] ${line.product} ${line.qty}개${lineNote ? `(${lineNote})` : ""}`,
       encodeLineShipments([
         {
-          product: item.product,
-          qty: item.qty,
-          baseQty: item.qty,
+          product: line.product,
+          qty: line.qty,
+          baseQty: line.qty,
           note: lineNote,
-          unitPrice: item.unitPrice || 0,
-          lineSection: item.lineSection,
-          deliveryOnly: item.deliveryOnly,
+          unitPrice: line.unitPrice || 0,
+          lineSection: line.lineSection,
+          deliveryOnly: line.deliveryOnly,
           ship: lineShip,
         },
       ]),
@@ -698,14 +1280,14 @@ export function NewOrderV2({
       .join(" / ");
 
     return {
-      totalAmount: item.qty * (item.unitPrice || 0),
+      totalAmount: line.qty * (line.unitPrice || 0),
       notes,
       extraNote: "",
       items: [
         {
-          productName: item.product,
-          quantity: item.qty,
-          price: item.unitPrice || 0,
+          productName: line.product,
+          quantity: line.qty,
+          price: line.unitPrice || 0,
         },
       ],
       shipment: {
@@ -722,17 +1304,33 @@ export function NewOrderV2({
     };
   };
 
-  const uploadPhotos = async (orderIds: number[]) => {
-    const form = new FormData();
-    form.append("orderIds", orderIds.join(","));
-    for (const photo of photos) {
-      form.append("images", photo.file, photo.file.name);
+  /** 줄 순서대로 만든 주문 id 에 그 줄의 명단 파일을 붙일 대상 */
+  const uploadTargetsFor = (orderIds: number[]): UploadTarget[] =>
+    lines
+      .map((line, index) => ({
+        orderId: orderIds[index],
+        photos: line.ship === "parcel" ? (line.parcel?.photos ?? []) : [],
+      }))
+      .filter((target) => target.orderId && target.photos.length > 0);
+
+  /** 줄마다 자기 주문에만 올린다. 실패한 대상만 돌려준다 */
+  const uploadPhotos = async (targets: UploadTarget[]) => {
+    const failed: UploadTarget[] = [];
+    for (const target of targets) {
+      const form = new FormData();
+      form.append("orderIds", String(target.orderId));
+      for (const photo of target.photos) {
+        form.append("images", photo.file, photo.file.name);
+      }
+      const ok = await apiFetch("/api/orders/attachments", {
+        method: "POST",
+        body: form,
+      })
+        .then((response) => response.ok)
+        .catch(() => false);
+      if (!ok) failed.push(target);
     }
-    const response = await apiFetch("/api/orders/attachments", {
-      method: "POST",
-      body: form,
-    });
-    return response.ok;
+    return failed;
   };
 
   /**
@@ -740,9 +1338,9 @@ export function NewOrderV2({
    * - 목록 첫 줄 → 이 주문(id)을 고친다 (상품을 바꿨으면 상품도 바뀐다, 번호 유지)
    * - 나머지 줄 → 같은 그룹에 새 형제 주문으로 만든다 (순번은 editNextSplitIndex 부터)
    */
-  const saveEdit = async (order: ApiMemberOrder, first: CartItem, extras: CartItem[]) => {
+  const saveEdit = async (order: ApiMemberOrder, first: OrderLine, extras: OrderLine[]) => {
     setIsSubmitting(true);
-    setFormError("");
+    clearError();
     const errorMessage = async (response: Response, fallback: string) => {
       const data = (await response.json().catch(() => null)) as {
         message?: string | string[];
@@ -783,7 +1381,7 @@ export function NewOrderV2({
         }
         const startIndex = order.orderGroupKey ? (editNextSplitIndex ?? 2) : 1;
         const lastIndex = startIndex + extras.length - 1;
-        for (const [offset, item] of extras.entries()) {
+        for (const [offset, line] of extras.entries()) {
           const response = await apiFetch("/api/orders", {
             method: "POST",
             body: JSON.stringify({
@@ -793,7 +1391,7 @@ export function NewOrderV2({
               splitCount: Math.max(2, lastIndex),
               userId: getAuthUser()?.id,
               status: "PLACED",
-              ...buildOrderBody(item),
+              ...buildOrderBody(line),
             }),
           });
           const data = (await response.clone().json().catch(() => null)) as {
@@ -826,14 +1424,10 @@ export function NewOrderV2({
     }
 
     const orderIds = [order.id, ...created.map((row) => row.id)];
-    let uploadFailed = false;
-    if (ship === "parcel" && photos.length > 0) {
-      uploadFailed = !(await uploadPhotos(orderIds).catch(() => false));
-    }
+    const failedUploads = await uploadPhotos(uploadTargetsFor(orderIds));
     setResult({
       orderNumbers: [order.orderNumber, ...created.map((row) => row.orderNumber)],
-      orderIds,
-      uploadFailed,
+      failedUploads,
     });
     setIsSubmitting(false);
     onSubmitted(date);
@@ -843,11 +1437,12 @@ export function NewOrderV2({
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
-    const message = validate();
+    const { message, lineId } = validate();
     if (message) {
       setFormError(message);
+      setErrorLineId(lineId ?? "");
       setView("form");
-      revealFormError(message);
+      revealFormError(message, lineId);
       return;
     }
     const auth = getAuthUser();
@@ -856,13 +1451,13 @@ export function NewOrderV2({
       return;
     }
 
-    if (editOrder && items[0]) {
-      await saveEdit(editOrder, items[0], items.slice(1));
+    if (editOrder && lines[0]) {
+      await saveEdit(editOrder, lines[0], lines.slice(1));
       return;
     }
 
     setIsSubmitting(true);
-    setFormError("");
+    clearError();
     const created: Array<{ id: number; orderNumber: string }> = [];
 
     try {
@@ -874,16 +1469,16 @@ export function NewOrderV2({
         throw new Error("주문번호를 발급하지 못했습니다. 다시 시도해 주세요.");
       }
 
-      for (const [index, item] of items.entries()) {
+      for (const [index, line] of lines.entries()) {
         const response = await apiFetch("/api/orders", {
           method: "POST",
           body: JSON.stringify({
             orderGroupKey: issued.orderGroupKey,
             splitIndex: index + 1,
-            splitCount: items.length,
+            splitCount: lines.length,
             userId: auth.id,
             status: "PLACED",
-            ...buildOrderBody(item),
+            ...buildOrderBody(line),
           }),
         });
         const data = (await response.json().catch(() => null)) as {
@@ -917,16 +1512,12 @@ export function NewOrderV2({
       return;
     }
 
-    const orderIds = created.map((order) => order.id);
-    let uploadFailed = false;
-    if (ship === "parcel" && photos.length > 0) {
-      uploadFailed = !(await uploadPhotos(orderIds).catch(() => false));
-    }
-
+    const failedUploads = await uploadPhotos(
+      uploadTargetsFor(created.map((order) => order.id)),
+    );
     setResult({
       orderNumbers: created.map((order) => order.orderNumber),
-      orderIds,
-      uploadFailed,
+      failedUploads,
     });
     setIsSubmitting(false);
     onSubmitted(date);
@@ -937,129 +1528,90 @@ export function NewOrderV2({
   const retryUpload = async () => {
     if (!result || isRetryingUpload) return;
     setIsRetryingUpload(true);
-    const ok = await uploadPhotos(result.orderIds).catch(() => false);
+    const failedUploads = await uploadPhotos(result.failedUploads);
     setIsRetryingUpload(false);
-    if (ok) {
-      setResult({ ...result, uploadFailed: false });
-      onSubmitted(date);
-    }
+    setResult({ ...result, failedUploads });
+    if (failedUploads.length === 0) onSubmitted(date);
   };
 
   const resetForNewOrder = () => {
-    photos.forEach((photo) => URL.revokeObjectURL(photo.url));
-    setPhotos([]);
-    setItems([]);
-    setShip("");
-    setAddressSaved(false);
-    setAddress("");
-    setAddressDetail("");
-    setDeliveryPhone("");
-    setRemark("");
-    setMemo("");
-    setReceiverName("");
-    setReceiverPhone("");
-    setReceiverAddress("");
-    setReceiverAddressDetail("");
+    lines.forEach((line) =>
+      line.parcel?.photos.forEach((photo) => URL.revokeObjectURL(photo.url)),
+    );
+    setLines([]);
+    setQtyDrafts({});
     setResult(null);
-    setFormError("");
+    clearError();
     setView("form");
     window.scrollTo(0, 0);
   };
 
-  const shipLabel = SHIP_OPTIONS.find((option) => option.id === ship)?.label ?? "-";
+  /** 줄 카드에 보여줄 배송정보 한 줄 요약 */
+  const lineShipSummary = (line: OrderLine) => {
+    if (line.ship === "pickup") {
+      return branchInfo
+        ? `${branchInfo.name} 매장에서 ${dateLabel(date)}에 직접 수령해요.`
+        : "작업매장을 선택하면 그 매장에서 직접 수령해요.";
+    }
+    if (!isLineShipDone(line)) return "";
+    if (line.ship === "delivery" && line.delivery) {
+      return `${joinAddress(line.delivery.address, line.delivery.addressDetail)} · ${line.delivery.request}`;
+    }
+    if (line.ship === "parcel" && line.parcel) {
+      const parcel = line.parcel;
+      return parcel.receiverName.trim()
+        ? `받는 분 ${parcel.receiverName.trim()} · ${joinAddress(parcel.receiverAddress, parcel.receiverAddressDetail)}`
+        : `명단 파일 ${parcel.photos.length + line.existingPhotoCount}개`;
+    }
+    return "";
+  };
 
-  if (view === "delivery") {
+  if (view === "ship" && shipLine?.ship === "delivery") {
     return (
-      <div className="jy-wrap">
-        <V2Header title="배달 주소" onBack={() => setView("form")} />
-        <AddressInput
-          id="jy-addr"
-          label="도로명 · 지번 주소"
-          value={address}
-          onChange={setAddress}
-          placeholder="예: 김해시 장유로 123"
-        />
-        <div>
-          <label className="jy-label" htmlFor="jy-addr2">
-            상세 주소
-          </label>
-          <input
-            id="jy-addr2"
-            className="jy-input"
-            value={addressDetail}
-            onChange={(event) => setAddressDetail(event.target.value)}
-            placeholder="동, 호수, 층 등"
-          />
-        </div>
-        <div>
-          <label className="jy-label" htmlFor="jy-aphone">
-            받는 분 연락처
-          </label>
-          <input
-            id="jy-aphone"
-            className="jy-input"
-            type="tel"
-            inputMode="tel"
-            value={deliveryPhone}
-            onChange={(event) => setDeliveryPhone(formatPhone(event.target.value))}
-            placeholder="010-1234-5678"
-          />
-          <p className="jy-hint" style={{ marginTop: 4 }}>
-            비워 두면 주문자 연락처로 접수돼요.
-          </p>
-        </div>
-        <div>
-          <label className="jy-label" htmlFor="jy-areq">
-            배달 요청사항
-          </label>
-          <select
-            id="jy-areq"
-            className="jy-input"
-            value={deliveryRequest}
-            onChange={(event) => setDeliveryRequest(event.target.value)}
-          >
-            {DELIVERY_REQUESTS.map((request) => (
-              <option key={request}>{request}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="jy-label" htmlFor="jy-remark">
-            비고
-          </label>
-          <input
-            id="jy-remark"
-            className="jy-input"
-            value={remark}
-            onChange={(event) => setRemark(event.target.value)}
-            placeholder="배송 관련 요청 사항"
-          />
-        </div>
-        <div className="jy-info">
-          <b>i</b>
-          <span>배달 가능 지역과 배달 일정은 주문 확인 후 지점에서 따로 안내해요.</span>
-        </div>
-        {addressError ? <div className="jy-err">{addressError}</div> : null}
-        <V2Dock>
-          <button
-            type="button"
-            className="jy-btn jy-primary jy-big"
-            onClick={() => {
-              if (!address.trim()) {
-                setAddressError("주소를 입력해 주세요.");
-                return;
-              }
-              setAddressError("");
-              setAddressSaved(true);
-              setShip("delivery");
-              setView("form");
-              window.scrollTo(0, 0);
-            }}
-          >
-            이 주소로 배달하기
-          </button>
-        </V2Dock>
-      </div>
+      <DeliveryInfoView
+        key={shipLine.lineId}
+        product={`${shipLine.product} · ${shipLine.qty}개`}
+        initial={shipLine.delivery ?? (lastDelivery ? { ...lastDelivery } : emptyDelivery())}
+        onBack={backToForm}
+        onSave={(info) => {
+          updateLine(shipLine.lineId, { delivery: info });
+          setLastDelivery(info);
+          if (errorLineId === shipLine.lineId) clearError();
+          backToForm();
+        }}
+      />
+    );
+  }
+
+  if (view === "ship" && shipLine?.ship === "parcel") {
+    return (
+      <ParcelInfoView
+        key={shipLine.lineId}
+        product={`${shipLine.product} · ${shipLine.qty}개`}
+        initial={
+          shipLine.parcel ?? {
+            senderName: lastParcel?.senderName ?? profile?.name ?? "",
+            senderPhone: lastParcel?.senderPhone ?? profile?.phone ?? "",
+            senderAddress: lastParcel?.senderAddress ?? "",
+            senderAddressDetail: lastParcel?.senderAddressDetail ?? "",
+            receiverName: lastParcel?.receiverName ?? "",
+            receiverPhone: lastParcel?.receiverPhone ?? "",
+            receiverAddress: lastParcel?.receiverAddress ?? "",
+            receiverAddressDetail: lastParcel?.receiverAddressDetail ?? "",
+            // 명단 파일은 줄(주문)마다 따로 올린다
+            photos: [],
+          }
+        }
+        initialMemo={shipLine.memo}
+        existingPhotoCount={shipLine.existingPhotoCount}
+        onBack={backToForm}
+        onSave={(info, memo) => {
+          updateLine(shipLine.lineId, { parcel: info, memo });
+          setLastParcel(info);
+          if (errorLineId === shipLine.lineId) clearError();
+          backToForm();
+        }}
+      />
     );
   }
 
@@ -1079,92 +1631,90 @@ export function NewOrderV2({
               {ordererDisplay}
               {isProxy ? ` (대신 주문 · ${ordererPhone})` : ""}
             </dd>
-            <dt>배송방법</dt>
-            <dd>{shipLabel}</dd>
-            {ship === "delivery" ? (
-              <>
-                <dt>배달 주소</dt>
-                <dd>{joinAddress(address, addressDetail)}</dd>
-                <dt>연락처</dt>
-                <dd>{deliveryPhone || ordererPhone || "-"}</dd>
-                <dt>요청사항</dt>
-                <dd>{deliveryRequest}</dd>
-                {remark.trim() ? (
-                  <>
-                    <dt>비고</dt>
-                    <dd>{remark.trim()}</dd>
-                  </>
-                ) : null}
-              </>
-            ) : null}
-            {ship === "pickup" ? (
-              <>
-                <dt>수령 매장</dt>
-                <dd>{branchInfo?.name ?? "-"}</dd>
-              </>
-            ) : null}
-            {ship === "parcel" ? (
-              <>
-                <dt>보내는 사람</dt>
-                <dd>
-                  {senderName} / {senderPhone} /{" "}
-                  {joinAddress(senderAddress, senderAddressDetail)}
-                </dd>
-                <dt>받는 사람</dt>
-                <dd>
-                  {receiverName.trim() || receiverAddress.trim()
-                    ? `${receiverName} / ${receiverPhone} / ${joinAddress(receiverAddress, receiverAddressDetail)}`
-                    : "명단 파일 참고"}
-                </dd>
-                {photos.length + existingPhotoCount ? (
-                  <>
-                    <dt>명단 파일</dt>
-                    <dd>{photos.length + existingPhotoCount}개</dd>
-                  </>
-                ) : null}
-              </>
-            ) : null}
-            {(ship === "pickup" || ship === "parcel") && memo.trim() ? (
-              <>
-                <dt>메모</dt>
-                <dd>{memo.trim()}</dd>
-              </>
-            ) : null}
           </dl>
         </section>
         <section className="jy-card">
           <h2>주문 상품</h2>
-          <table className="jy-table">
-            <thead>
-              <tr>
-                <th>상품</th>
-                <th>수량</th>
-                <th>금액</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.product}>
-                  <td>{item.product}</td>
-                  <td className="jy-num">{item.qty}</td>
-                  <td className="jy-num">{formatWon(displayUnitPrice(item) * item.qty)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {lines.map((line) => {
+            const delivery = line.delivery;
+            const parcel = line.parcel;
+            return (
+              <div key={line.lineId} className="jy-confirm-line">
+                <div className="jy-confirm-line-head">
+                  <strong>{line.product}</strong>
+                  <span className="jy-num">
+                    {line.qty}개 · {formatWon(displayUnitPrice(line) * line.qty)}
+                  </span>
+                </div>
+                <dl className="jy-dl">
+                  <dt>배송방법</dt>
+                  <dd>{shipLabelOf(line.ship)}</dd>
+                  {line.ship === "delivery" && delivery ? (
+                    <>
+                      <dt>배달 주소</dt>
+                      <dd>{joinAddress(delivery.address, delivery.addressDetail)}</dd>
+                      <dt>연락처</dt>
+                      <dd>{delivery.phone || ordererPhone || "-"}</dd>
+                      <dt>요청사항</dt>
+                      <dd>{delivery.request}</dd>
+                      {delivery.remark.trim() ? (
+                        <>
+                          <dt>비고</dt>
+                          <dd>{delivery.remark.trim()}</dd>
+                        </>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {line.ship === "pickup" ? (
+                    <>
+                      <dt>수령 매장</dt>
+                      <dd>{branchInfo?.name ?? "-"}</dd>
+                    </>
+                  ) : null}
+                  {line.ship === "parcel" && parcel ? (
+                    <>
+                      <dt>보내는 사람</dt>
+                      <dd>
+                        {parcel.senderName} / {parcel.senderPhone} /{" "}
+                        {joinAddress(parcel.senderAddress, parcel.senderAddressDetail)}
+                      </dd>
+                      <dt>받는 사람</dt>
+                      <dd>
+                        {parcel.receiverName.trim() || parcel.receiverAddress.trim()
+                          ? `${parcel.receiverName} / ${parcel.receiverPhone} / ${joinAddress(parcel.receiverAddress, parcel.receiverAddressDetail)}`
+                          : "명단 파일 참고"}
+                      </dd>
+                      {parcel.photos.length + line.existingPhotoCount ? (
+                        <>
+                          <dt>명단 파일</dt>
+                          <dd>{parcel.photos.length + line.existingPhotoCount}개</dd>
+                        </>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {line.ship !== "delivery" && line.memo.trim() ? (
+                    <>
+                      <dt>메모</dt>
+                      <dd>{line.memo.trim()}</dd>
+                    </>
+                  ) : null}
+                </dl>
+              </div>
+            );
+          })}
           <div className="jy-total">
             <span>총금액</span>
             <strong className="jy-num">{formatWon(totalDisplayAmount)}</strong>
           </div>
-          {isEdit && items.length > 1 ? (
+          {isEdit && lines.length > 1 ? (
             <p className="jy-hint">
               첫 상품은 이 주문({editOrder?.orderNumber})에 저장되고, 더한 상품{" "}
-              {items.length - 1}건은 새 주문번호로 접수돼요.
+              {lines.length - 1}건은 새 주문번호로 접수돼요.
             </p>
           ) : null}
           {isEdit ? null : (
             <p className="jy-hint">
-              상품마다 주문서가 따로 만들어져요 (총 {items.length}건).
+              상품 줄마다 주문서가 따로 만들어져요 (총 {lines.length}건).
             </p>
           )}
         </section>
@@ -1209,7 +1759,7 @@ export function NewOrderV2({
         <p className="jy-sub">
           주문번호 {result.orderNumbers.filter(Boolean).join(", ") || "-"}
         </p>
-        {result.uploadFailed ? (
+        {result.failedUploads.length ? (
           <div className="jy-info">
             <b>!</b>
             <span>
@@ -1305,7 +1855,7 @@ export function NewOrderV2({
                 aria-pressed={store.id === branch}
                 onClick={() => {
                   setBranch(store.id);
-                  if (formError === BRANCH_ERROR) setFormError("");
+                  if (formError === BRANCH_ERROR) clearError();
                 }}
               >
                 {store.name.slice(0, 2)}
@@ -1360,72 +1910,121 @@ export function NewOrderV2({
             </button>
           </>
         )}
-        {items.length ? (
-          items.map((item, index) => {
-            const qtyInvalid = isQtyInvalid(item.product);
+        {lines.length ? (
+          lines.map((line, index) => {
+            const qtyInvalid = isQtyInvalid(line.lineId);
             const qtyErrorId = `jy-qty-err-${index}`;
+            const sibling = siblingOf(lines, line);
+            const shipDone = isLineShipDone(line);
+            const summary = lineShipSummary(line);
             return (
-              <div key={item.product} className="jy-item-line">
-                <div className="jy-item-name">
-                  <span>{item.product}</span>
-                  {qtyInvalid ? (
-                    <div id={qtyErrorId} className="jy-err" role="alert">
-                      {QTY_ERROR}
-                    </div>
-                  ) : (
-                    <div className="jy-meta jy-num">
-                      {formatWon(displayUnitPrice(item))} × {item.qty} ={" "}
-                      {formatWon(displayUnitPrice(item) * item.qty)}
-                    </div>
-                  )}
-                </div>
-                <span className="jy-qty">
-                  <button
-                    type="button"
-                    className="jy-btn"
-                    aria-label={`${item.product} 수량 줄이기`}
-                    onClick={() => setItemQty(item.product, item.qty - 1)}
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    aria-label={`${item.product} 수량`}
-                    value={qtyDrafts[item.product] ?? String(item.qty)}
-                    aria-invalid={qtyInvalid || undefined}
-                    aria-describedby={qtyInvalid ? qtyErrorId : undefined}
-                    onChange={(event) => typeItemQty(item.product, event.target.value)}
-                    onBlur={() => {
-                      // 올바른 값이면 입력 중 글자를 지우고, 빈칸·0 이면 에러와 함께 그대로 둔다
-                      if (!isQtyInvalid(item.product)) clearQtyDraft(item.product);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="jy-btn"
-                    aria-label={`${item.product} 수량 늘리기`}
-                    onClick={() => setItemQty(item.product, item.qty + 1)}
-                  >
-                    +
-                  </button>
-                  {/* 수정 모드는 상품이 0개가 되지 않게 2줄 이상일 때만 */}
-                  {isEdit && items.length < 2 ? null : (
+              <div key={line.lineId} id={`jy-line-${line.lineId}`} className="jy-line">
+                <div className="jy-item-line">
+                  <div className="jy-item-name">
+                    <span>{line.product}</span>
+                    {qtyInvalid ? (
+                      <div id={qtyErrorId} className="jy-err" role="alert">
+                        {QTY_ERROR}
+                      </div>
+                    ) : (
+                      <div className="jy-meta jy-num">
+                        {formatWon(displayUnitPrice(line))} × {line.qty} ={" "}
+                        {formatWon(displayUnitPrice(line) * line.qty)}
+                      </div>
+                    )}
+                    {sibling ? (
+                      <div className="jy-meta">총 {line.baseQty}개를 나눠 보내요</div>
+                    ) : null}
+                  </div>
+                  <span className="jy-qty">
                     <button
                       type="button"
-                      className="jy-btn jy-link"
-                      onClick={() => {
-                        clearQtyDraft(item.product);
-                        setItems((current) =>
-                          current.filter((row) => row.product !== item.product),
-                        );
-                      }}
+                      className="jy-btn"
+                      aria-label={`${line.product} 수량 줄이기`}
+                      disabled={line.qty <= 1}
+                      onClick={() => setLineQty(line.lineId, line.qty - 1)}
                     >
-                      삭제
+                      −
                     </button>
-                  )}
-                </span>
+                    <input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      aria-label={`${line.product} 수량`}
+                      value={qtyDrafts[line.lineId] ?? String(line.qty)}
+                      aria-invalid={qtyInvalid || undefined}
+                      aria-describedby={qtyInvalid ? qtyErrorId : undefined}
+                      onChange={(event) => typeLineQty(line.lineId, event.target.value)}
+                      // 빈칸·0 이면 에러와 함께 그대로 두고, 올바른 값이면 수량에 넣는다
+                      onBlur={() => commitQtyDraft(line.lineId)}
+                    />
+                    <button
+                      type="button"
+                      className="jy-btn"
+                      aria-label={`${line.product} 수량 늘리기`}
+                      // 나뉜 줄은 합계가 고정이라 형제 줄을 1개는 남긴다
+                      disabled={Boolean(sibling) && line.qty >= line.baseQty - 1}
+                      onClick={() => setLineQty(line.lineId, line.qty + 1)}
+                    >
+                      +
+                    </button>
+                    {/* 수정 모드는 상품이 0개가 되지 않게 2줄 이상일 때만 */}
+                    {isEdit && lines.length < 2 ? null : (
+                      <button
+                        type="button"
+                        className="jy-btn jy-link"
+                        onClick={() => removeLine(line.lineId)}
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </span>
+                </div>
+
+                <div className="jy-line-ship">
+                  <div className="jy-chips">
+                    {SHIP_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="jy-btn jy-chip"
+                        aria-pressed={option.id === line.ship}
+                        aria-label={`${line.product} ${option.label}`}
+                        disabled={option.id === "parcel" && line.deliveryOnly}
+                        onClick={() => chooseLineShip(line, option.id)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {line.ship === "delivery" || line.ship === "parcel" ? (
+                    <button
+                      type="button"
+                      className={`jy-btn jy-mini${shipDone ? " jy-ok" : ""}`}
+                      onClick={() => openShipView(line.lineId)}
+                    >
+                      {shipDone ? "배송정보 수정" : "배송정보 입력"}
+                    </button>
+                  ) : null}
+                </div>
+                {line.deliveryOnly ? (
+                  <div className="jy-meta">선물세트 박스는 택배로 보낼 수 없어요.</div>
+                ) : null}
+                {summary ? <div className="jy-meta">{summary}</div> : null}
+                {line.ship === "pickup" ? (
+                  <input
+                    className="jy-input"
+                    aria-label={`${line.product} 메모`}
+                    value={line.memo}
+                    onChange={(event) => updateLine(line.lineId, { memo: event.target.value })}
+                    placeholder="메모 (선택)"
+                  />
+                ) : null}
+                {errorLineId === line.lineId && formError ? (
+                  <div className="jy-err" role="alert">
+                    {formError}
+                  </div>
+                ) : null}
               </div>
             );
           })
@@ -1435,242 +2034,24 @@ export function NewOrderV2({
             함께 담을 수 있어요.
           </div>
         )}
-        {items.length ? (
-          <div className="jy-total">
-            <span>총금액</span>
-            <strong className="jy-num">{formatWon(totalDisplayAmount)}</strong>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="jy-card">
-        <h2>배송</h2>
-        <div className="jy-chips">
-          {SHIP_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className="jy-btn jy-chip"
-              aria-pressed={option.id === ship}
-              onClick={() => chooseShip(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        {ship === "delivery" && addressSaved ? (
-          <div className="jy-addr-sum">
-            <div>
-              <strong>{address}</strong> {addressDetail}
-              <div className="jy-meta">
-                {deliveryPhone || ordererPhone || "연락처 없음"} · {deliveryRequest}
-                {remark.trim() ? ` · 비고: ${remark.trim()}` : ""}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="jy-btn"
-              style={{ flex: "none", height: 36, fontSize: 13 }}
-              onClick={() => setView("delivery")}
-            >
-              수정
-            </button>
-          </div>
-        ) : null}
-
-        {ship === "pickup" ? (
-          <div className="jy-info">
-            <b>i</b>
-            <span>
-              {branchInfo
-                ? `${branchInfo.name} 매장에서 ${dateLabel(date)}에 직접 수령해요.`
-                : "작업매장을 선택하면 그 매장에서 직접 수령해요."}
-            </span>
-          </div>
-        ) : null}
-
-        {ship === "parcel" ? (
+        {lines.length ? (
           <>
-            {hasDeliveryOnly ? (
-              <div className="jy-err">
-                선물세트 박스 상품은 개별택배로 보낼 수 없어요.
-              </div>
-            ) : null}
-            <h2 style={{ fontSize: 14 }}>보내는 사람</h2>
-            <div className="jy-row">
-              <input
-                className="jy-input"
-                aria-label="보내는 사람 이름"
-                value={senderName}
-                onChange={(event) => setSenderName(event.target.value)}
-                placeholder="이름"
-              />
-              <input
-                className="jy-input"
-                aria-label="보내는 사람 연락처"
-                type="tel"
-                inputMode="tel"
-                value={senderPhone}
-                onChange={(event) => setSenderPhone(formatPhone(event.target.value))}
-                placeholder="연락처"
-              />
-            </div>
-            <AddressInput
-              id="jy-send-addr"
-              label="보내는 사람 주소"
-              value={senderAddress}
-              onChange={setSenderAddress}
-              placeholder="주소"
-            />
-            <input
-              className="jy-input"
-              aria-label="보내는 사람 상세 주소"
-              value={senderAddressDetail}
-              onChange={(event) => setSenderAddressDetail(event.target.value)}
-              placeholder="상세 주소"
-            />
-
-            <h2 style={{ fontSize: 14 }}>
-              받는 사람{" "}
-              {photos.length ? (
-                <span className="jy-meta">(명단 파일이 있으면 선택)</span>
-              ) : null}
-            </h2>
-            <div className="jy-row">
-              <input
-                className="jy-input"
-                aria-label="받는 사람 이름"
-                value={receiverName}
-                onChange={(event) => setReceiverName(event.target.value)}
-                placeholder="이름"
-              />
-              <input
-                className="jy-input"
-                aria-label="받는 사람 연락처"
-                type="tel"
-                inputMode="tel"
-                value={receiverPhone}
-                onChange={(event) => setReceiverPhone(formatPhone(event.target.value))}
-                placeholder="연락처"
-              />
-            </div>
-            <AddressInput
-              id="jy-recv-addr"
-              label="받는 사람 주소"
-              value={receiverAddress}
-              onChange={setReceiverAddress}
-              placeholder="주소"
-            />
-            <input
-              className="jy-input"
-              aria-label="받는 사람 상세 주소"
-              value={receiverAddressDetail}
-              onChange={(event) => setReceiverAddressDetail(event.target.value)}
-              placeholder="상세 주소"
-            />
-
-            <div>
-              <span className="jy-label">
-                택배관련 파일업로드(사진촬영 및 PDF,엑셀등 최대 {MAX_PHOTOS}개까지 업로드가능)
-              </span>
-              <div className="jy-photos">
-                {photos.map((photo) => (
-                  <div key={photo.url} className="jy-photo">
-                    {photo.kind === "image" ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={photo.url} alt="첨부한 명단 사진" />
-                    ) : (
-                      <div className="jy-photo-file" title={photo.file.name}>
-                        <span aria-hidden>{orderAttachmentIcon(photo.kind)}</span>
-                        <span className="jy-photo-file-name">{photo.file.name}</span>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      aria-label={`${photo.file.name} 삭제`}
-                      onClick={() => removePhoto(photo.url)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                {photos.length < photoLimit ? (
-                  <>
-                    <button
-                      type="button"
-                      className="jy-photo-add"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
-                      <span style={{ fontSize: 22 }} aria-hidden>
-                        📷
-                      </span>
-                      사진 촬영
-                    </button>
-                    <button
-                      type="button"
-                      className="jy-photo-add"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <span style={{ fontSize: 22 }} aria-hidden>
-                        📁
-                      </span>
-                      파일 업로드
-                    </button>
-                  </>
-                ) : null}
-              </div>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                hidden
-                onChange={(event) => {
-                  addPhotos(event.target.files);
-                  event.target.value = "";
-                }}
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={ORDER_ATTACHMENT_ACCEPT}
-                multiple
-                hidden
-                onChange={(event) => {
-                  addPhotos(event.target.files);
-                  event.target.value = "";
-                }}
-              />
-              {existingPhotoCount ? (
-                <p className="jy-hint" style={{ marginTop: 6 }}>
-                  이미 첨부된 파일 {existingPhotoCount}개는 그대로 있어요. 새로 올린 파일만 추가돼요.
-                </p>
-              ) : null}
-              {photoError ? <div className="jy-err">{photoError}</div> : null}
+            {isEdit ? null : (
+              <p className="jy-hint">
+                상품마다 배송방식을 고르세요. 배달·택배를 고른 뒤 수량을 줄이면 나머지는
+                반대 방식으로 나눠져요.
+              </p>
+            )}
+            <div className="jy-total">
+              <span>총금액</span>
+              <strong className="jy-num">{formatWon(totalDisplayAmount)}</strong>
             </div>
           </>
         ) : null}
-
-        {ship === "pickup" || ship === "parcel" ? (
-          <div>
-            <label className="jy-label" htmlFor="jy-memo">
-              메모
-            </label>
-            <textarea
-              id="jy-memo"
-              className="jy-input"
-              value={memo}
-              onChange={(event) => setMemo(event.target.value)}
-              placeholder="전달할 내용을 적어 주세요"
-            />
-          </div>
-        ) : null}
       </section>
 
-      {/* 주문 정보 칸의 오류는 그 섹션 아래에 보인다 */}
-      {formError && !isInfoError ? (
+      {/* 주문 정보 칸·상품 줄의 오류는 그 자리에 보인다 */}
+      {formError && !isInfoError && !errorLineId ? (
         <div ref={bottomErrorRef} className="jy-err" role="alert">
           {formError}
         </div>
@@ -1679,7 +2060,7 @@ export function NewOrderV2({
       <V2Dock>
         <div className="jy-cartbar">
           <div>
-            <div className="jy-meta">담은 상품 {items.length}개</div>
+            <div className="jy-meta">담은 상품 {lines.length}개</div>
             <div className="jy-t jy-num">총 {totalQty}개</div>
           </div>
           <button type="button" className="jy-btn jy-primary" onClick={goConfirm}>
