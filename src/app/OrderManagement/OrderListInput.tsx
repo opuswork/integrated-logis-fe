@@ -375,25 +375,10 @@ function isBoxProduct(productName: string) {
   return productName.includes("박스");
 }
 
-/** 선물세트 + (개) → ② 선물세트 낱개 (박스는 ① 우선) */
-function isGiftUnitProduct(
-  category: string,
-  productName: string,
-  spec?: string | null,
-) {
-  if (isBoxProduct(productName)) {
-    return false;
-  }
-  return (
-    isGiftSetCategory(category) &&
-    (productName.includes("(개)") || (spec ?? "").includes("(개)"))
-  );
-}
-
 /**
  * 줄 구분. 내부 값 "box" 는 저장된 배송상세에도 들어 있어 그대로 두고, 뜻은 ① 일반품이다.
  * 카테고리를 알면 선물세트 → ② / 그 밖 → ①.
- * 품명만 아는 예전 주문 복원: '(개)' 이고 '박스' 가 아니면 ② 선물세트 낱개, 나머지는 ①.
+ * 품명만 아는 예전 주문 복원: '(개)' 이고 '박스' 가 아니면 ② 선물세트, 나머지는 ①.
  */
 function inferLineSection(
   productName: string,
@@ -1568,7 +1553,8 @@ function catalogItemMatches(
       return false;
     }
   } else if (mode === "giftUnit") {
-    if (!isGiftUnitProduct(item.category, item.productName, item.spec)) {
+    // ② 선물세트: 선물세트 카테고리 전부 ('(개)'·박스 모두)
+    if (!isGiftSetCategory(item.category)) {
       return false;
     }
   } else if (
@@ -1897,7 +1883,7 @@ export function ProductAddDialog({
     : mode === "box"
       ? "일반품 추가"
       : mode === "giftUnit"
-        ? "선물세트 낱개 추가"
+        ? "선물세트 추가"
         : "상품 추가";
 
   const scopeLabel = fixedCategory
@@ -1907,7 +1893,7 @@ export function ProductAddDialog({
     : mode === "box"
       ? "일반품만 표시"
       : mode === "giftUnit"
-        ? "선물세트 (개)만 표시"
+        ? "선물세트만 표시"
         : "(현재 배달/택배 탭 기준)";
   const showCategoryFilter = mode === "all" && !unifiedCatalog;
   const subtitle = showOrderKind ? (
@@ -5862,7 +5848,7 @@ function ProductOrderPanel({
   const boxProductItems = productItems.filter(
     (item) => item.lineSection === "box",
   );
-  const boxAddLabel = "+ 일반품 추가";
+  const boxAddLabel = "+ 상품 추가";
   const giftUnitProductItems = productItems.filter(
     (item) => item.lineSection !== "box",
   );
@@ -6334,7 +6320,7 @@ function ProductOrderPanel({
         <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-[13px] font-bold text-[#1A202C]">
-              ① 일반품
+              ① 상품
             </h4>
             <button
               type="button"
@@ -6417,7 +6403,7 @@ function ProductOrderPanel({
                 }}
                 className="rounded-lg border border-[#9AE6B4] bg-[#F0FFF4] px-3 py-2 text-[12.5px] font-bold text-[#276749]"
               >
-                + 선물세트 낱개 추가
+                + 선물세트 추가
               </button>
               <button
                 type="button"
@@ -6437,18 +6423,18 @@ function ProductOrderPanel({
           {isWideProductList ? (
             <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
               <Table
-                caption="선물세트 낱개 상품 목록"
+                caption="선물세트 상품 목록"
                 columns={productColumns}
                 data={giftUnitProductItems}
-                emptyMessage="선물세트 낱개 상품만 검색·주문할 수 있습니다. '+ 선물세트 낱개 추가'로 담아주세요."
+                emptyMessage="선물세트 상품을 검색·주문할 수 있습니다. '+ 선물세트 추가'로 담아주세요."
                 scrollable={!isDesktop}
                 visibleRows={isDesktop ? undefined : 4}
               />
             </div>
           ) : giftUnitProductItems.length === 0 ? (
             <p className="rounded-lg border border-dashed border-[#E2E8F0] bg-white px-3 py-6 text-center text-[12px] text-[#A0AEC0] italic">
-              선물세트 낱개 상품만 검색·주문할 수 있습니다. &apos;+ 선물세트
-              낱개 추가&apos;로 담아주세요.
+              선물세트 상품을 검색·주문할 수 있습니다. &apos;+ 선물세트
+              추가&apos;로 담아주세요.
             </p>
           ) : (
             <ul className="space-y-2.5">
@@ -6629,8 +6615,12 @@ function ProductOrderPanel({
         defaultOrderKind={orderType ?? "delivery"}
         // 전역 주문종류가 없어 "주문종류: …" 안내를 숨긴다.
         showOrderKind={false}
-        // ① 일반품은 관리자도 공개 상품만 고른다
-        openStockOnly={openStockOnly || productDialogMode === "box"}
+        // ① 일반품·② 선물세트는 관리자도 공개 상품만 고른다
+        openStockOnly={
+          openStockOnly ||
+          productDialogMode === "box" ||
+          productDialogMode === "giftUnit"
+        }
         presentation={productDialogPresentation}
         mode={productDialogMode}
         onClose={() => setIsProductDialogOpen(false)}
