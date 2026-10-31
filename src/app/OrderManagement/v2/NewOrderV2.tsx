@@ -849,13 +849,6 @@ export function NewOrderV2({
   /** 상품 담기 창에 보일 구분 */
   const [productCategory, setProductCategory] =
     useState<ProductCategory>("일반품");
-  /** 다른 줄의 배송정보 화면을 열 때 미리 채워 줄 마지막 입력값 */
-  const [lastDelivery, setLastDelivery] = useState<DeliveryInfo | null>(
-    restored?.lines[0]?.delivery ?? null,
-  );
-  const [lastParcel, setLastParcel] = useState<ParcelInfo | null>(
-    restored?.lines[0]?.parcel ?? null,
-  );
   const linesRef = useRef<OrderLine[]>([]);
 
   const [formError, setFormError] = useState("");
@@ -1571,11 +1564,11 @@ export function NewOrderV2({
       <DeliveryInfoView
         key={shipLine.lineId}
         product={`${shipLine.product} · ${shipLine.qty}개`}
-        initial={shipLine.delivery ?? (lastDelivery ? { ...lastDelivery } : emptyDelivery())}
+        // 다른 줄의 입력값은 가져오지 않는다 (줄마다 빈 칸에서 시작)
+        initial={shipLine.delivery ?? emptyDelivery()}
         onBack={backToForm}
         onSave={(info) => {
           updateLine(shipLine.lineId, { delivery: info });
-          setLastDelivery(info);
           if (errorLineId === shipLine.lineId) clearError();
           backToForm();
         }}
@@ -1589,16 +1582,16 @@ export function NewOrderV2({
         key={shipLine.lineId}
         product={`${shipLine.product} · ${shipLine.qty}개`}
         initial={
+          // 다른 줄의 입력값은 가져오지 않는다. 보내는 사람 이름·연락처만 내 정보로 채운다
           shipLine.parcel ?? {
-            senderName: lastParcel?.senderName ?? profile?.name ?? "",
-            senderPhone: lastParcel?.senderPhone ?? profile?.phone ?? "",
-            senderAddress: lastParcel?.senderAddress ?? "",
-            senderAddressDetail: lastParcel?.senderAddressDetail ?? "",
-            receiverName: lastParcel?.receiverName ?? "",
-            receiverPhone: lastParcel?.receiverPhone ?? "",
-            receiverAddress: lastParcel?.receiverAddress ?? "",
-            receiverAddressDetail: lastParcel?.receiverAddressDetail ?? "",
-            // 명단 파일은 줄(주문)마다 따로 올린다
+            senderName: profile?.name ?? "",
+            senderPhone: profile?.phone ?? "",
+            senderAddress: "",
+            senderAddressDetail: "",
+            receiverName: "",
+            receiverPhone: "",
+            receiverAddress: "",
+            receiverAddressDetail: "",
             photos: [],
           }
         }
@@ -1607,7 +1600,6 @@ export function NewOrderV2({
         onBack={backToForm}
         onSave={(info, memo) => {
           updateLine(shipLine.lineId, { parcel: info, memo });
-          setLastParcel(info);
           if (errorLineId === shipLine.lineId) clearError();
           backToForm();
         }}
