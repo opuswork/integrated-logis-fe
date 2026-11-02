@@ -3705,6 +3705,10 @@ function ProductOrderPanel({
   >({});
   /** 배송정보입력 시트를 연 대상 줄 */
   const [shipSheetLineId, setShipSheetLineId] = useState<string | null>(null);
+  /** 체크한 줄들 (배달·택배 배송정보를 한 번에 입력) */
+  const [checkedLineIds, setCheckedLineIds] = useState<string[]>([]);
+  /** 한 번에 입력 중인 줄들. 시트를 저장하면 이 줄 모두에 같은 배송정보가 들어간다 */
+  const [shipSheetGroupIds, setShipSheetGroupIds] = useState<string[]>([]);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productDialogMode, setProductDialogMode] = useState<
     "all" | "box" | "giftUnit"
@@ -4771,6 +4775,71 @@ function ProductOrderPanel({
     !row.shipSaved &&
     !row.statusLocked;
 
+  /** 여러 줄에 같은 배송정보를 넣고 입력 완료로 표시한다 */
+  const fillLinesWithShipInfo = (lineIds: string[], info: LineShipInfo) => {
+    if (lineIds.length === 0) return;
+    setLineShipInfo((current) => {
+      const next = { ...current };
+      for (const id of lineIds) next[id] = { ...info };
+      return next;
+    });
+    setProductItems((current) =>
+      current.map((row) =>
+        lineIds.includes(row.lineId) ? { ...row, shipSaved: true } : row,
+      ),
+    );
+  };
+
+  /** 체크할 수 있는 줄: 배달·택배를 고른 잠기지 않은 줄 */
+  const isLineCheckable = (row: ProductLineItem) =>
+    (row.orderKind === "delivery" || row.orderKind === "parcel") &&
+    !row.statusLocked;
+  const checkableLines = productItems.filter(isLineCheckable);
+  // 방식이 바뀌었거나 지워진 줄은 체크에서 빠진 것으로 본다.
+  const activeCheckedIds = checkedLineIds.filter((id) =>
+    checkableLines.some((row) => row.lineId === id),
+  );
+  const allLinesChecked =
+    checkableLines.length > 0 &&
+    activeCheckedIds.length === checkableLines.length;
+
+  const toggleLineChecked = (lineId: string, checked: boolean) => {
+    setCheckedLineIds((current) =>
+      checked
+        ? [...current.filter((id) => id !== lineId), lineId]
+        : current.filter((id) => id !== lineId),
+    );
+  };
+
+  const toggleAllLinesChecked = (checked: boolean) => {
+    setCheckedLineIds(checked ? checkableLines.map((row) => row.lineId) : []);
+  };
+
+  /** 체크한 줄의 배송정보를 시트 하나로 한 번에 입력한다 */
+  const openCheckedShipSheet = () => {
+    const rows = productItems.filter((row) =>
+      activeCheckedIds.includes(row.lineId),
+    );
+    if (rows.length === 0) {
+      setAlertDialog({
+        open: true,
+        message: "배송정보를 입력할 상품을 체크해 주세요. (배달·택배 상품만)",
+      });
+      return;
+    }
+    if (rows.some((row) => row.orderKind !== rows[0].orderKind)) {
+      setAlertDialog({
+        open: true,
+        message:
+          "배달 상품과 택배 상품은 입력 항목이 달라 함께 입력할 수 없습니다. 같은 배송방식끼리 체크해 주세요.",
+      });
+      return;
+    }
+    setShipSheetQueue([]);
+    setShipSheetGroupIds(rows.map((row) => row.lineId));
+    setShipSheetLineId(rows[0].lineId);
+  };
+
   /** 배송정보가 필요한 첫 줄의 시트를 바로 열고 나머지는 저장할 때마다 이어 연다 */
   const startShipSheetQueue = (rows: ProductLineItem[]) => {
     const ids = rows.filter(needsShipSheet).map((row) => row.lineId);
@@ -4781,21 +4850,30 @@ function ProductOrderPanel({
 
   const closeShipSheet = () => {
     setShipSheetQueue([]);
+    setShipSheetGroupIds([]);
     setShipSheetLineId(null);
   };
 
   /** 배송정보입력 시트 저장 */
   const saveLineShipInfo = (lineId: string, info: LineShipInfo) => {
-    setLineShipInfo((current) => ({ ...current, [lineId]: info }));
-    setProductItems((current) =>
-      current.map((row) =>
-        row.lineId === lineId ? { ...row, shipSaved: true } : row,
-      ),
-    );
-    // 이어 열 줄: 그새 지워졌거나 방식이 바뀌었거나 이미 저장된 줄은 건너뛴다.
+    // 체크한 줄을 한 번에 입력한 경우: 그 줄 모두에 같은 배송정보를 넣고 체크를 푼다.
+    const sharedIds = shipSheetGroupIds.includes(lineId)
+      ? shipSheetGroupIds.filter((id) => id !== lineId)
+      : [];
+    fillLinesWithShipInfo([lineId, ...sharedIds], info);
+    if (shipSheetGroupIds.length > 0) {
+      setShipSheetGroupIds([]);
+      setCheckedLineIds([]);
+    }
+    // 이어 열 줄: 그새 지워졌거나 방식이 바뀌었거나 이미 저장된(방금 함께 채운) 줄은 건너뛴다.
     const nextIndex = shipSheetQueue.findIndex((candidate) => {
       const row = productItems.find((item) => item.lineId === candidate);
-      return candidate !== lineId && row !== undefined && needsShipSheet(row);
+      return (
+        candidate !== lineId &&
+        !sharedIds.includes(candidate) &&
+        row !== undefined &&
+        needsShipSheet(row)
+      );
     });
     setShipSheetQueue(
       nextIndex >= 0 ? shipSheetQueue.slice(nextIndex + 1) : [],
@@ -5642,6 +5720,24 @@ function ProductOrderPanel({
   ): TableColumn<ProductLineItem>[] => {
     const cols: TableColumn<ProductLineItem>[] = [
       {
+        // 배달·택배 줄을 체크해 배송정보를 한 번에 입력한다
+        key: "check",
+        header: "",
+        className: "w-[36px] px-1 text-center",
+        render: (row) =>
+          isLineCheckable(row) ? (
+            <input
+              type="checkbox"
+              aria-label={`${row.product} 선택`}
+              checked={activeCheckedIds.includes(row.lineId)}
+              onChange={(event) =>
+                toggleLineChecked(row.lineId, event.target.checked)
+              }
+              className="size-4 accent-[#3182CE]"
+            />
+          ) : null,
+      },
+      {
         key: "product",
         header: "상품명",
         render: (row) => (
@@ -5868,6 +5964,18 @@ function ProductOrderPanel({
     .size;
   const shipSheetLine =
     productItems.find((item) => item.lineId === shipSheetLineId) ?? null;
+  /** 체크한 줄을 한 번에 입력 중이면 시트 제목에 "○○ 외 N개" 와 합계 수량 */
+  const shipSheetGroupRows = productItems.filter((item) =>
+    shipSheetGroupIds.includes(item.lineId),
+  );
+  const shipSheetProductName =
+    shipSheetLine && shipSheetGroupRows.length > 1
+      ? `${shipSheetLine.product} 외 ${shipSheetGroupRows.length - 1}개`
+      : (shipSheetLine?.product ?? "");
+  const shipSheetQty =
+    shipSheetGroupRows.length > 1
+      ? shipSheetGroupRows.reduce((sum, item) => sum + item.qty, 0)
+      : (shipSheetLine?.qty ?? 0);
   /** 저장값이 없으면 달력에서 고른 납품일을 미리 채워 준다. */
   const shipSheetInitial =
     shipSheetLine && shipSheetLine.orderKind
@@ -6354,6 +6462,46 @@ function ProductOrderPanel({
               {boxAddLabel}
             </button>
           </div>
+          {/* ①·② 의 배달·택배 상품을 체크해 배송정보를 한 번에 입력 */}
+          {isWideProductList ? (
+            <div className="mb-2.5 flex flex-wrap items-center justify-end gap-3">
+              <label
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-[12.5px] font-semibold",
+                  checkableLines.length > 0
+                    ? "cursor-pointer text-[#1A202C]"
+                    : "cursor-not-allowed text-[#A0AEC0]",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={allLinesChecked}
+                  disabled={checkableLines.length === 0}
+                  onChange={(event) =>
+                    toggleAllLinesChecked(event.target.checked)
+                  }
+                  className="size-4 accent-[#3182CE]"
+                />
+                전체선택
+              </label>
+              <button
+                type="button"
+                disabled={activeCheckedIds.length === 0}
+                onClick={openCheckedShipSheet}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-[12.5px] font-bold",
+                  activeCheckedIds.length > 0
+                    ? "border-[#1A365D] bg-[#1A365D] text-white"
+                    : "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]",
+                )}
+              >
+                선택 상품 배송정보 입력
+                {activeCheckedIds.length > 0
+                  ? ` (${activeCheckedIds.length})`
+                  : ""}
+              </button>
+            </div>
+          ) : null}
           {isWideProductList ? (
             <div className="overflow-x-auto rounded-lg border border-[#E2E8F0] bg-white">
               <Table
@@ -6661,8 +6809,8 @@ function ProductOrderPanel({
           key={shipSheetLine.lineId}
           open
           kind={shipSheetLine.orderKind}
-          productName={shipSheetLine.product}
-          qty={shipSheetLine.qty}
+          productName={shipSheetProductName}
+          qty={shipSheetQty}
           initial={shipSheetInitial}
           minDateIso={todayDateValue()}
           shipDateLocked={shipDateLocked}
