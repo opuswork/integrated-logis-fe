@@ -3,15 +3,16 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type Dispatch,
+  type PointerEvent,
   type SetStateAction,
 } from "react";
 
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
@@ -300,111 +301,212 @@ function ProductImageSheet({
   );
 }
 
+/** 이미지 위 렌즈 영역을 오른쪽 확대창에 몇 배로 보여줄지 */
+const IMAGE_ZOOM_SCALE = 2.5;
+/** 마우스 호버 확대를 쓰는 화면 (그 밖에는 탭하면 큰 이미지 시트) */
+const HOVER_ZOOM_QUERY = "(hover: hover) and (min-width: 1040px)";
+
+type ImageZoomState = {
+  /** 이미지 박스 크기 (px) */
+  boxWidth: number;
+  boxHeight: number;
+  /** 박스 안 렌즈 위치·크기 (px) */
+  lensLeft: number;
+  lensTop: number;
+  lensWidth: number;
+  lensHeight: number;
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * 상품 상세 — 왼쪽 이미지, 오른쪽 상세 항목.
+ * PC 는 이미지에 마우스를 올리면 렌즈 영역이 오른쪽(상세 항목 위)에 확대되어 보인다 (아마존식).
+ */
 function StockInventoryDetailContent({
   product,
+  onImageOpen,
 }: {
   product: StockInventoryRow;
+  /** 호버 확대가 없는 화면에서 이미지를 탭했을 때 */
+  onImageOpen: () => void;
 }) {
-  const [imageOpen, setImageOpen] = useState(false);
   const hasImage = Boolean(product.imageUrl?.trim());
+  const [zoom, setZoom] = useState<ImageZoomState | null>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+
+  const updateZoom = (event: PointerEvent<HTMLButtonElement>) => {
+    const pane = paneRef.current;
+    if (event.pointerType !== "mouse" || !pane) {
+      return;
+    }
+    const box = event.currentTarget.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
+    const lensWidth = Math.min(paneRect.width / IMAGE_ZOOM_SCALE, box.width);
+    const lensHeight = Math.min(paneRect.height / IMAGE_ZOOM_SCALE, box.height);
+    setZoom({
+      boxWidth: box.width,
+      boxHeight: box.height,
+      lensLeft: clamp(
+        event.clientX - box.left - lensWidth / 2,
+        0,
+        box.width - lensWidth,
+      ),
+      lensTop: clamp(
+        event.clientY - box.top - lensHeight / 2,
+        0,
+        box.height - lensHeight,
+      ),
+      lensWidth,
+      lensHeight,
+    });
+  };
 
   return (
-    <>
-      <div className="mb-4">
+    <div className="grid gap-5 min-[1040px]:grid-cols-[360px_minmax(0,1fr)] min-[1040px]:gap-6">
+      <div>
         {hasImage ? (
           <>
             <button
               type="button"
-              aria-label="이미지 크게 보기"
-              onClick={() => setImageOpen(true)}
-              className="mx-auto block cursor-zoom-in rounded transition hover:ring-2 hover:ring-brand/40"
+              aria-label="상품 이미지"
+              onPointerMove={updateZoom}
+              onPointerLeave={() => setZoom(null)}
+              onClick={() => {
+                if (!window.matchMedia(HOVER_ZOOM_QUERY).matches) {
+                  onImageOpen();
+                }
+              }}
+              className="relative mx-auto block aspect-square w-full max-w-[360px] cursor-zoom-in overflow-hidden rounded-lg border border-line bg-white min-[1040px]:cursor-crosshair"
             >
-              <ProductThumbnail product={product} className="h-40 w-40 max-h-40" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={productImageSrc(product.imageUrl)}
+                alt={product.productName || "상품 이미지"}
+                draggable={false}
+                className="h-full w-full object-contain"
+              />
+              {zoom ? (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute hidden border border-[#94a3b8] bg-white/40 [background-image:radial-gradient(#64748b_1px,transparent_1px)] [background-size:4px_4px] min-[1040px]:block"
+                  style={{
+                    left: zoom.lensLeft,
+                    top: zoom.lensTop,
+                    width: zoom.lensWidth,
+                    height: zoom.lensHeight,
+                  }}
+                />
+              ) : null}
             </button>
             <p className="mt-1.5 text-center text-xs text-[#64748b]">
-              클릭하면 크게 볼 수 있습니다
+              <span className="min-[1040px]:hidden">
+                탭하면 크게 볼 수 있습니다
+              </span>
+              <span className="hidden min-[1040px]:inline">
+                마우스를 올리면 확대됩니다
+              </span>
             </p>
-            <ProductImageSheet
-              product={product}
-              open={imageOpen}
-              onClose={() => setImageOpen(false)}
-            />
           </>
         ) : (
           <ProductThumbnail
             product={product}
-            className="mx-auto h-40 w-40 max-h-40"
+            className="mx-auto aspect-square w-full max-w-[360px]"
           />
         )}
       </div>
 
-      <dl className="grid gap-3 min-[640px]:grid-cols-2 min-[1040px]:grid-cols-3">
-        <DetailField label="코드" value={product.code} />
-        <DetailField label="품명" value={product.productName} />
-        <DetailField label="구분" value={product.category} />
-        <DetailField
-          label="고객 공개"
-          value={product.openStock !== false ? "공개" : "비공개"}
-        />
-        <DetailField label="규격" value={product.spec ?? ""} />
-        <DetailField label="단위" value={String(product.unit)} />
-        <DetailField label="재고" value={formatStock(product.stock, product.stockMax)} />
-        <DetailField
-          label="적용일자"
-          value={formatDate(product.effectiveDate)}
-        />
-        <DetailField
-          label="500만원 이상 할인가"
-          value={formatPrice(product.priceOver500man)}
-        />
-        <DetailField
-          label="100만원 이상 할인가"
-          value={formatPrice(product.priceOver100man)}
-        />
-        <DetailField
-          label="도매 기본가"
-          value={formatPrice(product.wholesalePrice)}
-        />
-        <DetailField
-          label="준회원가"
-          value={formatPrice(product.associatePrice)}
-        />
-        <DetailField
-          label="소매가"
-          value={formatOptionalPrice(product.retailPrice)}
-        />
-        <DetailField
-          label="슈퍼 납품가"
-          value={formatOptionalPrice(product.supermarketPrice)}
-        />
-        <DetailField
-          label="급식가"
-          value={formatOptionalPrice(product.schoolServePrice)}
-        />
-        <DetailField
-          label="단가노출여부"
-          value={formatYesNo(product.unitPriceShow)}
-        />
-        <DetailField label="비과세" value={formatYesNo(product.taxExemption)} />
-        <DetailField
-          label="원본 파일명"
-          value={product.imageOriginalName ?? ""}
-        />
-        <DetailField
-          label="저장 파일명"
-          value={product.imageStoredName ?? ""}
-        />
-        <DetailField label="등록일" value={formatDate(product.createdAt)} />
-        <DetailField label="수정일" value={formatDate(product.updatedAt)} />
-        {product.imageUrl?.trim() ? (
-          <DetailField
-            label="사진 URL"
-            value={product.imageUrl}
-            className="min-[640px]:col-span-2 min-[1040px]:col-span-3"
-          />
+      <div ref={paneRef} className="relative min-w-0">
+        {zoom ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-10 hidden overflow-hidden rounded-lg border border-line bg-white shadow-[0_8px_30px_rgba(15,23,42,0.18)] min-[1040px]:block"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={productImageSrc(product.imageUrl)}
+              alt=""
+              className="absolute max-w-none object-contain"
+              style={{
+                width: zoom.boxWidth * IMAGE_ZOOM_SCALE,
+                height: zoom.boxHeight * IMAGE_ZOOM_SCALE,
+                left: -zoom.lensLeft * IMAGE_ZOOM_SCALE,
+                top: -zoom.lensTop * IMAGE_ZOOM_SCALE,
+              }}
+            />
+          </div>
         ) : null}
-      </dl>
-    </>
+
+        <dl className="grid gap-3 min-[640px]:grid-cols-2 min-[1040px]:grid-cols-3">
+          <DetailField label="코드" value={product.code} />
+          <DetailField label="품명" value={product.productName} />
+          <DetailField label="구분" value={product.category} />
+          <DetailField
+            label="고객 공개"
+            value={product.openStock !== false ? "공개" : "비공개"}
+          />
+          <DetailField label="규격" value={product.spec ?? ""} />
+          <DetailField label="단위" value={String(product.unit)} />
+          <DetailField label="재고" value={formatStock(product.stock, product.stockMax)} />
+          <DetailField
+            label="적용일자"
+            value={formatDate(product.effectiveDate)}
+          />
+          <DetailField
+            label="500만원 이상 할인가"
+            value={formatPrice(product.priceOver500man)}
+          />
+          <DetailField
+            label="100만원 이상 할인가"
+            value={formatPrice(product.priceOver100man)}
+          />
+          <DetailField
+            label="도매 기본가"
+            value={formatPrice(product.wholesalePrice)}
+          />
+          <DetailField
+            label="준회원가"
+            value={formatPrice(product.associatePrice)}
+          />
+          <DetailField
+            label="소매가"
+            value={formatOptionalPrice(product.retailPrice)}
+          />
+          <DetailField
+            label="슈퍼 납품가"
+            value={formatOptionalPrice(product.supermarketPrice)}
+          />
+          <DetailField
+            label="급식가"
+            value={formatOptionalPrice(product.schoolServePrice)}
+          />
+          <DetailField
+            label="단가노출여부"
+            value={formatYesNo(product.unitPriceShow)}
+          />
+          <DetailField label="비과세" value={formatYesNo(product.taxExemption)} />
+          <DetailField
+            label="원본 파일명"
+            value={product.imageOriginalName ?? ""}
+          />
+          <DetailField
+            label="저장 파일명"
+            value={product.imageStoredName ?? ""}
+          />
+          <DetailField label="등록일" value={formatDate(product.createdAt)} />
+          <DetailField label="수정일" value={formatDate(product.updatedAt)} />
+          {product.imageUrl?.trim() ? (
+            <DetailField
+              label="사진 URL"
+              value={product.imageUrl}
+              className="min-[640px]:col-span-2 min-[1040px]:col-span-3"
+            />
+          ) : null}
+        </dl>
+      </div>
+    </div>
   );
 }
 
@@ -420,8 +522,11 @@ function ProductFormEditor({
   isSaving,
   onCancel,
   onSubmit,
+  inSheet = false,
 }: {
   mode: "create" | "edit";
+  /** 바텀시트 안에 넣을 때: 테두리·제목·"목록으로" 없이 폼만 */
+  inSheet?: boolean;
   currentProduct: StockInventoryRow | null;
   form: ProductFormState;
   setForm: Dispatch<SetStateAction<ProductFormState>>;
@@ -476,20 +581,26 @@ function ProductFormEditor({
   })();
 
   return (
-    <section className="rounded-lg border border-line bg-panel p-4">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h4 className="text-base font-semibold text-ink">
-            {mode === "create" ? "상품 등록" : "상품 수정"}
-          </h4>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            이미지 파일은 선택 사항이며, 업로드 시 미리보기를 확인할 수 있습니다.
-          </p>
+    <section
+      className={
+        inSheet ? undefined : "rounded-lg border border-line bg-panel p-4"
+      }
+    >
+      {inSheet ? null : (
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h4 className="text-base font-semibold text-ink">
+              {mode === "create" ? "상품 등록" : "상품 수정"}
+            </h4>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              이미지 파일은 선택 사항이며, 업로드 시 미리보기를 확인할 수 있습니다.
+            </p>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+            목록으로
+          </Button>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-          목록으로
-        </Button>
-      </div>
+      )}
 
       <div className="mb-4 flex flex-col items-start gap-3 min-[640px]:flex-row">
         <ProductThumbnail
@@ -758,7 +869,8 @@ function ProductFormEditor({
   );
 }
 
-function StockInventoryDetailPanel({
+/** 상품 상세 바텀시트 (PC·모바일 공통) */
+function StockInventoryDetailSheet({
   product,
   onClose,
   onEdit,
@@ -771,79 +883,47 @@ function StockInventoryDetailPanel({
   onDelete: () => void;
   isDeleting: boolean;
 }) {
-  return (
-    <section className="hidden rounded-lg border border-line bg-panel p-4 min-[1040px]:block">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h4 className="text-base font-semibold text-ink">상품 상세</h4>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            {product.productName}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onEdit}>
-            수정
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-red text-red hover:bg-[#fef2f2]"
-            disabled={isDeleting}
-            onClick={onDelete}
-          >
-            {isDeleting ? "삭제 중..." : "삭제"}
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            닫기
-          </Button>
-        </div>
-      </div>
+  const [imageOpen, setImageOpen] = useState(false);
 
-      <StockInventoryDetailContent key={product.id} product={product} />
-    </section>
-  );
-}
-
-function StockInventoryDetailModal({
-  product,
-  onClose,
-  onEdit,
-  onDelete,
-  isDeleting,
-}: {
-  product: StockInventoryRow;
-  onClose: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  isDeleting: boolean;
-}) {
   return (
-    <div className="min-[1040px]:hidden">
-      <Dialog open title="상품 상세" onClose={onClose}>
-        <p className="mb-3 text-[13px] text-muted-foreground">
-          {product.productName}
-        </p>
-        <div className="max-h-[60vh] overflow-y-auto pr-1">
-          <StockInventoryDetailContent key={product.id} product={product} />
+    <>
+      <BottomSheet
+        open
+        title="상품 상세"
+        subtitle={product.productName}
+        onClose={onClose}
+        footer={
+          <div className="mx-auto flex max-w-[1200px] flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onEdit}>
+              수정
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-red text-red hover:bg-[#fef2f2]"
+              disabled={isDeleting}
+              onClick={onDelete}
+            >
+              {isDeleting ? "삭제 중..." : "삭제"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="mx-auto max-w-[1200px] px-5 pb-6">
+          <StockInventoryDetailContent
+            key={product.id}
+            product={product}
+            onImageOpen={() => setImageOpen(true)}
+          />
         </div>
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onEdit}>
-            수정
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-red text-red hover:bg-[#fef2f2]"
-            disabled={isDeleting}
-            onClick={onDelete}
-          >
-            {isDeleting ? "삭제 중..." : "삭제"}
-          </Button>
-        </div>
-      </Dialog>
-    </div>
+      </BottomSheet>
+      {/* 시트 안에 두면 시트의 transform 때문에 fixed 위치가 어긋나므로 형제로 둔다 */}
+      <ProductImageSheet
+        product={product}
+        open={imageOpen}
+        onClose={() => setImageOpen(false)}
+      />
+    </>
   );
 }
 
@@ -1200,9 +1280,6 @@ export function StockInventoryMng() {
       }
 
       await loadProducts();
-      if ("id" in data) {
-        setSelectedProduct(data);
-      }
       backToList();
     } catch (err) {
       setFormError(
@@ -1345,7 +1422,8 @@ export function StockInventoryMng() {
     );
   }
 
-  if (view === "create" || view === "edit") {
+  // 수정은 목록 위 바텀시트로 띄우고, 등록만 전체 화면 폼을 쓴다.
+  if (view === "create") {
     return (
       <div className="space-y-3">
         <div>
@@ -1518,25 +1596,43 @@ export function StockInventoryMng() {
           ) : null}
 
           {selectedProduct ? (
-            <>
-              <StockInventoryDetailPanel
-                product={selectedProduct}
-                onClose={() => setSelectedProduct(null)}
-                onEdit={() => openEdit(selectedProduct)}
-                onDelete={() => void handleDelete(selectedProduct)}
-                isDeleting={isDeleting}
-              />
-              <StockInventoryDetailModal
-                product={selectedProduct}
-                onClose={() => setSelectedProduct(null)}
-                onEdit={() => openEdit(selectedProduct)}
-                onDelete={() => void handleDelete(selectedProduct)}
-                isDeleting={isDeleting}
-              />
-            </>
+            <StockInventoryDetailSheet
+              product={selectedProduct}
+              onClose={() => setSelectedProduct(null)}
+              onEdit={() => openEdit(selectedProduct)}
+              onDelete={() => void handleDelete(selectedProduct)}
+              isDeleting={isDeleting}
+            />
           ) : null}
         </>
       )}
+
+      <BottomSheet
+        open={view === "edit"}
+        title="상품 수정"
+        subtitle={editingProduct?.productName}
+        onClose={backToList}
+      >
+        <div className="mx-auto max-w-[1200px] px-5 pb-6">
+          <p className="mb-4 text-[13px] text-muted-foreground">
+            이미지 파일은 선택 사항이며, 업로드 시 미리보기를 확인할 수 있습니다.
+          </p>
+          <ProductFormEditor
+            inSheet
+            mode="edit"
+            currentProduct={editingProduct}
+            form={form}
+            setForm={setForm}
+            imageFile={imageFile}
+            setImageFile={setImageFile}
+            existingImageUrl={editingProduct?.imageUrl ?? null}
+            formError={formError}
+            isSaving={isSaving}
+            onCancel={backToList}
+            onSubmit={() => void handleSave()}
+          />
+        </div>
+      </BottomSheet>
     </div>
   );
 }
