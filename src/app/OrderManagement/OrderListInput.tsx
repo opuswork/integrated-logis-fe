@@ -1618,6 +1618,7 @@ export function ProductAddDialog({
   presentation = "dialog",
   unifiedCatalog = false,
   fixedCategory,
+  largeText = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1641,6 +1642,8 @@ export function ProductAddDialog({
   unifiedCatalog?: boolean;
   /** 개인앱 새 주문: 주문서에서 고른 구분(일반품/선물세트)만 보인다 */
   fixedCategory?: "일반품" | "선물세트";
+  /** 관리자 제품주문서: 창 글자 1.5배 (globals.css `.om-text-150`), 창도 넓힌다 */
+  largeText?: boolean;
   /** editList 시 미리 채울 수량 (품명 → 수량) */
   initialQuantities?: Record<string, number>;
   /** editList 확정. catalogProducts = 카탈로그에 있는 품명(없는 행은 유지 판단용) */
@@ -2335,7 +2338,7 @@ export function ProductAddDialog({
       open={open}
       title={dialogTitle}
       onClose={onClose}
-      className="max-w-lg"
+      className={largeText ? "om-text-150 max-w-3xl" : "max-w-lg"}
     >
       <div className="space-y-3">
         {subtitle ? (
@@ -6936,6 +6939,7 @@ function ProductOrderPanel({
         }
         presentation={productDialogPresentation}
         mode={productDialogMode}
+        largeText={largeText}
         onClose={() => setIsProductDialogOpen(false)}
         onAddItems={addProductItems}
       />
