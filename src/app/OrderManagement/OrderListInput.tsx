@@ -45,6 +45,7 @@ import { VoiceFeedbackRecorder } from "@/components/voice-feedback-recorder";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, getAuthUser } from "@/lib/auth";
+import { hangulInputValue, hasLatinLetters, qwertyToHangul } from "@/lib/hangul-typing";
 import {
   formatMonthDay,
   isSundayIso,
@@ -1575,11 +1576,21 @@ function catalogItemMatches(
   if (!normalizedKeyword) {
     return true;
   }
-  return (
+  if (
     item.productName.toLowerCase().includes(normalizedKeyword) ||
     item.code.toLowerCase().includes(normalizedKeyword) ||
     (item.spec ?? "").toLowerCase().includes(normalizedKeyword)
-  );
+  ) {
+    return true;
+  }
+  // 영문 상태로 친 검색어는 한글로도 찾아본다 (rlqna → 기쁨). 규격의 mL·L 때문에
+  // 입력칸 글자는 바꾸지 않는다. 대소문자(쌍자음)를 살리려고 원래 검색어로 바꾼다.
+  const trimmed = filter.keyword.trim();
+  if (!hasLatinLetters(trimmed)) {
+    return false;
+  }
+  const hangulKeyword = qwertyToHangul(trimmed);
+  return item.productName.includes(hangulKeyword);
 }
 
 export interface ProductDialogItem {
@@ -2529,7 +2540,8 @@ function ChurchSearchField({
           if (readOnly) {
             return;
           }
-          onQueryChange(event.target.value);
+          // 영문 상태로 친 글자는 한글로 바꾼다 (5, 서울, 원주 …)
+          onQueryChange(hangulInputValue(event));
           setIsOpen(true);
         }}
         onKeyDown={(event) => {
@@ -2776,7 +2788,8 @@ function OrdererNameField({
         }
         value={value}
         onChange={(event) => {
-          onChange(event.target.value);
+          // 영문 상태로 친 이름은 한글로 바꾼다
+          onChange(hangulInputValue(event));
           setIsOpen(true);
         }}
         onKeyDown={(event) =>
@@ -3521,7 +3534,9 @@ function LineShipSheet({
             <input
               type="text"
               value={draft.recipientName}
-              onChange={(event) => patch({ recipientName: event.target.value })}
+              onChange={(event) =>
+                patch({ recipientName: hangulInputValue(event) })
+              }
               className={inputClass}
             />
             <label className={labelClass}>받는 분 전화번호 *</label>
@@ -3574,7 +3589,9 @@ function LineShipSheet({
             <input
               type="text"
               value={draft.senderName}
-              onChange={(event) => patch({ senderName: event.target.value })}
+              onChange={(event) =>
+                patch({ senderName: hangulInputValue(event) })
+              }
               className={inputClass}
             />
             <label className={labelClass}>
@@ -3613,7 +3630,9 @@ function LineShipSheet({
             <input
               type="text"
               value={draft.recipientName}
-              onChange={(event) => patch({ recipientName: event.target.value })}
+              onChange={(event) =>
+                patch({ recipientName: hangulInputValue(event) })
+              }
               placeholder="선택 입력"
               className={inputClass}
             />
@@ -6410,7 +6429,7 @@ function ProductOrderPanel({
                           : ordererName
                     }
                     onChange={(event) =>
-                      handleOrdererNameInput(event.target.value)
+                      handleOrdererNameInput(hangulInputValue(event))
                     }
                     readOnly={ordererFieldsReadOnly}
                     required
