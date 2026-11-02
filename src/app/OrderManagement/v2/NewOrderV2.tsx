@@ -1909,6 +1909,15 @@ export function NewOrderV2({
             const sibling = siblingOf(lines, line);
             const shipDone = isLineShipDone(line);
             const summary = lineShipSummary(line);
+            // 배달 비고 · 택배 메모는 요약 바로 아래 한 줄로 (직접수령은 아래 입력칸)
+            const shipNote =
+              line.ship === "delivery" && shipDone
+                ? line.delivery?.remark.trim()
+                  ? `비고: ${line.delivery.remark.trim()}`
+                  : ""
+                : line.ship === "parcel" && shipDone && line.memo.trim()
+                  ? `메모: ${line.memo.trim()}`
+                  : "";
             return (
               <div key={line.lineId} id={`jy-line-${line.lineId}`} className="jy-line">
                 <div className="jy-item-line">
@@ -2003,6 +2012,7 @@ export function NewOrderV2({
                   <div className="jy-meta">선물세트 박스는 택배로 보낼 수 없어요.</div>
                 ) : null}
                 {summary ? <div className="jy-meta">{summary}</div> : null}
+                {shipNote ? <div className="jy-meta">{shipNote}</div> : null}
                 {line.ship === "pickup" ? (
                   <input
                     className="jy-input"
