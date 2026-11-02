@@ -272,3 +272,34 @@
     background: #1a365d;
   }
 }
+
+/*
+ * 관리자 제품주문서: 매장·주문자 / ① 상품 / ② 선물세트 섹션 글자 1.5배.
+ * 하위 요소가 px 고정 크기 클래스를 쓰므로 크기별로 1.5배 값을 덮어쓴다.
+ * (레이어 밖 규칙이라 Tailwind utilities 보다 우선한다)
+ */
+.om-text-150 { font-size: 1.5em; }
+.om-text-150 .text-\[10px\] { font-size: 15px; }
+.om-text-150 .text-\[10\.5px\] { font-size: 15.75px; }
+.om-text-150 .text-\[11px\] { font-size: 16.5px; }
+.om-text-150 .text-xs,
+.om-text-150 .text-\[12px\] { font-size: 18px; }
+.om-text-150 .text-\[12\.5px\] { font-size: 18.75px; }
+.om-text-150 .text-\[13px\] { font-size: 19.5px; }
+.om-text-150 .text-sm,
+.om-text-150 .text-\[14px\] { font-size: 21px; }
+.om-text-150 .text-\[14\.5px\] { font-size: 21.75px; }
+.om-text-150 .text-\[15px\] { font-size: 22.5px; }
+.om-text-150 .text-base,
+.om-text-150 .text-\[16px\] { font-size: 24px; }
+.om-text-150 .text-\[17px\] { font-size: 25.5px; }
+.om-text-150 .text-lg,
+.om-text-150 .text-\[18px\] { font-size: 27px; }
+.om-text-150 .text-\[20px\] { font-size: 30px; }
+.om-text-150 .text-\[22px\] { font-size: 33px; }
+.om-text-150 .text-\[24px\] { font-size: 36px; }
+.om-text-150 input,
+.om-text-150 textarea,
+.om-text-150 select {
+  font-size: inherit;
+}
