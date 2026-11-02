@@ -297,6 +297,7 @@ function ShipKindButtons({
   parcelDisabled = false,
   size = "card",
   labelPrefix = "",
+  thickBorder = false,
 }: {
   value: OrderType | "";
   onChange: (kind: OrderType) => void;
@@ -304,6 +305,8 @@ function ShipKindButtons({
   /** 배달 전용 상품: 택배를 고를 수 없다 (직접수령은 가능) */
   parcelDisabled?: boolean;
   size?: "table" | "card" | "sheet";
+  /** 상품 추가 창 위쪽 배송방식 버튼: 테두리 2px */
+  thickBorder?: boolean;
   /** 스크린리더용: 어떤 상품의 배송선택인지 */
   labelPrefix?: string;
 }) {
@@ -335,6 +338,7 @@ function ShipKindButtons({
               size === "table" && "h-8 rounded px-1.5 text-[12px]",
               size === "card" && "h-9 rounded-md px-1.5 text-[12.5px]",
               size === "sheet" && "h-14 rounded-xl border-2 px-1 text-[16px]",
+              thickBorder && "border-2",
               selected
                 ? "border-[#5B2A86] bg-[#F5EEFB] text-[#5B2A86]"
                 : "border-[#E2E8F0] bg-white text-[#1A202C] hover:bg-[#F8FAFC]",
@@ -1991,6 +1995,7 @@ export function ProductAddDialog({
       <div className="flex">
         <ShipKindButtons
           size={isSheet ? "sheet" : "card"}
+          thickBorder
           value={presetKind}
           onChange={setPresetKind}
         />
