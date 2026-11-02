@@ -5700,13 +5700,20 @@ function ProductOrderPanel({
       {
         key: "lineShip",
         header: "배송선택",
-        className: "w-[330px] px-1",
+        // 글자 1.5배(관리자)에서는 버튼 3개가 330px 에 들어가지 않아
+        // 칸을 넓히고 배송정보 버튼을 아랫줄로 내린다.
+        className: largeText ? "w-[400px] px-1" : "w-[330px] px-1",
         render: (row: ProductLineItem) => {
           const isPickup = row.orderKind === "pickup";
           const done = isPickup ? Boolean(row.note.trim()) : row.shipSaved;
           return (
             <div>
-              <div className="flex items-center gap-1.5">
+              <div
+                className={cn(
+                  "flex gap-1.5",
+                  largeText ? "flex-col" : "items-center",
+                )}
+              >
                 <ShipKindButtons
                   size="table"
                   labelPrefix={row.product}
@@ -5726,6 +5733,7 @@ function ProductOrderPanel({
                   }
                   className={cn(
                     "shrink-0 rounded border px-1.5 py-1 text-[11px] font-bold",
+                    largeText && "self-start",
                     !row.orderKind
                       ? "cursor-not-allowed border-[#E2E8F0] bg-[#EDF2F7] text-[#A0AEC0]"
                       : done
