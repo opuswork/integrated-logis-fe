@@ -20,7 +20,11 @@ import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 200, 500].map((size) => ({
+  value: String(size),
+  label: `${size}줄`,
+}));
+const DEFAULT_PAGE_SIZE = 20;
 
 type StockInventoryRow = {
   [key: string]: string | number | boolean | null;
@@ -922,6 +926,7 @@ export function StockInventoryMng() {
   const [openFilter, setOpenFilter] = useState("all");
   const [searchField, setSearchField] = useState("all");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selectedProduct, setSelectedProduct] =
     useState<StockInventoryRow | null>(null);
   const [view, setView] = useState<"list" | "create" | "edit">("list");
@@ -1023,10 +1028,10 @@ export function StockInventoryMng() {
     setPage(1);
   }, [keyword, categoryFilter, openFilter, searchField]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageOffset = (safePage - 1) * PAGE_SIZE;
-  const pageProducts = filteredProducts.slice(pageOffset, pageOffset + PAGE_SIZE);
+  const pageOffset = (safePage - 1) * pageSize;
+  const pageProducts = filteredProducts.slice(pageOffset, pageOffset + pageSize);
 
   const openCreate = () => {
     setView("create");
@@ -1287,6 +1292,11 @@ export function StockInventoryMng() {
       render: (row) => formatPrice(row.wholesalePrice),
     },
     {
+      key: "retailPrice",
+      header: "소매가",
+      render: (row) => formatOptionalPrice(row.retailPrice) || "-",
+    },
+    {
       key: "effectiveDate",
       header: "적용일자",
       render: (row) => formatDate(row.effectiveDate),
@@ -1438,12 +1448,30 @@ export function StockInventoryMng() {
                 </div>
               </div>
             </div>
-            <p className="mt-2 text-xs text-[#64748b]">
-              총 {filteredProducts.length}건
-              {keyword.trim() || categoryFilter !== "all" || openFilter !== "all"
-                ? ` (전체 ${products.length}건 중)`
-                : ""}
-            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-[#64748b]">
+                총 {filteredProducts.length}건
+                {keyword.trim() || categoryFilter !== "all" || openFilter !== "all"
+                  ? ` (전체 ${products.length}건 중)`
+                  : ""}
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-[#64748b]">
+                  상품보기
+                </span>
+                <div className="w-[96px]">
+                  <Dropdown
+                    aria-label="상품보기"
+                    options={PAGE_SIZE_OPTIONS}
+                    value={String(pageSize)}
+                    onChange={(value) => {
+                      setPageSize(Number(value));
+                      setPage(1);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           </section>
 
           <div className="space-y-2.5 min-[1040px]:hidden">
