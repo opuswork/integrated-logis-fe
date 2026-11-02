@@ -3259,6 +3259,22 @@ function parcelCarryFrom(delivery: LineShipInfo): LineShipInfo {
   };
 }
 
+/**
+ * 택배 배송정보 → 배달 시트 초기값: 발송일·업체명·받는 분·주소만 이어받는다.
+ * 보내는 사람·이메일/팩스는 배달에 없고, 배달 시간·받는 분 전화번호는 비워 둔다.
+ */
+function deliveryCarryFrom(parcel: LineShipInfo): LineShipInfo {
+  const hasAddress = parcel.contactMode === "address";
+  return {
+    ...emptyLineShipInfo("delivery"),
+    deliveryDate: parcel.parcelShipDate,
+    companyName: parcel.companyName,
+    recipientName: parcel.recipientName,
+    recipientAddress: hasAddress ? parcel.recipientAddress : "",
+    recipientAddressDetail: hasAddress ? parcel.recipientAddressDetail : "",
+  };
+}
+
 function LineShipSheet({
   open,
   kind,
@@ -4899,6 +4915,21 @@ function ProductOrderPanel({
       setShipSheetLineId(parcelRows[0].lineId);
       return;
     }
+    // 반대로 체크한 택배 줄이 모두 입력돼 있으면 맨 위 택배 줄의 배송정보를
+    // 이어받아 배달 시트를 바로 연다 (택배 시트는 다시 열지 않는다).
+    const savedParcelInfo =
+      deliveryRows.length > 0 &&
+      parcelRows.length > 0 &&
+      parcelRows.every((row) => row.shipSaved && lineShipInfo[row.lineId])
+        ? lineShipInfo[parcelRows[0].lineId]
+        : null;
+    if (savedParcelInfo) {
+      setShipSheetCarry(deliveryCarryFrom(savedParcelInfo));
+      setPendingParcelGroupIds([]);
+      setShipSheetGroupIds(deliveryRows.map((row) => row.lineId));
+      setShipSheetLineId(deliveryRows[0].lineId);
+      return;
+    }
     const firstRows = deliveryRows.length > 0 ? deliveryRows : parcelRows;
     setShipSheetCarry(null);
     setPendingParcelGroupIds(
@@ -6062,7 +6093,7 @@ function ProductOrderPanel({
   /** 저장값이 없으면 달력에서 고른 납품일을 미리 채워 준다. */
   const shipSheetInitial =
     shipSheetLine && shipSheetLine.orderKind
-      ? ((shipSheetCarry && shipSheetLine.orderKind === "parcel"
+      ? ((shipSheetCarry && shipSheetLine.orderKind === shipSheetCarry.kind
           ? shipSheetCarry
           : null) ??
         lineShipInfo[shipSheetLine.lineId] ??
