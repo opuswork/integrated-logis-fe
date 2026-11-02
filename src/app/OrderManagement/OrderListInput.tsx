@@ -1952,7 +1952,10 @@ export function ProductAddDialog({
           type="search"
           autoFocus
           value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
+          // 영문 상태로 친 글자는 완성된 글자가 될 때만 한글로 (1.8L·500mL 은 그대로)
+          onChange={(event) =>
+            setKeyword(hangulInputValue(event, { syllablesOnly: true }))
+          }
           onKeyDown={(event) => {
             if (event.key !== "Tab" || event.shiftKey) {
               return;
