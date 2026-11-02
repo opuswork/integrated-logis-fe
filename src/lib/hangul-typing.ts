@@ -140,16 +140,29 @@ function keyToJamo(key: string) {
   return KEY_TO_JAMO[key] ?? KEY_TO_JAMO[key.toLowerCase()] ?? key;
 }
 
+export type HangulConvertOptions = {
+  /**
+   * 완성된 글자만 나올 때만 바꾼다. 낱자(ㄱ, ㅣ, ㅢ …)가 남으면 영문 그대로 둔다.
+   * 상품 검색처럼 영문(1.8L, 500mL)도 쳐야 하는 칸에 쓴다.
+   */
+  syllablesOnly?: boolean;
+};
+
 /**
  * 영문 글자가 섞인 한글/영문 덩어리만 두벌식으로 다시 조합한다.
  * 영문이 없는 부분(이미 한글, 숫자, 기호, 공백)은 건드리지 않는다.
  */
-export function qwertyToHangul(text: string): string {
-  return text.replace(/[A-Za-z가-힣ㄱ-ㅣ]+/g, (chunk) =>
-    /[A-Za-z]/.test(chunk)
-      ? composeJamo([...hangulToKeys(chunk)].map(keyToJamo))
-      : chunk,
-  );
+export function qwertyToHangul(
+  text: string,
+  options: HangulConvertOptions = {},
+): string {
+  return text.replace(/[A-Za-z가-힣ㄱ-ㅣ]+/g, (chunk) => {
+    if (!/[A-Za-z]/.test(chunk)) {
+      return chunk;
+    }
+    const composed = composeJamo([...hangulToKeys(chunk)].map(keyToJamo));
+    return options.syllablesOnly && /[ㄱ-ㅣ]/.test(composed) ? chunk : composed;
+  });
 }
 
 /** 영문이 들어 있는지 (검색어를 한글로도 찾아볼지 판단) */
@@ -163,6 +176,7 @@ export function hasLatinLetters(text: string) {
  */
 export function hangulInputValue(
   event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  options: HangulConvertOptions = {},
 ): string {
   const input = event.target;
   const raw = input.value;
@@ -170,10 +184,10 @@ export function hangulInputValue(
   if (native.isComposing || !hasLatinLetters(raw)) {
     return raw;
   }
-  const converted = qwertyToHangul(raw);
+  const converted = qwertyToHangul(raw, options);
   const caret = input.selectionStart;
   if (caret !== null && caret < raw.length) {
-    const nextCaret = qwertyToHangul(raw.slice(0, caret)).length;
+    const nextCaret = qwertyToHangul(raw.slice(0, caret), options).length;
     requestAnimationFrame(() => input.setSelectionRange(nextCaret, nextCaret));
   }
   return converted;
