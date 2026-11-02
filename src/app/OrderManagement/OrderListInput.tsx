@@ -3628,6 +3628,7 @@ function ProductOrderPanel({
   onRemoveGreeting,
   presetShipDate = null,
   sheetOnMobile = false,
+  largeText = false,
 }: {
   onGreetingClick: (context: {
     productNames: string[];
@@ -3641,6 +3642,8 @@ function ProductOrderPanel({
   }) => void;
   /** When true (admin proxy order), leave customer fields empty for manual entry. */
   blankCustomerFields?: boolean;
+  /** 관리자 제품주문서: 매장·주문자 / ① / ② 섹션 글자를 1.5배로 (globals.css `.om-text-150`) */
+  largeText?: boolean;
   /** 개인회원: 상품 추가 목록에 공개(openStock) 상품만 표시 */
   openStockOnly?: boolean;
   hasUnsavedGreeting?: boolean;
@@ -6072,7 +6075,12 @@ function ProductOrderPanel({
   return (
     <div className="mx-auto w-full max-w-[420px] space-y-0 rounded-2xl bg-[#F5F7FA] sm:max-w-none">
       {/* Highlight: store + orderer */}
-      <div className="mb-4 rounded-xl border-2 border-[#F6AD55] bg-white p-4">
+      <div
+        className={cn(
+          "mb-4 rounded-xl border-2 border-[#F6AD55] bg-white p-4",
+          largeText && "om-text-150",
+        )}
+      >
         <div className="mb-3.5 flex rounded-lg bg-[#EDF2F7] p-[3px]">
           {BRANCH_STORES.map((store) => {
             const selected = branchStore === store.id;
@@ -6317,7 +6325,12 @@ function ProductOrderPanel({
           </p>
         ) : null}
         {/* ① 일반품 */}
-        <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+        <div
+          className={cn(
+            "rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3",
+            largeText && "om-text-150",
+          )}
+        >
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-[13px] font-bold text-[#1A202C]">
               ① 상품
@@ -6389,7 +6402,12 @@ function ProductOrderPanel({
         </div>
 
         {/* ② 선물세트 (인사장 주문) */}
-        <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+        <div
+          className={cn(
+            "rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3",
+            largeText && "om-text-150",
+          )}
+        >
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-[13px] font-bold text-[#1A202C]">
               ② 선물세트 (인사장 주문)
@@ -7828,6 +7846,7 @@ export function OrderListInput({
               <ProductOrderPanel
                 key={orderFormKey}
                 blankCustomerFields={embedded}
+                largeText={embedded}
                 openStockOnly={!embedded}
                 sheetOnMobile={!embedded}
                 presetShipDate={presetShipDate}
