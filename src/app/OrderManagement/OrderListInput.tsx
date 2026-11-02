@@ -3244,6 +3244,8 @@ function GreetingViewModal({
  * 직접수령은 이 시트 없이 줄 아래 메모 칸만 쓴다.
  * 하단 고정 버튼으로만 저장되며, 저장 전 값은 해당 줄에 반영되지 않는다.
  */
+const SENDER_INFO_ERROR = "보내는 사람 정보를 모두 입력해 주세요.";
+
 function LineShipSheet({
   open,
   kind,
@@ -3331,7 +3333,7 @@ function LineShipSheet({
       !draft.senderPhone.trim() ||
       !draft.senderAddress.trim()
     ) {
-      return "보내는 사람 정보를 모두 입력해 주세요.";
+      return SENDER_INFO_ERROR;
     }
     if (draft.contactMode === "address" && !draft.recipientAddress.trim()) {
       return "받는 사람 주소를 입력해 주세요.";
@@ -3339,10 +3341,19 @@ function LineShipSheet({
     return "";
   };
 
+  /** 보내는 사람 오류는 보내는 사람 상세주소 바로 아래에, 나머지는 맨 아래에 보인다 */
+  const isSenderError = error === SENDER_INFO_ERROR;
+
   const handleSave = () => {
     const message = validate();
     if (message) {
       setError(message);
+      // 위쪽에 뜨는 오류도 보이도록 스크롤한다.
+      requestAnimationFrame(() =>
+        document
+          .getElementById("line-ship-error")
+          ?.scrollIntoView({ block: "center", behavior: "smooth" }),
+      );
       return;
     }
     // 배달은 항상 주소로 수취 (이메일/팩스 선택 없음)
@@ -3560,6 +3571,14 @@ function LineShipSheet({
                 patchSenderAddress({ senderAddressDetail: value })
               }
             />
+            {isSenderError ? (
+              <p
+                id="line-ship-error"
+                className="-mt-1 mb-3 rounded-lg border border-[#E53E3E]/30 bg-[#FDEEEE] px-3 py-2 text-[13px] text-[#E53E3E]"
+              >
+                {error}
+              </p>
+            ) : null}
             {/* 택배는 받는 분 성함이 선택 항목 (배달에서 이어받을 수 있다) */}
             <label className={labelClass}>받는 분 성함</label>
             <input
@@ -3612,8 +3631,11 @@ function LineShipSheet({
           </>
         )}
 
-        {error ? (
-          <p className="mt-1 rounded-lg border border-[#E53E3E]/30 bg-[#FDEEEE] px-3 py-2 text-[13px] text-[#E53E3E]">
+        {error && !isSenderError ? (
+          <p
+            id="line-ship-error"
+            className="mt-1 rounded-lg border border-[#E53E3E]/30 bg-[#FDEEEE] px-3 py-2 text-[13px] text-[#E53E3E]"
+          >
             {error}
           </p>
         ) : null}
