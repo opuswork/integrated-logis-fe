@@ -3246,6 +3246,19 @@ function GreetingViewModal({
  */
 const SENDER_INFO_ERROR = "보내는 사람 정보를 모두 입력해 주세요.";
 
+/** 배달 배송정보 → 택배 시트 초기값: 공통 항목만 이어받고 나머지(보내는 사람 등)는 비워 둔다 */
+function parcelCarryFrom(delivery: LineShipInfo): LineShipInfo {
+  return {
+    ...emptyLineShipInfo("parcel"),
+    parcelShipDate: delivery.deliveryDate,
+    companyName: delivery.companyName,
+    recipientName: delivery.recipientName,
+    recipientAddress: delivery.recipientAddress,
+    recipientAddressDetail: delivery.recipientAddressDetail,
+    contactMode: "address",
+  };
+}
+
 function LineShipSheet({
   open,
   kind,
@@ -4870,8 +4883,23 @@ function ProductOrderPanel({
     // 배달에서 이어받은 값으로 채워 이어 연다.
     const deliveryRows = rows.filter((row) => row.orderKind === "delivery");
     const parcelRows = rows.filter((row) => row.orderKind === "parcel");
-    const firstRows = deliveryRows.length > 0 ? deliveryRows : parcelRows;
     setShipSheetQueue([]);
+    // 체크한 배달 줄이 모두 입력돼 있으면 배달 시트는 건너뛰고
+    // 맨 위 배달 줄의 배송정보를 이어받아 택배 시트를 바로 연다.
+    const savedDeliveryInfo =
+      deliveryRows.length > 0 &&
+      parcelRows.length > 0 &&
+      deliveryRows.every((row) => row.shipSaved && lineShipInfo[row.lineId])
+        ? lineShipInfo[deliveryRows[0].lineId]
+        : null;
+    if (savedDeliveryInfo) {
+      setShipSheetCarry(parcelCarryFrom(savedDeliveryInfo));
+      setPendingParcelGroupIds([]);
+      setShipSheetGroupIds(parcelRows.map((row) => row.lineId));
+      setShipSheetLineId(parcelRows[0].lineId);
+      return;
+    }
+    const firstRows = deliveryRows.length > 0 ? deliveryRows : parcelRows;
     setShipSheetCarry(null);
     setPendingParcelGroupIds(
       deliveryRows.length > 0 ? parcelRows.map((row) => row.lineId) : [],
@@ -4905,16 +4933,7 @@ function ProductOrderPanel({
     fillLinesWithShipInfo([lineId, ...sharedIds], info);
     setShipSheetCarry(null);
     if (info.kind === "delivery" && pendingParcelGroupIds.length > 0) {
-      // 배달 다음 택배: 공통 항목만 이어받고 나머지(보내는 사람 등)는 비워 둔다.
-      setShipSheetCarry({
-        ...emptyLineShipInfo("parcel"),
-        parcelShipDate: info.deliveryDate,
-        companyName: info.companyName,
-        recipientName: info.recipientName,
-        recipientAddress: info.recipientAddress,
-        recipientAddressDetail: info.recipientAddressDetail,
-        contactMode: "address",
-      });
+      setShipSheetCarry(parcelCarryFrom(info));
       setShipSheetGroupIds(pendingParcelGroupIds);
       setPendingParcelGroupIds([]);
       setShipSheetQueue([]);
