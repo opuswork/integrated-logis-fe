@@ -3560,6 +3560,15 @@ function LineShipSheet({
                 patchSenderAddress({ senderAddressDetail: value })
               }
             />
+            {/* 택배는 받는 분 성함이 선택 항목 (배달에서 이어받을 수 있다) */}
+            <label className={labelClass}>받는 분 성함</label>
+            <input
+              type="text"
+              value={draft.recipientName}
+              onChange={(event) => patch({ recipientName: event.target.value })}
+              placeholder="선택 입력"
+              className={inputClass}
+            />
             <RecipientContactChoice
               mode={draft.contactMode}
               onModeChange={(mode) => patch({ contactMode: mode })}
@@ -3709,6 +3718,14 @@ function ProductOrderPanel({
   const [checkedLineIds, setCheckedLineIds] = useState<string[]>([]);
   /** 한 번에 입력 중인 줄들. 시트를 저장하면 이 줄 모두에 같은 배송정보가 들어간다 */
   const [shipSheetGroupIds, setShipSheetGroupIds] = useState<string[]>([]);
+  /** 배달+택배를 함께 체크했을 때: 배달 저장 뒤 이어서 열 택배 줄들 */
+  const [pendingParcelGroupIds, setPendingParcelGroupIds] = useState<string[]>(
+    [],
+  );
+  /** 배달에서 이어받은 택배 시트 초기값 (배달일·납품업체명·받는 분·주소) */
+  const [shipSheetCarry, setShipSheetCarry] = useState<LineShipInfo | null>(
+    null,
+  );
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productDialogMode, setProductDialogMode] = useState<
     "all" | "box" | "giftUnit"
@@ -4827,17 +4844,18 @@ function ProductOrderPanel({
       });
       return;
     }
-    if (rows.some((row) => row.orderKind !== rows[0].orderKind)) {
-      setAlertDialog({
-        open: true,
-        message:
-          "배달 상품과 택배 상품은 입력 항목이 달라 함께 입력할 수 없습니다. 같은 배송방식끼리 체크해 주세요.",
-      });
-      return;
-    }
+    // 배달+택배를 함께 체크하면 배달 시트를 먼저 열고, 저장하면 택배 시트를
+    // 배달에서 이어받은 값으로 채워 이어 연다.
+    const deliveryRows = rows.filter((row) => row.orderKind === "delivery");
+    const parcelRows = rows.filter((row) => row.orderKind === "parcel");
+    const firstRows = deliveryRows.length > 0 ? deliveryRows : parcelRows;
     setShipSheetQueue([]);
-    setShipSheetGroupIds(rows.map((row) => row.lineId));
-    setShipSheetLineId(rows[0].lineId);
+    setShipSheetCarry(null);
+    setPendingParcelGroupIds(
+      deliveryRows.length > 0 ? parcelRows.map((row) => row.lineId) : [],
+    );
+    setShipSheetGroupIds(firstRows.map((row) => row.lineId));
+    setShipSheetLineId(firstRows[0].lineId);
   };
 
   /** 배송정보가 필요한 첫 줄의 시트를 바로 열고 나머지는 저장할 때마다 이어 연다 */
@@ -4851,6 +4869,8 @@ function ProductOrderPanel({
   const closeShipSheet = () => {
     setShipSheetQueue([]);
     setShipSheetGroupIds([]);
+    setPendingParcelGroupIds([]);
+    setShipSheetCarry(null);
     setShipSheetLineId(null);
   };
 
@@ -4861,6 +4881,24 @@ function ProductOrderPanel({
       ? shipSheetGroupIds.filter((id) => id !== lineId)
       : [];
     fillLinesWithShipInfo([lineId, ...sharedIds], info);
+    setShipSheetCarry(null);
+    if (info.kind === "delivery" && pendingParcelGroupIds.length > 0) {
+      // 배달 다음 택배: 공통 항목만 이어받고 나머지(보내는 사람 등)는 비워 둔다.
+      setShipSheetCarry({
+        ...emptyLineShipInfo("parcel"),
+        parcelShipDate: info.deliveryDate,
+        companyName: info.companyName,
+        recipientName: info.recipientName,
+        recipientAddress: info.recipientAddress,
+        recipientAddressDetail: info.recipientAddressDetail,
+        contactMode: "address",
+      });
+      setShipSheetGroupIds(pendingParcelGroupIds);
+      setPendingParcelGroupIds([]);
+      setShipSheetQueue([]);
+      setShipSheetLineId(pendingParcelGroupIds[0]);
+      return;
+    }
     if (shipSheetGroupIds.length > 0) {
       setShipSheetGroupIds([]);
       setCheckedLineIds([]);
@@ -5369,6 +5407,10 @@ function ProductOrderPanel({
             : null,
           hasParcelItems && shipSenderAddressDetail
             ? `보내는분상세주소:${shipSenderAddressDetail}`
+            : null,
+          // 택배 받는 분 성함은 선택 항목 — 입력했을 때만 남긴다
+          hasParcelItems && firstParcelShip?.recipientName.trim()
+            ? `받는분성함:${firstParcelShip.recipientName.trim()}`
             : null,
           // 이메일/팩스는 선택 여부만 기록 (값 입력 없음)
           isPickupGroup
@@ -5979,7 +6021,10 @@ function ProductOrderPanel({
   /** 저장값이 없으면 달력에서 고른 납품일을 미리 채워 준다. */
   const shipSheetInitial =
     shipSheetLine && shipSheetLine.orderKind
-      ? (lineShipInfo[shipSheetLine.lineId] ??
+      ? ((shipSheetCarry && shipSheetLine.orderKind === "parcel"
+          ? shipSheetCarry
+          : null) ??
+        lineShipInfo[shipSheetLine.lineId] ??
         (presetShipDate
           ? {
               ...emptyLineShipInfo(toLineShipKind(shipSheetLine.orderKind)),
