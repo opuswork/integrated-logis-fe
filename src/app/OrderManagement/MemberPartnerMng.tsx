@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { openDaumPostcode } from "@/lib/daum-postcode";
+import { hangulInputValue } from "@/lib/hangul-typing";
 
 export type PartnerRow = {
   id: number;
@@ -213,16 +214,22 @@ export function MemberPartnerMng({
         <input
           className={inputClass}
           value={form.name}
-          onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
+          onChange={(e) => {
+            // 영문 상태로 친 글자는 완성된 글자일 때 한글로 (KFC 같은 영문 이름은 그대로)
+            const name = hangulInputValue(e, { syllablesOnly: true });
+            setForm((c) => ({ ...c, name }));
+          }}
           required
         />
         <label className={labelClass}>담당자명 *</label>
         <input
           className={inputClass}
           value={form.contactName}
-          onChange={(e) =>
-            setForm((c) => ({ ...c, contactName: e.target.value }))
-          }
+          onChange={(e) => {
+            // 담당자 이름: 영문 상태로 친 글자는 바로 한글로
+            const contactName = hangulInputValue(e);
+            setForm((c) => ({ ...c, contactName }));
+          }}
           required
         />
         <label className={labelClass}>연락처 *</label>
@@ -262,9 +269,11 @@ export function MemberPartnerMng({
         <input
           className={inputClass}
           value={form.addressDetail}
-          onChange={(e) =>
-            setForm((c) => ({ ...c, addressDetail: e.target.value }))
-          }
+          onChange={(e) => {
+            // 완성된 글자일 때만 한글로 (B1, A동 같은 표기는 그대로)
+            const addressDetail = hangulInputValue(e, { syllablesOnly: true });
+            setForm((c) => ({ ...c, addressDetail }));
+          }}
           placeholder="동/호수 등"
         />
         <label className={labelClass}>이메일</label>
@@ -298,7 +307,9 @@ export function MemberPartnerMng({
           <input
             className={inputClass}
             value={listFilter}
-            onChange={(e) => setListFilter(e.target.value)}
+            onChange={(e) =>
+              setListFilter(hangulInputValue(e, { syllablesOnly: true }))
+            }
             placeholder="거래처명으로 검색"
           />
         ) : null}
