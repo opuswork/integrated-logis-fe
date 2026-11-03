@@ -23,10 +23,15 @@ declare global {
         width?: string;
         height?: string;
         animation?: boolean;
+        /** false: 열릴 때 카카오 검색칸에 커서를 두지 않는다 */
+        focusInput?: boolean;
       }) => DaumPostcodeInstance;
     };
   }
 }
+
+/** 카카오 우편번호 화면 맨 위 검색칸 높이(px). 이만큼 잘라 숨긴다 */
+const KAKAO_SEARCH_BAR_HEIGHT = 52;
 
 let scriptPromise: Promise<void> | null = null;
 let activeOverlay: HTMLElement | null = null;
@@ -132,12 +137,21 @@ export async function openDaumPostcode(onComplete: (address: string) => void) {
     searchInput.setSelectionRange(nextCaret, nextCaret);
   });
 
+  /*
+   * 카카오 검색칸은 숨기는 옵션이 없어서, 카카오 화면을 검색칸 높이만큼 위로 올리고
+   * 바깥 상자에서 잘라 낸다 (검색은 위의 우리 검색칸으로 한다).
+   */
+  const clip = document.createElement("div");
+  clip.className = "min-h-[340px] w-full overflow-hidden rounded-lg bg-white";
+  clip.style.height = "min(380px, 70vh)";
   const frame = document.createElement("div");
-  frame.className = "min-h-[380px] w-full overflow-hidden rounded-lg bg-white";
-  frame.style.height = "min(420px, 70vh)";
+  frame.className = "w-full";
+  frame.style.marginTop = `-${KAKAO_SEARCH_BAR_HEIGHT}px`;
+  frame.style.height = `calc(100% + ${KAKAO_SEARCH_BAR_HEIGHT}px)`;
+  clip.append(frame);
 
   header.append(title, closeButton);
-  panel.append(header, searchForm, frame);
+  panel.append(header, searchForm, clip);
   overlay.append(panel);
   document.body.append(overlay);
   activeOverlay = overlay;
@@ -174,12 +188,16 @@ export async function openDaumPostcode(onComplete: (address: string) => void) {
       },
       onresize(size) {
         if (size.height > 0) {
-          frame.style.height = `${Math.min(size.height, window.innerHeight * 0.7)}px`;
+          clip.style.height = `${Math.min(
+            size.height - KAKAO_SEARCH_BAR_HEIGHT,
+            window.innerHeight * 0.7,
+          )}px`;
         }
       },
       width: "100%",
       height: "100%",
       animation: false,
+      focusInput: false,
     }).embed(frame, query ? { q: query } : undefined);
   };
 
