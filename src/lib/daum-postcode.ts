@@ -1,3 +1,5 @@
+import { hasLatinLetters, qwertyToHangul } from "@/lib/hangul-typing";
+
 type DaumPostcodeData = {
   address: string;
   roadAddress: string;
@@ -8,7 +10,8 @@ type DaumPostcodeData = {
 
 type DaumPostcodeInstance = {
   open: () => void;
-  embed: (element: HTMLElement) => void;
+  /** q: 처음부터 이 검색어로 검색한 화면을 띄운다 */
+  embed: (element: HTMLElement, options?: { q?: string }) => void;
 };
 
 declare global {
@@ -95,12 +98,46 @@ export async function openDaumPostcode(onComplete: (address: string) => void) {
     "shrink-0 rounded-[7px] border border-[#cbd5e1] bg-white px-2.5 py-1 text-sm text-[#64748b]";
   closeButton.textContent = "닫기";
 
+  /*
+   * 카카오 검색칸은 iframe(다른 사이트) 안이라 글자를 바꿀 수 없다.
+   * 그래서 위에 우리 검색칸을 두고, 영문 상태로 친 글자를 바로 한글로 바꾼 뒤
+   * Enter/검색 때 카카오 검색을 그 검색어(q)로 다시 띄운다.
+   */
+  const searchForm = document.createElement("form");
+  searchForm.className = "mb-3 flex gap-2";
+  const searchInput = document.createElement("input");
+  searchInput.type = "search";
+  searchInput.setAttribute("aria-label", "주소 검색어");
+  searchInput.placeholder = "도로명, 건물명, 지번 입력";
+  searchInput.autocomplete = "off";
+  searchInput.className =
+    "min-w-0 flex-1 rounded-lg border border-[#cbd5e1] bg-white px-3 py-2 text-[15px] text-[#17202a] placeholder:text-[#94a3b8] focus:border-[#2563eb] focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20";
+  const searchButton = document.createElement("button");
+  searchButton.type = "submit";
+  searchButton.className =
+    "shrink-0 rounded-lg bg-[#1e293b] px-4 py-2 text-sm font-bold text-white";
+  searchButton.textContent = "검색";
+  searchForm.append(searchInput, searchButton);
+
+  searchInput.addEventListener("input", (event) => {
+    const raw = searchInput.value;
+    if ((event as InputEvent).isComposing || !hasLatinLetters(raw)) {
+      return;
+    }
+    const caret = searchInput.selectionStart ?? raw.length;
+    const converted = qwertyToHangul(raw);
+    if (converted === raw) return;
+    const nextCaret = qwertyToHangul(raw.slice(0, caret)).length;
+    searchInput.value = converted;
+    searchInput.setSelectionRange(nextCaret, nextCaret);
+  });
+
   const frame = document.createElement("div");
   frame.className = "min-h-[380px] w-full overflow-hidden rounded-lg bg-white";
   frame.style.height = "min(420px, 70vh)";
 
   header.append(title, closeButton);
-  panel.append(header, frame);
+  panel.append(header, searchForm, frame);
   overlay.append(panel);
   document.body.append(overlay);
   activeOverlay = overlay;
@@ -128,18 +165,31 @@ export async function openDaumPostcode(onComplete: (address: string) => void) {
   });
   document.addEventListener("keydown", handleKeyDown);
 
-  new window.daum!.Postcode({
-    oncomplete(data) {
-      onComplete(formatAddress(data));
-      cleanup();
-    },
-    onresize(size) {
-      if (size.height > 0) {
-        frame.style.height = `${Math.min(size.height, window.innerHeight * 0.7)}px`;
-      }
-    },
-    width: "100%",
-    height: "100%",
-    animation: false,
-  }).embed(frame);
+  const mountPostcode = (query?: string) => {
+    frame.replaceChildren();
+    new window.daum!.Postcode({
+      oncomplete(data) {
+        onComplete(formatAddress(data));
+        cleanup();
+      },
+      onresize(size) {
+        if (size.height > 0) {
+          frame.style.height = `${Math.min(size.height, window.innerHeight * 0.7)}px`;
+        }
+      },
+      width: "100%",
+      height: "100%",
+      animation: false,
+    }).embed(frame, query ? { q: query } : undefined);
+  };
+
+  searchForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const query = qwertyToHangul(searchInput.value).trim();
+    searchInput.value = query;
+    if (query) mountPostcode(query);
+  });
+
+  mountPostcode();
+  searchInput.focus();
 }
