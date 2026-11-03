@@ -160,6 +160,10 @@ export function qwertyToHangul(
     if (!/[A-Za-z]/.test(chunk)) {
       return chunk;
     }
+    // 두벌식은 쌍자음·ㅒ·ㅖ(Q W E R T O P)에만 대문자를 쓴다. 그 밖의 대문자는 영어로 본다 (ABC, KFC).
+    if (options.syllablesOnly && /[A-DF-NSUVX-Z]/.test(chunk)) {
+      return chunk;
+    }
     const composed = composeJamo([...hangulToKeys(chunk)].map(keyToJamo));
     return options.syllablesOnly && /[ㄱ-ㅣ]/.test(composed) ? chunk : composed;
   });
