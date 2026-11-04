@@ -62,7 +62,7 @@ export function MemberHomeInstallMng() {
         <div className="mb-3 flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/icons/icon-192.png?v=3"
+            src="/icons/icon-192.png?v=4"
             alt="장유주문"
             className="size-14 rounded-[14px] border border-[#E2E8F0]"
           />
