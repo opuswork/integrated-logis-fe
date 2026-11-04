@@ -112,7 +112,7 @@ export function OrderCalendarV2({
       : "";
 
   return (
-    <div className="jy-wrap">
+    <div className="jy-wrap jy-cal-screen">
       <header className="jy-bar">
         <div className="jy-sp">
           <div className="jy-eyebrow">장유 · 지점 주문</div>
