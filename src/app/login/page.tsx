@@ -21,6 +21,10 @@ import { cn } from "@/lib/utils";
 const LABEL_CLASS = "mb-1.5 block text-[13px] text-[#7A6F66]";
 const INPUT_CLASS =
   "h-[50px] w-full rounded-xl border border-[#E6DED4] bg-white px-3.5 text-[15px] text-[#2B2622] placeholder:text-[#7A6F66]/80 focus:outline-2 focus:outline-offset-1 focus:outline-[#D9663A]";
+/** 로그인 대문 캐릭터: 1→2→3→4 순서로 바뀌며 반복 (globals.css .login-mascot-frame) */
+const LOGIN_MASCOT_FRAMES = [1, 2, 3, 4].map(
+  (n) => `/assets/images/login-mascot-${n}.webp`,
+);
 
 function LoginForm() {
   const router = useRouter();
@@ -125,15 +129,26 @@ function LoginForm() {
             <span className="relative z-[1] inline-block rounded-full bg-white px-3 py-[5px] text-xs font-bold text-[#D9663A]">
               생명물간장 주문
             </span>
-            <div className="relative z-[1] mx-auto mt-3.5 w-[min(78%,300px)]">
-              <Image
-                src="/assets/images/login-truck.webp"
-                alt="간장병 캐릭터가 트럭을 몰며 손을 흔드는 그림"
-                width={640}
-                height={566}
-                priority
-                className="login-drive block h-auto w-full"
-              />
+            <div className="login-drive relative z-[1] mx-auto mt-3.5 w-[min(70%,260px)]">
+              {LOGIN_MASCOT_FRAMES.map((src, index) => (
+                <Image
+                  key={src}
+                  src={src}
+                  alt={
+                    index === 0
+                      ? "간장병 캐릭터가 휴대폰으로 간장을 주문하는 그림"
+                      : ""
+                  }
+                  aria-hidden={index === 0 ? undefined : true}
+                  width={640}
+                  height={640}
+                  priority={index === 0}
+                  className={cn(
+                    "login-mascot-frame block h-auto w-full",
+                    index > 0 && "absolute inset-0",
+                  )}
+                />
+              ))}
             </div>
             <div
               aria-hidden
