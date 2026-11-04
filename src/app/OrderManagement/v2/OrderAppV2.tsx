@@ -8,8 +8,10 @@ import { apiFetch } from "@/lib/api";
 import { NewOrderV2 } from "./NewOrderV2";
 import { OrderCalendarV2, type CalendarFilters } from "./OrderCalendarV2";
 import {
+  TEXT_SCALES,
   mapMemberOrders,
   todayIso,
+  useTextScaleIndex,
   type ApiMemberOrder,
   type V2Order,
 } from "./order-v2-shared";
@@ -55,6 +57,7 @@ export function OrderAppV2({
   const [deletingOrder, setDeletingOrder] = useState<V2Order | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const textScaleIndex = useTextScaleIndex();
 
   // 기존 내 주문 현황과 같이 4초마다 조용히 새로고침
   useEffect(() => {
@@ -140,7 +143,10 @@ export function OrderAppV2({
   };
 
   return (
-    <div className="jy-v2 -mx-4 -mt-4 -mb-6 min-h-[calc(100dvh-4rem)] min-[1040px]:m-0 min-[1040px]:rounded-xl">
+    <div
+      className="jy-v2 -mx-4 -mt-4 -mb-6 min-h-[calc(100dvh-4rem)] min-[1040px]:m-0 min-[1040px]:rounded-xl"
+      style={{ "--jy-zoom": TEXT_SCALES[textScaleIndex] } as React.CSSProperties}
+    >
       {screen === "calendar" ? (
         <OrderCalendarV2
           orders={orders}

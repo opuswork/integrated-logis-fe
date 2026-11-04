@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react";
+
 import { memberFacingStatusLabel } from "@/lib/order-delivery";
 import {
   parseBranchStoreFromNotes,
@@ -171,6 +173,79 @@ export function BackIcon() {
   );
 }
 
+/** 화면 크기 단계. 가운데(1)가 기본 = 1.5배 글씨 화면 그대로 */
+export const TEXT_SCALES = [0.67, 0.85, 1, 1.15, 1.3] as const;
+const DEFAULT_SCALE_INDEX = 2;
+const TEXT_SCALE_KEY = "jy-v2-text-scale";
+const TEXT_SCALE_EVENT = "jy-v2-text-scale-change";
+
+function readTextScaleIndex() {
+  try {
+    const saved = Number(window.localStorage.getItem(TEXT_SCALE_KEY));
+    return Number.isInteger(saved) && saved >= 0 && saved < TEXT_SCALES.length
+      ? saved
+      : DEFAULT_SCALE_INDEX;
+  } catch {
+    return DEFAULT_SCALE_INDEX;
+  }
+}
+
+function subscribeTextScale(onChange: () => void) {
+  window.addEventListener(TEXT_SCALE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(TEXT_SCALE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+/** 글씨+/글씨- 단계 (이 기기에 저장) */
+export function useTextScaleIndex() {
+  return useSyncExternalStore(
+    subscribeTextScale,
+    readTextScaleIndex,
+    () => DEFAULT_SCALE_INDEX,
+  );
+}
+
+function setTextScaleIndex(index: number) {
+  try {
+    window.localStorage.setItem(TEXT_SCALE_KEY, String(index));
+  } catch {
+    // 저장이 막힌 브라우저: 이번 화면에서만 바뀐다 (아래 이벤트도 저장값을 읽으므로 그대로)
+  }
+  window.dispatchEvent(new Event(TEXT_SCALE_EVENT));
+}
+
+function TextScaleControls() {
+  const index = useTextScaleIndex();
+  return (
+    <div className="jy-text-scale">
+      <button
+        type="button"
+        className="jy-btn"
+        aria-label="글씨 작게"
+        disabled={index <= 0}
+        onClick={() => setTextScaleIndex(index - 1)}
+      >
+        글씨-
+      </button>
+      <span className="jy-num" aria-live="polite">
+        {Math.round(TEXT_SCALES[index] * 100)}%
+      </span>
+      <button
+        type="button"
+        className="jy-btn"
+        aria-label="글씨 크게"
+        disabled={index >= TEXT_SCALES.length - 1}
+        onClick={() => setTextScaleIndex(index + 1)}
+      >
+        글씨+
+      </button>
+    </div>
+  );
+}
+
 export function V2Header({
   title,
   onBack,
@@ -188,7 +263,8 @@ export function V2Header({
       >
         <BackIcon />
       </button>
-      <h1 style={{ fontSize: 20 }}>{title}</h1>
+      <h1 style={{ fontSize: 20, flex: 1, minWidth: 0 }}>{title}</h1>
+      <TextScaleControls />
     </header>
   );
 }
