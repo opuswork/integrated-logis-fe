@@ -894,6 +894,32 @@ function restoreEditOrder(order: ApiMemberOrder) {
   };
 }
 
+/** 완료 화면 경례 영상. 한 번만 재생하고 마지막 장면에서 멈춘다 */
+function OrderCompleteVideo() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  // 움직임 줄이기: 재생하지 않고 마지막(경례) 장면을 보여 준다
+  const showLastFrame = () => {
+    const video = videoRef.current;
+    if (!video || !window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    video.pause();
+    if (Number.isFinite(video.duration)) video.currentTime = video.duration;
+  };
+  return (
+    <video
+      ref={videoRef}
+      className="jy-done-video"
+      src="/assets/videos/order-complete.mp4"
+      poster="/assets/images/order-complete-poster.webp"
+      autoPlay
+      muted
+      playsInline
+      preload="auto"
+      aria-label="간장병 캐릭터가 경례하는 영상"
+      onLoadedMetadata={showLastFrame}
+    />
+  );
+}
+
 export function NewOrderV2({
   initialDate,
   editOrder,
@@ -1856,13 +1882,17 @@ export function NewOrderV2({
               aria-busy={isSubmitting}
               onClick={() => void handleSubmit()}
             >
-              {isEdit
-                ? isSubmitting
-                  ? "저장 중…"
-                  : "수정 완료"
-                : isSubmitting
-                  ? "접수 중…"
-                  : "주문 완료"}
+              {isSubmitting ? (
+                <span
+                  className="jy-spinner"
+                  role="status"
+                  aria-label={isEdit ? "저장 중" : "접수 중"}
+                />
+              ) : isEdit ? (
+                "수정 완료"
+              ) : (
+                "주문 완료"
+              )}
             </button>
           </div>
         </V2Dock>
@@ -1875,9 +1905,7 @@ export function NewOrderV2({
       <div className="jy-wrap jy-large-text">
         <div className="jy-logo">✓</div>
         <p className="jy-title-c">{isEdit ? "주문이 수정됐어요" : "주문이 접수됐어요"}</p>
-        <p className="jy-sub">
-          주문번호 {result.orderNumbers.filter(Boolean).join(", ") || "-"}
-        </p>
+        <OrderCompleteVideo />
         {result.failedUploads.length ? (
           <div className="jy-info">
             <b>!</b>
