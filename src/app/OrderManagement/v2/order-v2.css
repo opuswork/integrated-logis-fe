@@ -814,91 +814,182 @@
 }
 
 /* 주문 달력 화면: 고령 사용자용으로 글자 1.5배 (칸·버튼도 글자에 맞게 키운다) */
-.jy-v2 .jy-cal-screen {
+.jy-v2 .jy-large-text {
   font-size: 22.5px;
   padding: 16px 12px 176px;
 }
-.jy-v2 .jy-cal-screen h1 {
+.jy-v2 .jy-large-text h1 {
   font-size: 33px;
 }
-.jy-v2 .jy-cal-screen h2 {
+.jy-v2 .jy-large-text h2 {
   font-size: 22.5px;
 }
-.jy-v2 .jy-cal-screen .jy-eyebrow,
-.jy-v2 .jy-cal-screen .jy-label,
-.jy-v2 .jy-cal-screen .jy-link,
-.jy-v2 .jy-cal-screen .jy-meta,
-.jy-v2 .jy-cal-screen .jy-btn.jy-mini {
+.jy-v2 .jy-large-text .jy-eyebrow,
+.jy-v2 .jy-large-text .jy-label,
+.jy-v2 .jy-large-text .jy-link,
+.jy-v2 .jy-large-text .jy-meta,
+.jy-v2 .jy-large-text .jy-btn.jy-mini {
   font-size: 19.5px;
 }
-.jy-v2 .jy-cal-screen .jy-card {
+.jy-v2 .jy-large-text .jy-card {
   padding: 12px;
 }
-.jy-v2 .jy-cal-screen .jy-cal-head .jy-ym {
+.jy-v2 .jy-large-text .jy-cal-head .jy-ym {
   font-size: 27px;
   white-space: nowrap;
 }
-.jy-v2 .jy-cal-screen .jy-circle {
+.jy-v2 .jy-large-text .jy-circle {
   width: 36px;
   height: 36px;
 }
-.jy-v2 .jy-cal-screen .jy-cal-head .jy-today-btn {
+.jy-v2 .jy-large-text .jy-cal-head .jy-today-btn {
   height: 44px;
   padding: 0 8px;
   border-radius: 22px;
   font-size: 19.5px;
 }
-.jy-v2 .jy-cal-screen .jy-dow,
-.jy-v2 .jy-cal-screen .jy-legend,
-.jy-v2 .jy-cal-screen .jy-badge,
-.jy-v2 .jy-cal-screen .jy-hint {
+.jy-v2 .jy-large-text .jy-dow,
+.jy-v2 .jy-large-text .jy-legend,
+.jy-v2 .jy-large-text .jy-badge,
+.jy-v2 .jy-large-text .jy-hint {
   font-size: 18px;
 }
-.jy-v2 .jy-cal-screen .jy-legend i {
+.jy-v2 .jy-large-text .jy-legend i {
   width: 15px;
   height: 15px;
 }
-.jy-v2 .jy-cal-screen .jy-day {
+.jy-v2 .jy-large-text .jy-day {
   height: 76px;
 }
-.jy-v2 .jy-cal-screen .jy-day .jy-d {
+.jy-v2 .jy-large-text .jy-day .jy-d {
   font-size: 22.5px;
   width: 38px;
   height: 38px;
   line-height: 38px;
   border-radius: 19px;
 }
-.jy-v2 .jy-cal-screen .jy-day .jy-cnt {
+.jy-v2 .jy-large-text .jy-day .jy-cnt {
   font-size: 16.5px;
   padding: 3px 7px;
 }
-.jy-v2 .jy-cal-screen .jy-search {
+.jy-v2 .jy-large-text .jy-search {
   height: 60px;
 }
-.jy-v2 .jy-cal-screen .jy-search input {
+.jy-v2 .jy-large-text .jy-search input {
   height: 56px;
   font-size: 22.5px;
 }
-.jy-v2 .jy-cal-screen .jy-chip {
+.jy-v2 .jy-large-text .jy-chip {
   height: 50px;
   padding: 0 18px;
   border-radius: 25px;
   font-size: 21px;
 }
-.jy-v2 .jy-cal-screen .jy-chips.jy-scroll {
+.jy-v2 .jy-large-text .jy-chips.jy-scroll {
   margin: 0 -12px;
   padding: 0 12px 2px;
 }
-.jy-v2 .jy-cal-screen .jy-items {
+.jy-v2 .jy-large-text .jy-items {
   font-size: 21px;
 }
-.jy-v2 .jy-cal-screen .jy-btn.jy-mini {
+.jy-v2 .jy-large-text .jy-btn.jy-mini {
   height: 40px;
   padding: 0 14px;
 }
-.jy-v2 .jy-cal-screen .jy-big {
+.jy-v2 .jy-large-text .jy-big {
   height: 64px;
   font-size: 24px;
+}
+/* 새 주문 화면 (주문서·배송정보 입력·주문 확인·완료) */
+.jy-v2 .jy-large-text .jy-input {
+  height: 60px;
+  font-size: 22.5px;
+}
+.jy-v2 .jy-large-text textarea.jy-input {
+  height: auto;
+  min-height: 120px;
+}
+.jy-v2 .jy-large-text .jy-chips.jy-half .jy-chip {
+  height: 60px;
+  font-size: 22.5px;
+}
+.jy-v2 .jy-large-text .jy-line-ship .jy-chip {
+  height: 48px;
+  padding: 0 14px;
+  font-size: 19.5px;
+}
+.jy-v2 .jy-large-text .jy-qty .jy-btn {
+  width: 46px;
+  height: 46px;
+}
+.jy-v2 .jy-large-text .jy-qty input {
+  width: 64px;
+  height: 46px;
+}
+.jy-v2 .jy-large-text .jy-total strong {
+  font-size: 27px;
+}
+.jy-v2 .jy-large-text .jy-cartbar .jy-t {
+  font-size: 24px;
+}
+.jy-v2 .jy-large-text .jy-cartbar .jy-btn {
+  height: 60px;
+}
+.jy-v2 .jy-large-text .jy-err,
+.jy-v2 .jy-large-text .jy-info,
+.jy-v2 .jy-large-text .jy-dl dt,
+.jy-v2 .jy-large-text .jy-confirm-line-head span {
+  font-size: 19.5px;
+}
+.jy-v2 .jy-large-text .jy-info b {
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  font-size: 16px;
+}
+.jy-v2 .jy-large-text .jy-dl {
+  grid-template-columns: 128px 1fr;
+}
+.jy-v2 .jy-large-text .jy-table {
+  font-size: 21px;
+}
+.jy-v2 .jy-large-text .jy-table th {
+  font-size: 18px;
+}
+.jy-v2 .jy-large-text .jy-photo-add {
+  font-size: 18px;
+}
+.jy-v2 .jy-large-text .jy-photo-file-name {
+  font-size: 15px;
+}
+.jy-v2 .jy-large-text .jy-title-c {
+  font-size: 33px;
+}
+.jy-v2 .jy-large-text .jy-logo {
+  font-size: 42px;
+}
+/* 같은 주소 쓰기: 전체선택 + 버튼, 줄마다 체크박스 */
+.jy-v2 .jy-check-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.jy-v2 .jy-check {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.jy-v2 .jy-check input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0.2em 0 0;
+  accent-color: var(--jy-accent);
+  cursor: pointer;
 }
 
 /* 완료 화면 */
