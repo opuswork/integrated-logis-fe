@@ -1,6 +1,7 @@
 /*
  * 주문목록포함버전 (시안: fe/장유 주문 7.html)
- * 따뜻한 미색 바탕, 흰 카드, 주황 포인트, 아래 고정 버튼 바. 라이트·다크 모두.
+ * 따뜻한 미색 바탕, 흰 카드, 주황 포인트, 아래 고정 버튼 바.
+ * 기본 버전과 같은 색으로, 휴대폰이 다크 모드여도 밝은 화면 그대로 보인다.
  * 모든 규칙은 .jy-v2 안에서만 적용된다.
  */
 .jy-v2 {
@@ -36,33 +37,6 @@
   line-height: 1.5;
 }
 
-@media (prefers-color-scheme: dark) {
-  .jy-v2 {
-    --jy-bg: #1a1715;
-    --jy-surface: #24201d;
-    --jy-fg: #f1ece6;
-    --jy-muted: #ada398;
-    --jy-line: #3a3430;
-    --jy-line2: #332e2a;
-    --jy-accent: #e8784c;
-    --jy-accent-fg: #1a1715;
-    --jy-soft: #2e2824;
-    --jy-ink: #f1ece6;
-    --jy-ink-fg: #1a1715;
-    --jy-ink-muted: #5e554d;
-    --jy-prep: #f0c27a;
-    --jy-prep-bg: #3a2e1a;
-    --jy-done: #8fd1bf;
-    --jy-done-bg: #1c322c;
-    --jy-err: #f2a49c;
-    --jy-sat: #8eb4ea;
-    --jy-blue: #9fc0f2;
-    --jy-blue-bg: #1d2a40;
-    --jy-purple: #cdb2f0;
-    --jy-purple-bg: #2e2340;
-    color-scheme: dark;
-  }
-}
 
 .jy-v2 *,
 .jy-v2 *::before,
@@ -837,6 +811,94 @@
   border-radius: 3px;
   margin-right: 4px;
   vertical-align: -1px;
+}
+
+/* 주문 달력 화면: 고령 사용자용으로 글자 1.5배 (칸·버튼도 글자에 맞게 키운다) */
+.jy-v2 .jy-cal-screen {
+  font-size: 22.5px;
+  padding: 16px 12px 176px;
+}
+.jy-v2 .jy-cal-screen h1 {
+  font-size: 33px;
+}
+.jy-v2 .jy-cal-screen h2 {
+  font-size: 22.5px;
+}
+.jy-v2 .jy-cal-screen .jy-eyebrow,
+.jy-v2 .jy-cal-screen .jy-label,
+.jy-v2 .jy-cal-screen .jy-link,
+.jy-v2 .jy-cal-screen .jy-meta,
+.jy-v2 .jy-cal-screen .jy-btn.jy-mini {
+  font-size: 19.5px;
+}
+.jy-v2 .jy-cal-screen .jy-card {
+  padding: 12px;
+}
+.jy-v2 .jy-cal-screen .jy-cal-head .jy-ym {
+  font-size: 27px;
+  white-space: nowrap;
+}
+.jy-v2 .jy-cal-screen .jy-circle {
+  width: 36px;
+  height: 36px;
+}
+.jy-v2 .jy-cal-screen .jy-cal-head .jy-today-btn {
+  height: 44px;
+  padding: 0 8px;
+  border-radius: 22px;
+  font-size: 19.5px;
+}
+.jy-v2 .jy-cal-screen .jy-dow,
+.jy-v2 .jy-cal-screen .jy-legend,
+.jy-v2 .jy-cal-screen .jy-badge,
+.jy-v2 .jy-cal-screen .jy-hint {
+  font-size: 18px;
+}
+.jy-v2 .jy-cal-screen .jy-legend i {
+  width: 15px;
+  height: 15px;
+}
+.jy-v2 .jy-cal-screen .jy-day {
+  height: 76px;
+}
+.jy-v2 .jy-cal-screen .jy-day .jy-d {
+  font-size: 22.5px;
+  width: 38px;
+  height: 38px;
+  line-height: 38px;
+  border-radius: 19px;
+}
+.jy-v2 .jy-cal-screen .jy-day .jy-cnt {
+  font-size: 16.5px;
+  padding: 3px 7px;
+}
+.jy-v2 .jy-cal-screen .jy-search {
+  height: 60px;
+}
+.jy-v2 .jy-cal-screen .jy-search input {
+  height: 56px;
+  font-size: 22.5px;
+}
+.jy-v2 .jy-cal-screen .jy-chip {
+  height: 50px;
+  padding: 0 18px;
+  border-radius: 25px;
+  font-size: 21px;
+}
+.jy-v2 .jy-cal-screen .jy-chips.jy-scroll {
+  margin: 0 -12px;
+  padding: 0 12px 2px;
+}
+.jy-v2 .jy-cal-screen .jy-items {
+  font-size: 21px;
+}
+.jy-v2 .jy-cal-screen .jy-btn.jy-mini {
+  height: 40px;
+  padding: 0 14px;
+}
+.jy-v2 .jy-cal-screen .jy-big {
+  height: 64px;
+  font-size: 24px;
 }
 
 /* 완료 화면 */
