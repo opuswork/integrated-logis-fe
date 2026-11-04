@@ -209,48 +209,6 @@
     animation: none;
   }
 }
-
-/* 로그인 대문 캐릭터: 4장을 1→2→3→4 순서로 1.2초씩 보여 주며 반복 (장면 사이 0.24초 겹쳐 바뀜) */
-@keyframes login-mascot {
-  0%,
-  20% {
-    opacity: 1;
-  }
-  25%,
-  95% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-.login-mascot-frame {
-  animation: login-mascot 4.8s linear infinite;
-}
-
-.login-mascot-frame:nth-child(2) {
-  animation-delay: -3.6s;
-}
-
-.login-mascot-frame:nth-child(3) {
-  animation-delay: -2.4s;
-}
-
-.login-mascot-frame:nth-child(4) {
-  animation-delay: -1.2s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .login-mascot-frame {
-    animation: none;
-  }
-
-  .login-mascot-frame:not(:first-child) {
-    opacity: 0;
-  }
-}
-
 /* Keep 선물세트 주문서 cell backgrounds when using browser Print. */
 @media print {
   .gift-set-print-sheet,
