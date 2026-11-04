@@ -696,24 +696,27 @@ function MobileMemberHeader({
   onToggle,
   onMenuChange,
   memberName,
-  memberTypeLabel,
+  churchName,
 }: {
   activeMenu: MemberNav;
   isOpen: boolean;
   onToggle: () => void;
   onMenuChange: (menu: MemberNav) => void;
   memberName?: string;
-  memberTypeLabel?: string;
+  churchName?: string;
 }) {
-  // "김정호 관장님" — 직분이 없으면 "김정호 님"
-  const greeting = memberName
-    ? `${memberName} ${memberTypeLabel ? `${memberTypeLabel}님` : "님"}`
+  // "인천/김정호님" — 중앙이 없으면 "김정호님". 이름이 이미 "님"으로 끝나면 또 붙이지 않는다
+  const name = memberName?.trim() ?? "";
+  const greeting = name
+    ? [churchName?.trim(), name.endsWith("님") ? name : `${name}님`]
+        .filter(Boolean)
+        .join("/")
     : "";
 
   return (
     <div className="sticky top-0 z-30 bg-[#1e2a5b] pt-[env(safe-area-inset-top)] min-[1040px]:hidden">
       <header className="relative z-50 flex h-16 items-center justify-between px-4 text-white">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             aria-label={isOpen ? "메뉴 닫기" : "메뉴 열기"}
@@ -730,9 +733,12 @@ function MobileMemberHeader({
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {greeting ? (
-            <span className="text-[15px] font-bold text-[#f9a8d4]">
+            <span
+              className="min-w-0 truncate text-[15px] font-bold text-[#f9a8d4]"
+              title={greeting}
+            >
               {greeting}
             </span>
           ) : null}
@@ -8366,7 +8372,7 @@ export function OrderListInput({
           onToggle={() => setIsMobileMenuOpen((open) => !open)}
           onMenuChange={handleMenuChange}
           memberName={memberProfile.name}
-          memberTypeLabel={memberProfile.memberTypeLabel}
+          churchName={memberProfile.churchName}
         />
 
         <div className="px-4 pt-4 pb-6 min-[1040px]:p-0">{content}</div>
