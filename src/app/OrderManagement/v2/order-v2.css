@@ -971,6 +971,36 @@
   font-size: 42px;
 }
 /* 같은 주소 쓰기: 전체선택 + 버튼, 줄마다 체크박스 */
+/* 접수 중 버튼 스피너 */
+.jy-v2 .jy-spinner {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: jy-spin 0.8s linear infinite;
+}
+@keyframes jy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jy-v2 .jy-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* 완료 화면 경례 영상 — 흰 배경을 바탕색에 섞는다 */
+.jy-v2 .jy-done-video {
+  display: block;
+  width: min(240px, 70%);
+  aspect-ratio: 666 / 846;
+  margin: 0 auto;
+  mix-blend-mode: multiply;
+}
+
 /* 제목 줄 오른쪽 글씨-/글씨+ */
 .jy-v2 .jy-text-scale {
   display: inline-flex;
