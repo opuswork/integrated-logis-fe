@@ -1,8 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { LoginChromeHeader } from "@/components/login-chrome-header";
 import { Button } from "@/components/ui/button";
@@ -21,10 +20,6 @@ import { cn } from "@/lib/utils";
 const LABEL_CLASS = "mb-1.5 block text-[13px] text-[#7A6F66]";
 const INPUT_CLASS =
   "h-[50px] w-full rounded-xl border border-[#E6DED4] bg-white px-3.5 text-[15px] text-[#2B2622] placeholder:text-[#7A6F66]/80 focus:outline-2 focus:outline-offset-1 focus:outline-[#D9663A]";
-/** 로그인 대문 캐릭터: 1→2→3→4 순서로 바뀌며 반복 (globals.css .login-mascot-frame) */
-const LOGIN_MASCOT_FRAMES = [1, 2, 3, 4].map(
-  (n) => `/assets/images/login-mascot-${n}.webp`,
-);
 
 function LoginForm() {
   const router = useRouter();
@@ -36,6 +31,7 @@ function LoginForm() {
   const [logoutMsg, setLogoutMsg] = useState<"shown" | "fading" | "hidden">(
     "shown",
   );
+  const videoRef = useRef<HTMLVideoElement>(null);
   const signupSuccess = searchParams.get("signup") === "success";
   const logoutReason = searchParams.get("reason");
   const loggedOutByUser = logoutReason === "logout";
@@ -56,6 +52,13 @@ function LoginForm() {
       window.clearTimeout(hideTimer);
     };
   }, [loggedOutByUser]);
+
+  // 움직임 줄이기를 켠 기기에서는 대문 영상을 첫 장면(포스터)에 멈춘다.
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      videoRef.current?.pause();
+    }
+  }, []);
 
   useEffect(() => {
     const existing = getAuthUser();
@@ -129,30 +132,18 @@ function LoginForm() {
             <span className="relative z-[1] inline-block rounded-full bg-white px-3 py-[5px] text-xs font-bold text-[#D9663A]">
               생명물간장 주문
             </span>
-            <div className="login-drive relative z-[1] mx-auto mt-3.5 w-[min(70%,260px)]">
-              {LOGIN_MASCOT_FRAMES.map((src, index) => (
-                <Image
-                  key={src}
-                  src={src}
-                  alt={
-                    index === 0
-                      ? "간장병 캐릭터가 휴대폰으로 간장을 주문하는 그림"
-                      : ""
-                  }
-                  aria-hidden={index === 0 ? undefined : true}
-                  width={640}
-                  height={640}
-                  priority={index === 0}
-                  className={cn(
-                    "login-mascot-frame block h-auto w-full",
-                    index > 0 && "absolute inset-0",
-                  )}
-                />
-              ))}
-            </div>
-            <div
-              aria-hidden
-              className="relative mx-auto -mt-2.5 h-3.5 w-[62%] rounded-[50%] bg-[rgba(120,70,30,0.18)] blur-[6px]"
+            {/* 16:9 영상의 가운데만 4:3 으로 보여 준다 (오른쪽 아래 표식은 잘림). 가장자리는 카드 배경에 스며들게 흐리게 */}
+            <video
+              ref={videoRef}
+              src="/assets/videos/login-logo.mp4"
+              poster="/assets/images/login-logo-poster.webp"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+              aria-label="간장병 캐릭터가 휴대폰으로 간장을 주문하는 영상"
+              className="relative z-[1] mx-auto mt-3.5 block aspect-[4/3] w-[min(86%,340px)] rounded-[20px] object-cover [mask-image:radial-gradient(ellipse_at_center,#000_62%,transparent_100%)]"
             />
             <h1 className="relative z-[1] mt-4 text-2xl font-bold">장유 주문앱</h1>
             <p className="relative z-[1] mt-1 text-sm text-[#7A6F66]">
