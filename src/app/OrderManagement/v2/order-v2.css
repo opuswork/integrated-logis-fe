@@ -45,6 +45,8 @@
 }
 
 .jy-v2 .jy-wrap {
+  /* 글씨+/글씨- : 화면 전체(글자·버튼·고정 바)를 함께 키우고 줄인다 */
+  zoom: var(--jy-zoom, 1);
   max-width: 480px;
   margin: 0 auto;
   padding: 20px 20px 132px;
@@ -969,6 +971,29 @@
   font-size: 42px;
 }
 /* 같은 주소 쓰기: 전체선택 + 버튼, 줄마다 체크박스 */
+/* 제목 줄 오른쪽 글씨-/글씨+ */
+.jy-v2 .jy-text-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.jy-v2 .jy-text-scale .jy-btn {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--jy-line);
+  border-radius: 999px;
+  background: var(--jy-surface);
+  font-size: 17px;
+  font-weight: 700;
+}
+.jy-v2 .jy-text-scale span {
+  min-width: 44px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--jy-muted);
+}
+
 .jy-v2 .jy-check-bar {
   display: flex;
   align-items: center;

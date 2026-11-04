@@ -282,6 +282,24 @@ function copiedShipPatch(
 }
 
 /**
+ * 직접수령·방식 전 줄은 원본과 같은 방식으로 바꾸고 복사한다.
+ * 선물세트 박스(배달 전용)는 택배가 안 되므로 배달로 바꾼다.
+ */
+function copiedLinePatch(
+  source: OrderLine,
+  target: OrderLine,
+  sender: { name: string; phone: string } | null,
+): Partial<OrderLine> | null {
+  if (target.ship === "delivery" || target.ship === "parcel") {
+    return copiedShipPatch(source, target, sender);
+  }
+  const ship: ShipMethod =
+    source.ship === "parcel" && !target.deliveryOnly ? "parcel" : "delivery";
+  const patch = copiedShipPatch(source, { ...target, ship }, sender);
+  return patch ? { ...patch, ship } : null;
+}
+
+/**
  * 수량 변경 (관리자 updateProductQty 와 같은 규칙).
  * - 나뉜 줄: 합계 baseQty 고정, 형제 줄이 나머지 (각 줄 최소 1)
  * - 배송방식을 고른 줄을 줄이면 → 나머지가 반대 방식 줄로 바로 생긴다
@@ -1152,16 +1170,12 @@ export function NewOrderV2({
     setCopyAfterSave(false);
   };
 
-  /** 체크할 수 있는 줄: 배달·택배를 고른 줄 (직접수령은 넣을 주소가 없다) */
-  const checkableLines = lines.filter(
-    (line) => line.ship === "delivery" || line.ship === "parcel",
-  );
-  // 방식이 바뀌었거나 지워진 줄은 체크에서 빠진 것으로 본다
+  // 지워진 줄은 체크에서 빠진 것으로 본다
   const activeCheckedIds = checkedLineIds.filter((id) =>
-    checkableLines.some((line) => line.lineId === id),
+    lines.some((line) => line.lineId === id),
   );
   const allLinesChecked =
-    checkableLines.length > 0 && activeCheckedIds.length === checkableLines.length;
+    lines.length > 0 && activeCheckedIds.length === lines.length;
 
   const toggleLineChecked = (lineId: string, checked: boolean) => {
     setCheckedLineIds((current) =>
@@ -1177,7 +1191,7 @@ export function NewOrderV2({
     setLines((current) =>
       current.map((line) => {
         if (!targetIds.has(line.lineId)) return line;
-        const patch = copiedShipPatch(source, line, profile);
+        const patch = copiedLinePatch(source, line, profile);
         return patch ? { ...line, ...patch } : line;
       }),
     );
@@ -1196,8 +1210,13 @@ export function NewOrderV2({
       copyShipToChecked(source);
       return;
     }
+    // 직접수령·방식 전 줄이면 배달로 바꿔서 연다
+    const first = checked[0];
+    if (first.ship !== "delivery" && first.ship !== "parcel") {
+      setLines(changeLineShip(lines, first.lineId, "delivery"));
+    }
     setCopyAfterSave(true);
-    openShipView(checked[0].lineId);
+    openShipView(first.lineId);
   };
 
   const validate = (): { message: string; lineId?: string } => {
@@ -2010,7 +2029,7 @@ export function NewOrderV2({
             </button>
           </>
         )}
-        {checkableLines.length ? (
+        {lines.length ? (
           <div className="jy-check-bar">
             <label className="jy-check">
               <input
@@ -2018,7 +2037,7 @@ export function NewOrderV2({
                 checked={allLinesChecked}
                 onChange={(event) =>
                   setCheckedLineIds(
-                    event.target.checked ? checkableLines.map((line) => line.lineId) : [],
+                    event.target.checked ? lines.map((line) => line.lineId) : [],
                   )
                 }
               />
@@ -2054,20 +2073,16 @@ export function NewOrderV2({
               <div key={line.lineId} id={`jy-line-${line.lineId}`} className="jy-line">
                 <div className="jy-item-line">
                   <div className="jy-item-name">
-                    {line.ship === "delivery" || line.ship === "parcel" ? (
-                      <label className="jy-check">
-                        <input
-                          type="checkbox"
-                          checked={activeCheckedIds.includes(line.lineId)}
-                          onChange={(event) =>
-                            toggleLineChecked(line.lineId, event.target.checked)
-                          }
-                        />
-                        <span>{line.product}</span>
-                      </label>
-                    ) : (
+                    <label className="jy-check">
+                      <input
+                        type="checkbox"
+                        checked={activeCheckedIds.includes(line.lineId)}
+                        onChange={(event) =>
+                          toggleLineChecked(line.lineId, event.target.checked)
+                        }
+                      />
                       <span>{line.product}</span>
-                    )}
+                    </label>
                     {qtyInvalid ? (
                       <div id={qtyErrorId} className="jy-err" role="alert">
                         {QTY_ERROR}
