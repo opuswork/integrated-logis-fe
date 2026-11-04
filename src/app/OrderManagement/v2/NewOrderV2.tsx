@@ -216,6 +216,71 @@ function isLineShipDone(line: OrderLine) {
   return false;
 }
 
+/** 택배 정보 빈 칸. 보내는 사람 이름·연락처만 내 정보로 채운다 */
+function emptyParcel(sender: { name: string; phone: string } | null): ParcelInfo {
+  return {
+    senderName: sender?.name ?? "",
+    senderPhone: sender?.phone ?? "",
+    senderAddress: "",
+    senderAddressDetail: "",
+    receiverName: "",
+    receiverPhone: "",
+    receiverAddress: "",
+    receiverAddressDetail: "",
+    photos: [],
+  };
+}
+
+/** 같은 주소 쓰기에 쓸 수 있는 줄: 배달·택배 배송정보를 다 넣은 줄 */
+function isCopySource(line: OrderLine) {
+  return (line.ship === "delivery" || line.ship === "parcel") && isLineShipDone(line);
+}
+
+/**
+ * 같은 주소 쓰기: source 줄의 배송정보를 target 줄에 넣을 값.
+ * - 같은 방식끼리는 그대로 (택배 명단 파일·메모는 줄마다 따로라 두고)
+ * - 배달 ↔ 택배는 받는 곳 주소·상세주소·연락처만 (관리자 이어받기와 같음)
+ * 넣을 주소가 없으면 null.
+ */
+function copiedShipPatch(
+  source: OrderLine,
+  target: OrderLine,
+  sender: { name: string; phone: string } | null,
+): Partial<OrderLine> | null {
+  if (source.ship === "delivery" && source.delivery) {
+    const from = source.delivery;
+    if (target.ship === "delivery") return { delivery: { ...from } };
+    if (target.ship === "parcel") {
+      const base = target.parcel ?? emptyParcel(sender);
+      return {
+        parcel: {
+          ...base,
+          receiverAddress: from.address,
+          receiverAddressDetail: from.addressDetail,
+          receiverPhone: from.phone || base.receiverPhone,
+        },
+      };
+    }
+  }
+  if (source.ship === "parcel" && source.parcel) {
+    const from = source.parcel;
+    if (target.ship === "parcel") {
+      return { parcel: { ...from, photos: target.parcel?.photos ?? [] } };
+    }
+    if (target.ship === "delivery" && from.receiverAddress.trim()) {
+      return {
+        delivery: {
+          ...(target.delivery ?? emptyDelivery()),
+          address: from.receiverAddress,
+          addressDetail: from.receiverAddressDetail,
+          phone: from.receiverPhone,
+        },
+      };
+    }
+  }
+  return null;
+}
+
 /**
  * 수량 변경 (관리자 updateProductQty 와 같은 규칙).
  * - 나뉜 줄: 합계 baseQty 고정, 형제 줄이 나머지 (각 줄 최소 1)
@@ -343,7 +408,7 @@ function AddressInput({
         <button
           type="button"
           className="jy-btn"
-          style={{ height: 50, flex: "none" }}
+          style={{ height: 60, flex: "none" }}
           disabled={searching}
           onClick={() => void searchAddress()}
         >
@@ -372,7 +437,7 @@ function DeliveryInfoView({
     setInfo((current) => ({ ...current, ...patch }));
 
   return (
-    <div className="jy-wrap">
+    <div className="jy-wrap jy-large-text">
       <V2Header title="배달 주소" onBack={onBack} />
       <p className="jy-meta">{product}</p>
       <AddressInput
@@ -542,7 +607,7 @@ function ParcelInfoView({
   };
 
   return (
-    <div className="jy-wrap">
+    <div className="jy-wrap jy-large-text">
       <V2Header title="택배 정보" onBack={goBack} />
       <p className="jy-meta">{product}</p>
       <section className="jy-card">
@@ -835,6 +900,10 @@ export function NewOrderV2({
   const [view, setView] = useState<View>("form");
   /** 배송정보 입력 화면에서 고치는 줄 */
   const [shipLineId, setShipLineId] = useState("");
+  /** 같은 주소 쓰기로 연 입력 화면: 저장하면 체크한 다른 줄에도 복사한다 */
+  const [copyAfterSave, setCopyAfterSave] = useState(false);
+  /** 같은 주소 쓰기 대상으로 체크한 줄 */
+  const [checkedLineIds, setCheckedLineIds] = useState<string[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState("");
 
@@ -1080,6 +1149,55 @@ export function NewOrderV2({
   const backToForm = () => {
     setView("form");
     setShipLineId("");
+    setCopyAfterSave(false);
+  };
+
+  /** 체크할 수 있는 줄: 배달·택배를 고른 줄 (직접수령은 넣을 주소가 없다) */
+  const checkableLines = lines.filter(
+    (line) => line.ship === "delivery" || line.ship === "parcel",
+  );
+  // 방식이 바뀌었거나 지워진 줄은 체크에서 빠진 것으로 본다
+  const activeCheckedIds = checkedLineIds.filter((id) =>
+    checkableLines.some((line) => line.lineId === id),
+  );
+  const allLinesChecked =
+    checkableLines.length > 0 && activeCheckedIds.length === checkableLines.length;
+
+  const toggleLineChecked = (lineId: string, checked: boolean) => {
+    setCheckedLineIds((current) =>
+      checked
+        ? [...current.filter((id) => id !== lineId), lineId]
+        : current.filter((id) => id !== lineId),
+    );
+  };
+
+  /** source 줄의 배송정보를 체크한 나머지 줄에 복사한다 */
+  const copyShipToChecked = (source: OrderLine) => {
+    const targetIds = new Set(activeCheckedIds.filter((id) => id !== source.lineId));
+    setLines((current) =>
+      current.map((line) => {
+        if (!targetIds.has(line.lineId)) return line;
+        const patch = copiedShipPatch(source, line, profile);
+        return patch ? { ...line, ...patch } : line;
+      }),
+    );
+    if (errorLineId && targetIds.has(errorLineId)) clearError();
+  };
+
+  /**
+   * 같은 주소 쓰기: 처음 쓴 주소(체크한 줄 중 배송정보를 넣은 맨 위 줄, 없으면 전체에서 맨 위 줄)를
+   * 체크한 줄에 복사. 아직 아무 줄도 넣지 않았으면 체크한 맨 위 줄의 입력 화면을 열고 저장 때 복사한다.
+   */
+  const applySameAddress = () => {
+    const checked = lines.filter((line) => activeCheckedIds.includes(line.lineId));
+    if (checked.length === 0) return;
+    const source = checked.find(isCopySource) ?? lines.find(isCopySource);
+    if (source) {
+      copyShipToChecked(source);
+      return;
+    }
+    setCopyAfterSave(true);
+    openShipView(checked[0].lineId);
   };
 
   const validate = (): { message: string; lineId?: string } => {
@@ -1564,12 +1682,13 @@ export function NewOrderV2({
       <DeliveryInfoView
         key={shipLine.lineId}
         product={`${shipLine.product} · ${shipLine.qty}개`}
-        // 다른 줄의 입력값은 가져오지 않는다 (줄마다 빈 칸에서 시작)
+        // 다른 줄의 입력값은 가져오지 않는다 (같은 주소 쓰기로만 복사)
         initial={shipLine.delivery ?? emptyDelivery()}
         onBack={backToForm}
         onSave={(info) => {
           updateLine(shipLine.lineId, { delivery: info });
           if (errorLineId === shipLine.lineId) clearError();
+          if (copyAfterSave) copyShipToChecked({ ...shipLine, delivery: info });
           backToForm();
         }}
       />
@@ -1581,26 +1700,15 @@ export function NewOrderV2({
       <ParcelInfoView
         key={shipLine.lineId}
         product={`${shipLine.product} · ${shipLine.qty}개`}
-        initial={
-          // 다른 줄의 입력값은 가져오지 않는다. 보내는 사람 이름·연락처만 내 정보로 채운다
-          shipLine.parcel ?? {
-            senderName: profile?.name ?? "",
-            senderPhone: profile?.phone ?? "",
-            senderAddress: "",
-            senderAddressDetail: "",
-            receiverName: "",
-            receiverPhone: "",
-            receiverAddress: "",
-            receiverAddressDetail: "",
-            photos: [],
-          }
-        }
+        // 다른 줄의 입력값은 가져오지 않는다 (같은 주소 쓰기로만 복사)
+        initial={shipLine.parcel ?? emptyParcel(profile)}
         initialMemo={shipLine.memo}
         existingPhotoCount={shipLine.existingPhotoCount}
         onBack={backToForm}
         onSave={(info, memo) => {
           updateLine(shipLine.lineId, { parcel: info, memo });
           if (errorLineId === shipLine.lineId) clearError();
+          if (copyAfterSave) copyShipToChecked({ ...shipLine, parcel: info, memo });
           backToForm();
         }}
       />
@@ -1609,7 +1717,7 @@ export function NewOrderV2({
 
   if (view === "confirm") {
     return (
-      <div className="jy-wrap">
+      <div className="jy-wrap jy-large-text">
         <V2Header title="주문 확인" onBack={() => setView("form")} />
         <section className="jy-card">
           <h2>{isEdit ? "아래 내용으로 수정할까요?" : "아래 내용으로 주문할까요?"}</h2>
@@ -1745,7 +1853,7 @@ export function NewOrderV2({
 
   if (view === "done" && result) {
     return (
-      <div className="jy-wrap">
+      <div className="jy-wrap jy-large-text">
         <div className="jy-logo">✓</div>
         <p className="jy-title-c">{isEdit ? "주문이 수정됐어요" : "주문이 접수됐어요"}</p>
         <p className="jy-sub">
@@ -1783,7 +1891,7 @@ export function NewOrderV2({
   }
 
   return (
-    <div className="jy-wrap">
+    <div className="jy-wrap jy-large-text">
       <V2Header title={isEdit ? "주문 수정" : "새 주문"} onBack={onBackToList} />
 
       {profileError ? <div className="jy-err">{profileError}</div> : null}
@@ -1869,7 +1977,7 @@ export function NewOrderV2({
           <button
             type="button"
             className="jy-btn jy-dark"
-            style={{ height: 50 }}
+            style={{ height: 60 }}
             onClick={() => setProductDialogOpen(true)}
           >
             상품 변경 및 추가
@@ -1895,13 +2003,37 @@ export function NewOrderV2({
             <button
               type="button"
               className="jy-btn jy-dark"
-              style={{ height: 50 }}
+              style={{ height: 60 }}
               onClick={() => setProductDialogOpen(true)}
             >
               + 상품 담기
             </button>
           </>
         )}
+        {checkableLines.length ? (
+          <div className="jy-check-bar">
+            <label className="jy-check">
+              <input
+                type="checkbox"
+                checked={allLinesChecked}
+                onChange={(event) =>
+                  setCheckedLineIds(
+                    event.target.checked ? checkableLines.map((line) => line.lineId) : [],
+                  )
+                }
+              />
+              전체선택
+            </label>
+            <button
+              type="button"
+              className="jy-btn jy-dark"
+              disabled={activeCheckedIds.length === 0}
+              onClick={applySameAddress}
+            >
+              같은 주소 쓰기 ({activeCheckedIds.length})
+            </button>
+          </div>
+        ) : null}
         {lines.length ? (
           lines.map((line, index) => {
             const qtyInvalid = isQtyInvalid(line.lineId);
@@ -1922,7 +2054,20 @@ export function NewOrderV2({
               <div key={line.lineId} id={`jy-line-${line.lineId}`} className="jy-line">
                 <div className="jy-item-line">
                   <div className="jy-item-name">
-                    <span>{line.product}</span>
+                    {line.ship === "delivery" || line.ship === "parcel" ? (
+                      <label className="jy-check">
+                        <input
+                          type="checkbox"
+                          checked={activeCheckedIds.includes(line.lineId)}
+                          onChange={(event) =>
+                            toggleLineChecked(line.lineId, event.target.checked)
+                          }
+                        />
+                        <span>{line.product}</span>
+                      </label>
+                    ) : (
+                      <span>{line.product}</span>
+                    )}
                     {qtyInvalid ? (
                       <div id={qtyErrorId} className="jy-err" role="alert">
                         {QTY_ERROR}
