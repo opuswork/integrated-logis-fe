@@ -17,9 +17,9 @@ import {
 import { API_BASE_URL } from "@/lib/env";
 import { cn } from "@/lib/utils";
 
-const LABEL_CLASS = "mb-1.5 block text-[13px] text-[#7A6F66]";
+const LABEL_CLASS = "mb-2 block text-[19.5px] text-[#7A6F66]";
 const INPUT_CLASS =
-  "h-[50px] w-full rounded-xl border border-[#E6DED4] bg-white px-3.5 text-[15px] text-[#2B2622] placeholder:text-[#7A6F66]/80 focus:outline-2 focus:outline-offset-1 focus:outline-[#D9663A]";
+  "h-[64px] w-full rounded-xl border border-[#E6DED4] bg-white px-4 text-[22.5px] text-[#2B2622] placeholder:text-[#7A6F66]/80 focus:outline-2 focus:outline-offset-1 focus:outline-[#D9663A]";
 
 function LoginForm() {
   const router = useRouter();
@@ -222,7 +222,7 @@ function LoginForm() {
                 variant="default"
                 disabled={!username || !password || isSubmitting}
                 aria-busy={isSubmitting}
-                className="h-14 w-full rounded-2xl border-[#D9663A] bg-[#D9663A] text-base font-bold text-white hover:bg-[#c55a31] disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-[68px] w-full rounded-2xl border-[#D9663A] bg-[#D9663A] text-[24px] font-bold text-white hover:bg-[#c55a31] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? (
                   <Spinner size="sm" label="로그인 중" />
