@@ -11,11 +11,10 @@ const FAREWELL_MAX_MS = 12000;
 /** 영상을 못 불러왔을 때 이동까지 기다리는 시간 */
 const FAREWELL_ERROR_MS = 2000;
 
-/** 영상 속 대사 (소리 없이 재생하므로 자막으로 보여 준다). 시간은 초 */
+/** 영상 위 자막 (소리 없이 재생). 캐릭터가 인사하는 두 구간에 맞춘다. 시간은 초 */
 const FAREWELL_CAPTIONS = [
-  { start: 1.4, end: 2.9, text: "안녕하세요!" },
-  { start: 2.9, end: 4.8, text: "반갑습니다!" },
-  { start: 6.3, end: 10.1, text: "좋은 하루 보내세요!" },
+  { start: 1.4, end: 4.8, text: "장유앱을 사용하여 주셔서 감사합니다." },
+  { start: 6.3, end: 10.1, text: "또 오세요!!" },
 ];
 
 /**
