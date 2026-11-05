@@ -118,9 +118,9 @@ function LoginForm() {
   return (
     <div className="min-h-[100dvh] bg-[#FAF7F2] font-[family-name:var(--font-noto-sans-kr)] text-[#2B2622]">
       <LoginChromeHeader />
-      <main className="px-5 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(4.5rem,calc(env(safe-area-inset-top)+4.25rem))]">
+      <main className="px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(4.5rem,calc(env(safe-area-inset-top)+4.25rem))]">
         <div className="mx-auto flex w-full max-w-[480px] flex-col gap-3.5">
-          <section className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(120%_90%_at_50%_15%,#FBEFE2_0%,#F7DFC6_100%)] px-5 pb-[22px] pt-7 text-center">
+          <section className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(120%_90%_at_50%_15%,#FBEFE2_0%,#F7DFC6_100%)] px-2 pb-3 pt-4 text-center">
             <div
               aria-hidden
               className="absolute -right-[60px] -top-[70px] size-[220px] rounded-full bg-[#D9663A] opacity-10"
@@ -129,10 +129,11 @@ function LoginForm() {
               aria-hidden
               className="absolute -bottom-[50px] -left-10 size-[140px] rounded-full bg-[#D9663A] opacity-[0.08]"
             />
-            <span className="relative z-[1] inline-block rounded-full bg-white px-3 py-[5px] text-xs font-bold text-[#D9663A]">
+            <span className="relative z-[1] inline-block rounded-full bg-white px-5 py-1.5 text-[24px] font-bold leading-tight text-[#D9663A]">
               생명물간장 주문
             </span>
-            {/* 16:9 영상의 가운데만 4:3 으로 보여 준다 (오른쪽 아래 표식은 잘림). 가장자리는 카드 배경에 스며들게 흐리게 */}
+            {/* 16:9 영상의 가운데를 보여 준다 (오른쪽 아래 표식은 잘림). 로그인 칸이 스크롤 없이 보이도록
+                높이는 화면 높이에 맞춰 줄어든다. 가장자리는 카드 배경에 스며들게 흐리게 */}
             <video
               ref={videoRef}
               src="/assets/videos/login-logo.mp4"
@@ -143,12 +144,9 @@ function LoginForm() {
               playsInline
               preload="auto"
               aria-label="간장병 캐릭터가 휴대폰으로 간장을 주문하는 영상"
-              className="relative z-[1] mx-auto mt-3.5 block aspect-[4/3] w-[min(86%,340px)] rounded-[20px] object-cover [mask-image:radial-gradient(ellipse_at_center,#000_62%,transparent_100%)]"
+              className="relative z-[1] mx-auto mt-2.5 block aspect-[4/3] max-h-[max(140px,calc(100dvh-520px))] w-full rounded-[20px] object-cover [mask-image:radial-gradient(ellipse_at_center,#000_62%,transparent_100%)]"
             />
-            <h1 className="relative z-[1] mt-4 text-2xl font-bold">장유 주문앱</h1>
-            <p className="relative z-[1] mt-1 text-sm text-[#7A6F66]">
-              로그인하고 주문을 시작하세요
-            </p>
+            <h1 className="sr-only">장유 주문앱</h1>
             <h2 className="sr-only">B2B통합 물류·주문 관리 시스템</h2>
           </section>
 
