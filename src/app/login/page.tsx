@@ -144,7 +144,7 @@ function LoginForm() {
               playsInline
               preload="auto"
               aria-label="간장병 캐릭터가 휴대폰으로 간장을 주문하는 영상"
-              className="relative z-[1] mx-auto mt-2.5 block aspect-[4/3] max-h-[max(140px,calc(100dvh-520px))] w-full rounded-[20px] object-cover [mask-image:radial-gradient(ellipse_at_center,#000_62%,transparent_100%)]"
+              className="relative z-[1] mx-auto mt-2.5 block aspect-[4/3] max-h-[max(140px,calc(100dvh-450px))] w-full rounded-[20px] object-cover [mask-image:radial-gradient(ellipse_at_center,#000_62%,transparent_100%)]"
             />
             <h1 className="sr-only">장유 주문앱</h1>
             <h2 className="sr-only">B2B통합 물류·주문 관리 시스템</h2>
