@@ -7,7 +7,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { Download } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -18,8 +18,17 @@ import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { getAuthUser, isTopAdminUser } from "@/lib/auth";
-import { exportMembersWorkbook } from "@/lib/export-members-excel";
+import {
+  exportMembersWorkbook,
+  parseMembersWorkbook,
+  type MemberImportRow,
+} from "@/lib/export-members-excel";
 import { cn } from "@/lib/utils";
+
+import {
+  MemberExcelUploadDialog,
+  type MemberBulkUpdateResult,
+} from "./MemberExcelUploadDialog";
 
 const PAGE_SIZE = 20;
 
@@ -809,6 +818,15 @@ export function MembersListMng() {
   const [page, setPage] = useState(1);
   const [editingMember, setEditingMember] = useState<MemberRow | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isApplyingUpload, setIsApplyingUpload] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [upload, setUpload] = useState<{
+    fileName: string;
+    rows: MemberImportRow[];
+    preview: MemberBulkUpdateResult;
+  } | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const canExportMembers = isTopAdminUser(getAuthUser());
 
   const loadMembers = async () => {
@@ -905,10 +923,10 @@ export function MembersListMng() {
       await exportMembersWorkbook({
         rows: filteredMembers.map((member) => [
           member.username,
-          member.churchName
-            ? `${member.fullname}-${member.churchName}`
-            : member.fullname,
+          member.fullname,
+          member.churchName,
           formatMemberType(member.memberType),
+          member.phone,
         ]),
         filename: `회원명단_${stamp}.xlsx`,
       });
@@ -919,8 +937,83 @@ export function MembersListMng() {
     }
   };
 
+  /** 고친 회원명단 엑셀 → 미리보기(dryRun) / 적용 */
+  const postBulkUpdate = async (rows: MemberImportRow[], dryRun: boolean) => {
+    const response = await apiFetch("/api/members/bulk-update", {
+      method: "POST",
+      body: JSON.stringify({ rows, dryRun }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | (MemberBulkUpdateResult & { message?: string | string[] })
+      | null;
+    if (!response.ok || !data?.summary) {
+      const raw = data?.message;
+      throw new Error(
+        (Array.isArray(raw) ? raw[0] : raw) || "회원명단을 확인하지 못했습니다.",
+      );
+    }
+    return data;
+  };
+
+  const handleUploadFile = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const rows = await parseMembersWorkbook(file);
+      if (rows.length === 0) {
+        throw new Error("엑셀에 회원 행이 없습니다.");
+      }
+      const preview = await postBulkUpdate(rows, true);
+      setUploadError("");
+      setUpload({ fileName: file.name, rows, preview });
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : "엑셀 파일을 읽지 못했습니다.",
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleApplyUpload = async () => {
+    if (!upload) return;
+    setIsApplyingUpload(true);
+    setUploadError("");
+    try {
+      const result = await postBulkUpdate(upload.rows, false);
+      setUpload(null);
+      window.alert(`회원 ${result.summary.updated}명의 정보를 수정했습니다.`);
+      await loadMembers();
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : "회원 정보를 수정하지 못했습니다.",
+      );
+    } finally {
+      setIsApplyingUpload(false);
+    }
+  };
+
   const exportButton = canExportMembers ? (
-    <div className="flex justify-end">
+    <div className="flex justify-end gap-2">
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void handleUploadFile(file);
+        }}
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={isUploading}
+        onClick={() => uploadInputRef.current?.click()}
+      >
+        <Upload className="size-4" />
+        {isUploading ? "확인 중..." : "엑셀 업로드"}
+      </Button>
       <Button
         variant="outline"
         size="sm"
@@ -1083,6 +1176,17 @@ export function MembersListMng() {
           ) : null}
 
           {exportButton}
+
+          {upload ? (
+            <MemberExcelUploadDialog
+              fileName={upload.fileName}
+              preview={upload.preview}
+              isApplying={isApplyingUpload}
+              error={uploadError}
+              onApply={() => void handleApplyUpload()}
+              onClose={() => setUpload(null)}
+            />
+          ) : null}
 
           {editingMember ? (
             <MemberEditPanel
