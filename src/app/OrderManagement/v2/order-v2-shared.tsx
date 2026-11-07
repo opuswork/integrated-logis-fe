@@ -176,12 +176,27 @@ export function BackIcon() {
 /** 화면 크기 단계. 가운데(1)가 기본 = 1.5배 글씨 화면 그대로 */
 export const TEXT_SCALES = [0.67, 0.85, 1, 1.15, 1.3] as const;
 const DEFAULT_SCALE_INDEX = 2;
+/**
+ * 글씨 단계는 이번 방문(탭) 동안만 기억한다 (sessionStorage).
+ * 앱을 새로 열면 항상 100% 로 시작 — 예전에 줄여 둔 값(67% 등) 때문에
+ * 글씨+/- 버튼이 없는 주문 달력이 작게 열리던 문제 방지.
+ */
 const TEXT_SCALE_KEY = "jy-v2-text-scale";
 const TEXT_SCALE_EVENT = "jy-v2-text-scale-change";
 
+/** 예전 버전이 기기에 영구 저장한 값은 지운다 */
+if (typeof window !== "undefined") {
+  try {
+    window.localStorage.removeItem(TEXT_SCALE_KEY);
+  } catch {
+    // 저장소가 막힌 브라우저
+  }
+}
+
 function readTextScaleIndex() {
   try {
-    const saved = Number(window.localStorage.getItem(TEXT_SCALE_KEY));
+    const raw = window.sessionStorage.getItem(TEXT_SCALE_KEY);
+    const saved = raw === null ? NaN : Number(raw);
     return Number.isInteger(saved) && saved >= 0 && saved < TEXT_SCALES.length
       ? saved
       : DEFAULT_SCALE_INDEX;
@@ -192,14 +207,10 @@ function readTextScaleIndex() {
 
 function subscribeTextScale(onChange: () => void) {
   window.addEventListener(TEXT_SCALE_EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(TEXT_SCALE_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
+  return () => window.removeEventListener(TEXT_SCALE_EVENT, onChange);
 }
 
-/** 글씨+/글씨- 단계 (이 기기에 저장) */
+/** 글씨+/글씨- 단계 (이번 방문 동안 유지, 새로 열면 100%) */
 export function useTextScaleIndex() {
   return useSyncExternalStore(
     subscribeTextScale,
@@ -210,7 +221,7 @@ export function useTextScaleIndex() {
 
 function setTextScaleIndex(index: number) {
   try {
-    window.localStorage.setItem(TEXT_SCALE_KEY, String(index));
+    window.sessionStorage.setItem(TEXT_SCALE_KEY, String(index));
   } catch {
     // 저장이 막힌 브라우저: 이번 화면에서만 바뀐다 (아래 이벤트도 저장값을 읽으므로 그대로)
   }
