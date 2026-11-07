@@ -1339,7 +1339,7 @@ export function StockInventoryMng() {
     {
       key: "productName",
       header: "품명",
-      className: "w-[24%]",
+      className: "w-[14%]",
     },
     {
       key: "image",
@@ -1352,11 +1352,13 @@ export function StockInventoryMng() {
     {
       key: "spec",
       header: "규격",
+      className: "w-[22%]",
       render: (row) => <SpecText spec={row.spec} />,
     },
     {
       key: "unit",
       header: "단위",
+      className: "w-[56px]",
       render: (row) => String(row.unit),
     },
     {
@@ -1368,6 +1370,7 @@ export function StockInventoryMng() {
     {
       key: "openStock",
       header: "고객공개",
+      className: "w-[72px]",
       render: (row) => (row.openStock !== false ? "공개" : "비공개"),
     },
     {
