@@ -6,6 +6,7 @@ import { ProductNameWithStock } from "@/components/product-name-with-stock";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api";
+import { specToPlain } from "@/lib/spec-text";
 
 const DEFAULT_PRODUCT_IMAGE = "/assets/images/No_img.jpg";
 
@@ -144,7 +145,7 @@ export function ProductPickDialog({
       return (
         item.productName.toLowerCase().includes(normalizedKeyword) ||
         item.code.toLowerCase().includes(normalizedKeyword) ||
-        (item.spec ?? "").toLowerCase().includes(normalizedKeyword)
+        specToPlain(item.spec, " ").toLowerCase().includes(normalizedKeyword)
       );
     });
   }, [catalog, keyword, categoryFilter]);
@@ -258,7 +259,7 @@ export function ProductPickDialog({
                     />
                     <p className="truncate text-xs text-muted-foreground">
                       {item.code}
-                      {item.spec ? ` · ${item.spec}` : ""}
+                      {item.spec ? ` · ${specToPlain(item.spec)}` : ""}
                       {item.category ? ` · ${item.category}` : ""}
                       {item.boxName
                         ? ` · ${item.boxName}${

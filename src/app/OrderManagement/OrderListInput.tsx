@@ -53,6 +53,7 @@ import {
 } from "@/lib/date-format";
 import { openDaumPostcode } from "@/lib/daum-postcode";
 import { API_BASE_URL } from "@/lib/env";
+import { specToPlain } from "@/lib/spec-text";
 import {
   parseBranchStoreFromNotes,
   parseChurchFromNotes,
@@ -1589,7 +1590,7 @@ function catalogItemMatches(
   if (
     item.productName.toLowerCase().includes(normalizedKeyword) ||
     item.code.toLowerCase().includes(normalizedKeyword) ||
-    (item.spec ?? "").toLowerCase().includes(normalizedKeyword)
+    specToPlain(item.spec, " ").toLowerCase().includes(normalizedKeyword)
   ) {
     return true;
   }
@@ -2156,7 +2157,7 @@ export function ProductAddDialog({
                   isSheet ? "mt-1 text-[17px]" : "mt-0.5 text-xs",
                 )}
               >
-                {item.spec || "규격 없음"}
+                {specToPlain(item.spec) || "규격 없음"}
               </p>
               <p
                 className={cn(

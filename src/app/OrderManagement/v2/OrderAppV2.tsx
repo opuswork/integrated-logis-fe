@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { OrderPrintPreviewModal } from "@/app/admin/OrderManagement/OrderPrintPreview";
 import { apiFetch } from "@/lib/api";
@@ -28,6 +28,36 @@ function nextSplitIndex(rawOrders: ApiMemberOrder[], order: ApiMemberOrder) {
     ? rawOrders.filter((row) => row.orderGroupKey === key)
     : [order];
   return Math.max(...siblings.map((row) => row.splitIndex ?? 1), 1) + 1;
+}
+
+/** 화면 기준 폭(.jy-wrap max-width). 이보다 넓은 휴대 기기는 이 폭이 꽉 차게 키운다 */
+const BASE_WIDTH = 480;
+/** 이 폭 이상은 PC 레이아웃 (min-[1040px]) — 맞춤 확대 안 함 */
+const DESKTOP_MIN_WIDTH = 1040;
+const MAX_FIT_ZOOM = 1.8;
+
+function fitZoomFor(width: number) {
+  if (!width || width >= DESKTOP_MIN_WIDTH) return 1;
+  return Math.min(Math.max(width / BASE_WIDTH, 1), MAX_FIT_ZOOM);
+}
+
+/**
+ * 480px 보다 넓은 휴대 기기(태블릿·폴더블)에서 처음부터 화면이 꽉 차도록 맞춤 배율을 잰다.
+ * 그리기 전에 재서 작게 보였다가 커지는 깜박임이 없다.
+ */
+function useFitZoom() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fitZoom, setFitZoom] = useState(1);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const update = () => setFitZoom(fitZoomFor(element.clientWidth));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, fitZoom] as const;
 }
 
 /** 주문목록포함버전: 주문 달력 + 새 주문 (시안 fe/장유 주문 7.html) */
@@ -58,6 +88,7 @@ export function OrderAppV2({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const textScaleIndex = useTextScaleIndex();
+  const [rootRef, fitZoom] = useFitZoom();
 
   // 기존 내 주문 현황과 같이 4초마다 조용히 새로고침
   useEffect(() => {
@@ -144,8 +175,13 @@ export function OrderAppV2({
 
   return (
     <div
+      ref={rootRef}
       className="jy-v2 -mx-4 -mt-4 -mb-6 min-h-[calc(100dvh-4rem)] min-[1040px]:m-0 min-[1040px]:rounded-xl"
-      style={{ "--jy-zoom": TEXT_SCALES[textScaleIndex] } as React.CSSProperties}
+      style={
+        {
+          "--jy-zoom": fitZoom * TEXT_SCALES[textScaleIndex],
+        } as React.CSSProperties
+      }
     >
       {screen === "calendar" ? (
         <OrderCalendarV2
