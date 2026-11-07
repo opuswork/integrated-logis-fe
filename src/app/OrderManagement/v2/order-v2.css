@@ -351,6 +351,8 @@
   justify-content: center;
 }
 .jy-v2 .jy-confirm {
+  /* 글씨 단계·화면 맞춤 배율을 달력 화면과 같게 */
+  zoom: var(--jy-zoom, 1);
   width: 100%;
   max-width: 480px;
   background: var(--jy-surface);

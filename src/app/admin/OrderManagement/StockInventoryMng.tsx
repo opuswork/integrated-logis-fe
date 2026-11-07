@@ -8,6 +8,7 @@ import {
   type ChangeEvent,
   type Dispatch,
   type PointerEvent,
+  type ReactNode,
   type SetStateAction,
 } from "react";
 
@@ -19,6 +20,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
+import { SpecText, specToPlain } from "@/lib/spec-text";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 200, 500].map((size) => ({
@@ -251,7 +253,7 @@ function DetailField({
   className,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   className?: string;
 }) {
   return (
@@ -447,7 +449,7 @@ function StockInventoryDetailContent({
             label="고객 공개"
             value={product.openStock !== false ? "공개" : "비공개"}
           />
-          <DetailField label="규격" value={product.spec ?? ""} />
+          <DetailField label="규격" value={<SpecText spec={product.spec} />} />
           <DetailField label="단위" value={String(product.unit)} />
           <DetailField label="재고" value={formatStock(product.stock, product.stockMax)} />
           <DetailField
@@ -686,11 +688,16 @@ function ProductFormEditor({
           className="min-[640px]:col-span-2"
           required
         />
-        <Input
-          label="규격"
-          value={form.spec}
-          onChange={updateField("spec")}
-        />
+        <div>
+          <Input
+            label="규격"
+            value={form.spec}
+            onChange={updateField("spec")}
+          />
+          <p className="mt-1 text-xs text-[#64748b]">
+            줄을 바꾸려면 &lt;br/&gt; 를 입력하세요. (예: 간장500mL*1,&lt;br/&gt;간장120mlx2)
+          </p>
+        </div>
         <Input
           label="단위"
           type="number"
@@ -970,7 +977,7 @@ function MobileProductCard({
             </p>
             <p className="mt-0.5 text-xs text-[#64748b]">{product.code}</p>
             <p className="mt-1 text-xs text-[#64748b]">
-              {product.spec || "규격 없음"} · 단위 {product.unit} · 재고{" "}
+              {specToPlain(product.spec) || "규격 없음"} · 단위 {product.unit} · 재고{" "}
               {formatStock(product.stock, product.stockMax)}
             </p>
             <p className="mt-0.5 text-xs text-[#64748b]">
@@ -1086,7 +1093,7 @@ export function StockInventoryMng() {
         case "productName":
           return includesText(product.productName);
         case "spec":
-          return includesText(product.spec);
+          return includesText(specToPlain(product.spec, " "));
         case "stock":
           return matchesStock(product);
         case "unit":
@@ -1095,7 +1102,7 @@ export function StockInventoryMng() {
           return (
             includesText(product.code) ||
             includesText(product.productName) ||
-            includesText(product.spec) ||
+            includesText(specToPlain(product.spec, " ")) ||
             includesText(product.category) ||
             matchesStock(product) ||
             matchesUnit(product)
@@ -1345,7 +1352,7 @@ export function StockInventoryMng() {
     {
       key: "spec",
       header: "규격",
-      render: (row) => row.spec || "-",
+      render: (row) => <SpecText spec={row.spec} />,
     },
     {
       key: "unit",

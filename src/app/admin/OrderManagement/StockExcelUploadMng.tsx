@@ -12,6 +12,7 @@ import {
 
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
+import { SpecText } from "@/lib/spec-text";
 import { cn } from "@/lib/utils";
 
 const TEMPLATE_URL = "/templates/stock-bulk-upload.xlsx";
@@ -673,7 +674,7 @@ function PreviewPanel({
                   <ImageCell row={row} />
                 </td>
                 <td className="px-3 py-2">{row.productName || "—"}</td>
-                <td className="px-3 py-2 text-[#64748B]">{row.spec || "—"}</td>
+                <td className="px-3 py-2 text-[#64748B]"><SpecText spec={row.spec} fallback="—" /></td>
                 <td className="px-3 py-2 tabular-nums">{formatInt(row.unit)}</td>
                 <td className="px-3 py-2 text-[#64748B]">
                   {row.category || "—"}
