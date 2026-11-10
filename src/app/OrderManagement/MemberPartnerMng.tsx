@@ -24,6 +24,8 @@ export type PartnerRow = {
   contactName: string;
   phone: string | null;
   address: string;
+  /** 상세주소 (층·호수·건물명) */
+  addressDetail?: string | null;
   email: string | null;
   source?: string;
   category?: string | null;
@@ -211,7 +213,7 @@ export function MemberPartnerMng({
       contactName: row.contactName,
       phone: formatPhoneInput(row.phone ?? ""),
       address: row.address,
-      addressDetail: "",
+      addressDetail: row.addressDetail ?? "",
       email: row.email ?? "",
     });
     setError("");
@@ -251,7 +253,8 @@ export function MemberPartnerMng({
       name: form.name.trim(),
       contactName: form.contactName.trim(),
       phone: form.phone.trim(),
-      address: joinAddress(form.address, form.addressDetail),
+      address: form.address.trim(),
+      addressDetail: form.addressDetail.trim() || null,
       email: form.email.trim() || null,
     };
 
@@ -393,7 +396,7 @@ export function MemberPartnerMng({
       key: "address",
       header: "주소",
       className: "break-words",
-      render: (row) => row.address || "-",
+      render: (row) => joinAddress(row.address, row.addressDetail ?? "") || "-",
     },
     {
       key: "action",
@@ -419,7 +422,9 @@ export function MemberPartnerMng({
           {row.contactName || "-"} · {row.phone || "-"}
           {row.centerName ? ` · 중앙 ${row.centerName}` : ""}
         </p>
-        <p className="mt-0.5 break-words text-[#64748B]">{row.address}</p>
+        <p className="mt-0.5 break-words text-[#64748B]">
+          {joinAddress(row.address, row.addressDetail ?? "")}
+        </p>
         {row.email ? <p className="text-[#64748B]">{row.email}</p> : null}
       </div>
       {actionButtons(row)}
