@@ -12,6 +12,8 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Pagination } from "@/components/ui/pagination";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { Table, type TableColumn } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { openDaumPostcode } from "@/lib/daum-postcode";
 import { hangulInputValue } from "@/lib/hangul-typing";
@@ -107,6 +109,7 @@ export function MemberPartnerMng({
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const listTopRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // 관리자(공유 목록): 검색어 입력이 멈추면 서버 검색
   useEffect(() => {
@@ -119,6 +122,10 @@ export function MemberPartnerMng({
   }, [listFilter, sharedCatalog]);
 
   const loadPartners = useCallback(async () => {
+    // 검색어·페이지를 빨리 바꾸면 이전 요청을 취소해 늦게 온 응답이 화면을 덮지 않게 한다
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setListError("");
     try {
@@ -129,7 +136,9 @@ export function MemberPartnerMng({
           pageSize: String(pageSize),
         });
         if (searchQuery) params.set("search", searchQuery);
-        const res = await apiFetch(`/api/partners?${params.toString()}`);
+        const res = await apiFetch(`/api/partners?${params.toString()}`, {
+          signal: controller.signal,
+        });
         const data = (await res.json()) as PartnerPage | { message?: string };
         if (!res.ok || !("items" in data) || !Array.isArray(data.items)) {
           throw new Error(
@@ -155,6 +164,7 @@ export function MemberPartnerMng({
       setPartners(data);
       setTotal(data.length);
     } catch (err) {
+      if (controller.signal.aborted) return;
       setListError(
         err instanceof Error
           ? err.message
@@ -163,9 +173,11 @@ export function MemberPartnerMng({
       setPartners([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [sharedCatalog, page, pageSize, searchQuery]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   useEffect(() => {
     void loadPartners();
@@ -308,6 +320,111 @@ export function MemberPartnerMng({
     : editingId != null
       ? "수정 저장"
       : "등록";
+
+  const emptyMessage = searchQuery
+    ? "검색어가 포함된 거래처가 없습니다."
+    : "등록된 거래처가 없습니다.";
+
+  const actionButtons = (row: PartnerRow) => (
+    <div className="flex shrink-0 gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={(event) => {
+          event.stopPropagation();
+          startEdit(row);
+        }}
+      >
+        수정
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={(event) => {
+          event.stopPropagation();
+          void handleDelete(row.id);
+        }}
+      >
+        삭제
+      </Button>
+    </div>
+  );
+
+  /** 관리자 테이블 열 (재고/상품 테이블과 같은 Table 컴포넌트) */
+  const columns: TableColumn<PartnerRow>[] = [
+    {
+      key: "name",
+      header: "거래처명",
+      className: "w-[22%] font-semibold",
+    },
+    {
+      key: "category",
+      header: "구분",
+      className: "w-[72px]",
+      render: (row) => row.category || "-",
+    },
+    {
+      key: "subCategory",
+      header: "구분2",
+      className: "w-[110px]",
+      render: (row) => row.subCategory || "-",
+    },
+    {
+      key: "centerName",
+      header: "중앙",
+      className: "w-[80px]",
+      render: (row) => row.centerName || "-",
+    },
+    {
+      key: "contactName",
+      header: "담당자",
+      className: "w-[110px]",
+      render: (row) => row.contactName || "-",
+    },
+    {
+      key: "phone",
+      header: "연락처",
+      className: "w-[120px]",
+      render: (row) => row.phone || "-",
+    },
+    {
+      key: "address",
+      header: "주소",
+      className: "break-words",
+      render: (row) => row.address || "-",
+    },
+    {
+      key: "action",
+      header: "작업",
+      className: "w-[112px]",
+      render: (row) => actionButtons(row),
+    },
+  ];
+
+  /** 카드형 한 줄 (회원 목록, 관리자 좁은 화면) */
+  const renderPartnerCard = (row: PartnerRow) => (
+    <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 text-[13px] text-[#1A202C]">
+        <p className="flex flex-wrap items-center gap-1.5 font-semibold">
+          <span>{row.name}</span>
+          {row.category || row.subCategory ? (
+            <span className="rounded bg-[#EDF2F7] px-1.5 py-0.5 text-[10.5px] font-bold text-[#718096]">
+              {[row.category, row.subCategory].filter(Boolean).join(" · ")}
+            </span>
+          ) : null}
+        </p>
+        <p className="text-[#64748B]">
+          {row.contactName || "-"} · {row.phone || "-"}
+          {row.centerName ? ` · 중앙 ${row.centerName}` : ""}
+        </p>
+        <p className="mt-0.5 break-words text-[#64748B]">{row.address}</p>
+        {row.email ? <p className="text-[#64748B]">{row.email}</p> : null}
+      </div>
+      {actionButtons(row)}
+    </div>
+  );
 
   /** 등록·수정 입력칸 (회원: 카드 안 인라인, 관리자: bottom sheet 안) */
   const formFields = (
@@ -465,120 +582,144 @@ export function MemberPartnerMng({
         </form>
       )}
 
-      <div
-        ref={listTopRef}
-        className="scroll-mt-4 rounded-xl border border-[#E2E8F0] bg-white p-4"
-      >
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-[15px] font-semibold text-[#1A202C]">
-            등록된 거래처
-            {sharedCatalog && !loading ? (
-              <span className="ml-2 text-[12px] font-normal text-[#64748B]">
-                총 {total.toLocaleString()}건
-              </span>
-            ) : null}
-          </h4>
-          {sharedCatalog ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-[#64748b]">
-                거래처보기
-              </span>
-              <div className="w-[96px]">
-                <Dropdown
-                  aria-label="거래처보기"
-                  options={PAGE_SIZE_OPTIONS}
-                  value={String(pageSize)}
-                  onChange={(value) => {
-                    setPageSize(Number(value));
-                    setPage(1);
-                  }}
-                />
+      {sharedCatalog ? (
+        <>
+          {/* 검색·줄 수 (재고/상품과 같은 카드) */}
+          <section
+            ref={listTopRef}
+            className="scroll-mt-4 rounded-lg border border-line bg-panel p-3.5"
+          >
+            <input
+              className={`${inputClass} mb-0`}
+              aria-label="거래처 검색"
+              value={listFilter}
+              onChange={(e) =>
+                setListFilter(hangulInputValue(e, { syllablesOnly: true }))
+              }
+              placeholder="거래처명·담당자·주소·중앙으로 검색"
+            />
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              {loading ? (
+                <Skeleton className="h-3 w-20" />
+              ) : (
+                <p className="text-xs text-[#64748b]">
+                  총 {total.toLocaleString()}건
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-[#64748b]">
+                  거래처보기
+                </span>
+                <div className="w-[96px]">
+                  <Dropdown
+                    aria-label="거래처보기"
+                    options={PAGE_SIZE_OPTIONS}
+                    value={String(pageSize)}
+                    onChange={(value) => {
+                      setPageSize(Number(value));
+                      setPage(1);
+                    }}
+                  />
+                </div>
               </div>
             </div>
+          </section>
+
+          {listError ? (
+            <p className="rounded-lg border border-line bg-panel p-3.5 text-[13px] text-red-600">
+              {listError}
+            </p>
           ) : null}
-        </div>
-        {sharedCatalog ? (
-          <input
-            className={inputClass}
-            value={listFilter}
-            onChange={(e) =>
-              setListFilter(hangulInputValue(e, { syllablesOnly: true }))
-            }
-            placeholder="거래처명·담당자·주소·중앙으로 검색"
-          />
-        ) : null}
-        {listError ? (
-          <p className="mb-3 text-[13px] text-red-600">{listError}</p>
-        ) : null}
-        {loading ? (
-          <p className="text-[13px] text-[#64748B]">불러오는 중...</p>
-        ) : partners.length === 0 ? (
-          <p className="text-[13px] text-[#64748B]">
-            {sharedCatalog && searchQuery
-              ? "검색어가 포함된 거래처가 없습니다."
-              : "등록된 거래처가 없습니다."}
-          </p>
-        ) : (
-          <ul className="divide-y divide-[#E2E8F0]">
-            {partners.map((row) => (
-              <li
-                key={row.id}
-                className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between"
-              >
-                <div className="min-w-0 text-[13px] text-[#1A202C]">
-                  <p className="flex flex-wrap items-center gap-1.5 font-semibold">
-                    <span>{row.name}</span>
-                    {row.category || row.subCategory ? (
-                      <span className="rounded bg-[#EDF2F7] px-1.5 py-0.5 text-[10.5px] font-bold text-[#718096]">
-                        {[row.category, row.subCategory]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-[#64748B]">
-                    {row.contactName || "-"} · {row.phone || "-"}
-                    {row.centerName ? ` · 중앙 ${row.centerName}` : ""}
-                  </p>
-                  <p className="mt-0.5 break-words text-[#64748B]">
-                    {row.address}
-                  </p>
-                  {row.email ? (
-                    <p className="text-[#64748B]">{row.email}</p>
-                  ) : null}
+
+          {/* 좁은 화면: 카드 목록 */}
+          <div className="space-y-2.5 min-[1040px]:hidden">
+            {loading ? (
+              Array.from({ length: 4 }, (_, index) => (
+                <div
+                  key={index}
+                  className="space-y-2 rounded-xl border border-line bg-white p-3.5"
+                >
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="h-3 w-full" />
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => startEdit(row)}
-                  >
-                    수정
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleDelete(row.id)}
-                  >
-                    삭제
-                  </Button>
+              ))
+            ) : partners.length === 0 ? (
+              <p className="rounded-xl border border-line bg-white px-3.5 py-6 text-center text-sm text-muted-foreground">
+                {emptyMessage}
+              </p>
+            ) : (
+              partners.map((row) => (
+                <div
+                  key={row.id}
+                  className="rounded-xl border border-line bg-white px-3.5"
+                >
+                  {renderPartnerCard(row)}
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {sharedCatalog && total > 0 ? (
-          <div className="mt-4 flex justify-center">
-            <Pagination
-              page={page}
-              totalPages={totalPages}
-              onPageChange={changePage}
-            />
+              ))
+            )}
           </div>
-        ) : null}
-      </div>
+
+          {/* 넓은 화면: 테이블 */}
+          <section className="hidden min-w-0 rounded-lg border border-line bg-panel p-3.5 min-[1040px]:block">
+            {loading ? (
+              <TableSkeleton
+                rows={Math.min(pageSize, 12)}
+                columns={7}
+                className="border-0"
+              />
+            ) : (
+              <Table
+                caption="거래처 목록"
+                columns={columns}
+                data={partners}
+                emptyMessage={emptyMessage}
+                onRowClick={(row) => startEdit(row)}
+                getRowClassName={() => "cursor-pointer hover:bg-[#f8fafc]"}
+              />
+            )}
+          </section>
+
+          {total > 0 ? (
+            <div className="flex justify-center">
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={changePage}
+              />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+          <h4 className="mb-3 text-[15px] font-semibold text-[#1A202C]">
+            등록된 거래처
+          </h4>
+          {listError ? (
+            <p className="mb-3 text-[13px] text-red-600">{listError}</p>
+          ) : null}
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="space-y-2 py-1">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : partners.length === 0 ? (
+            <p className="text-[13px] text-[#64748B]">
+              등록된 거래처가 없습니다.
+            </p>
+          ) : (
+            <ul className="divide-y divide-[#E2E8F0]">
+              {partners.map((row) => (
+                <li key={row.id}>{renderPartnerCard(row)}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
