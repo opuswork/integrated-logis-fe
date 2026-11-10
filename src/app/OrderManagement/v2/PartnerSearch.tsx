@@ -10,6 +10,7 @@ export type PartnerHit = {
   name: string;
   phone: string | null;
   address: string;
+  addressDetail?: string | null;
   category?: string | null;
   subCategory?: string | null;
 };
@@ -29,9 +30,12 @@ export type PartnerFill = {
  */
 export function splitPartnerAddress(raw: string): [string, string] {
   const text = raw.replace(/\s+/g, " ").trim();
-  const match = text.match(/^(.*?(?:로|길)\s?\d+(?:-\d+)?)(?=\s|$)\s*(.*)$/);
+  // 서버 마이그레이션(20261111150000)과 같은 규칙: 참고항목 "(영화동)"은 주소에 남긴다
+  const match = text.match(
+    /^(.*?(?:로|길)\s?\d+(?:-\d+)?(?:\s?\([^)]*\))?)(?:[\s,]+(.*))?$/,
+  );
   if (!match) return [text, ""];
-  return [match[1].trim(), match[2].trim()];
+  return [match[1].trim(), (match[2] ?? "").replace(/^[\s,.]+|[\s,.]+$/g, "")];
 }
 
 /** "033-641-3811", "1566-2210/콜센터:1566-2210" 같은 값에서 전화번호 하나를 뽑는다 */
@@ -98,7 +102,10 @@ export function PartnerSearch({
   }, []);
 
   const choose = (hit: PartnerHit) => {
-    const [address, addressDetail] = splitPartnerAddress(hit.address);
+    // 상세주소가 따로 저장돼 있으면 그대로, 없으면(이전 데이터) 주소를 나눈다
+    const [address, addressDetail] = hit.addressDetail
+      ? [hit.address, hit.addressDetail]
+      : splitPartnerAddress(hit.address);
     onSelect({
       name: hit.name,
       address,
@@ -158,7 +165,7 @@ export function PartnerSearch({
                 >
                   <span className="jy-partner-name">{hit.name}</span>
                   <span className="jy-partner-sub">
-                    {[hit.address, hit.phone].filter(Boolean).join(" · ")}
+                    {[hit.address, hit.addressDetail, hit.phone].filter(Boolean).join(" · ")}
                   </span>
                 </button>
               </li>
