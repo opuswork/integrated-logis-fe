@@ -1,8 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { Dropdown } from "@/components/ui/dropdown";
+import { Pagination } from "@/components/ui/pagination";
 import { apiFetch } from "@/lib/api";
 import { openDaumPostcode } from "@/lib/daum-postcode";
 import { hangulInputValue } from "@/lib/hangul-typing";
@@ -28,7 +37,14 @@ type PartnerPage = {
   pageSize: number;
 };
 
-const PAGE_SIZE = 50;
+/** 관리자 목록: 거래처보기 줄 수 */
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200].map((size) => ({
+  value: String(size),
+  label: `${size}줄`,
+}));
+const DEFAULT_PAGE_SIZE = 20;
+
+const PARTNER_FORM_ID = "partner-form";
 
 type PartnerForm = {
   name: string;
@@ -80,15 +96,17 @@ export function MemberPartnerMng({
   const [error, setError] = useState("");
   /** 목록 불러오기·삭제 오류 */
   const [listError, setListError] = useState("");
-  // 관리자 화면은 목록을 먼저 보여주고, 등록 폼은 버튼으로 연다
-  const [formOpen, setFormOpen] = useState(!sharedCatalog);
+  /** 관리자 화면: 등록·수정 bottom sheet 열림 */
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<PartnerForm>(EMPTY_FORM);
   const [searchingAddress, setSearchingAddress] = useState(false);
   const [listFilter, setListFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
+  const listTopRef = useRef<HTMLDivElement>(null);
 
   // 관리자(공유 목록): 검색어 입력이 멈추면 서버 검색
   useEffect(() => {
@@ -108,7 +126,7 @@ export function MemberPartnerMng({
         // 엑셀 입력분까지 1만 건 이상이라 서버에서 페이지 단위로 받는다
         const params = new URLSearchParams({
           page: String(page),
-          pageSize: String(PAGE_SIZE),
+          pageSize: String(pageSize),
         });
         if (searchQuery) params.set("search", searchQuery);
         const res = await apiFetch(`/api/partners?${params.toString()}`);
@@ -147,31 +165,34 @@ export function MemberPartnerMng({
     } finally {
       setLoading(false);
     }
-  }, [sharedCatalog, page, searchQuery]);
+  }, [sharedCatalog, page, pageSize, searchQuery]);
 
   useEffect(() => {
     void loadPartners();
   }, [loadPartners]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const resetForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setError("");
-    if (sharedCatalog) setFormOpen(false);
+    setSheetOpen(false);
+  };
+
+  const closeSheet = () => {
+    if (saving) return;
+    resetForm();
   };
 
   const openCreateForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setError("");
-    setFormOpen(true);
+    setSheetOpen(true);
   };
 
   const startEdit = (row: PartnerRow) => {
-    setFormOpen(true);
-    if (sharedCatalog) window.scrollTo({ top: 0, behavior: "smooth" });
     setEditingId(row.id);
     setForm({
       name: row.name,
@@ -182,6 +203,12 @@ export function MemberPartnerMng({
       email: row.email ?? "",
     });
     setError("");
+    if (sharedCatalog) setSheetOpen(true);
+  };
+
+  const changePage = (next: number) => {
+    setPage(next);
+    listTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const validate = (): string | null => {
@@ -257,9 +284,6 @@ export function MemberPartnerMng({
     }
   };
 
-  // 관리자 목록은 서버에서 이미 검색·페이징된 결과
-  const visiblePartners = partners;
-
   const handleAddressSearch = async () => {
     setSearchingAddress(true);
     try {
@@ -279,6 +303,95 @@ export function MemberPartnerMng({
     }
   };
 
+  const submitLabel = saving
+    ? "저장 중..."
+    : editingId != null
+      ? "수정 저장"
+      : "등록";
+
+  /** 등록·수정 입력칸 (회원: 카드 안 인라인, 관리자: bottom sheet 안) */
+  const formFields = (
+    <>
+      <label className={labelClass}>거래처명 *</label>
+      <input
+        className={inputClass}
+        value={form.name}
+        onChange={(e) => {
+          // 영문 상태로 친 글자는 완성된 글자일 때 한글로 (KFC 같은 영문 이름은 그대로)
+          const name = hangulInputValue(e, { syllablesOnly: true });
+          setForm((c) => ({ ...c, name }));
+        }}
+        required
+      />
+      <label className={labelClass}>담당자명 *</label>
+      <input
+        className={inputClass}
+        value={form.contactName}
+        onChange={(e) => {
+          // 담당자 이름: 영문 상태로 친 글자는 바로 한글로
+          const contactName = hangulInputValue(e);
+          setForm((c) => ({ ...c, contactName }));
+        }}
+        required
+      />
+      <label className={labelClass}>연락처 *</label>
+      <input
+        className={inputClass}
+        inputMode="numeric"
+        maxLength={13}
+        value={form.phone}
+        onChange={(e) =>
+          setForm((c) => ({
+            ...c,
+            phone: formatPhoneInput(e.target.value),
+          }))
+        }
+        required
+      />
+      <label className={labelClass}>주소 *</label>
+      <div className="mb-2 flex gap-2">
+        <input
+          className={`${inputClass} mb-0`}
+          value={form.address}
+          readOnly
+          required
+          placeholder="주소 검색 버튼으로 입력해 주세요"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={searchingAddress}
+          onClick={() => void handleAddressSearch()}
+          className="shrink-0"
+        >
+          주소검색
+        </Button>
+      </div>
+      <label className={labelClass}>상세주소</label>
+      <input
+        className={inputClass}
+        value={form.addressDetail}
+        onChange={(e) => {
+          // 완성된 글자일 때만 한글로 (B1, A동 같은 표기는 그대로)
+          const addressDetail = hangulInputValue(e, {
+            syllablesOnly: true,
+          });
+          setForm((c) => ({ ...c, addressDetail }));
+        }}
+        placeholder="동/호수 등"
+      />
+      <label className={labelClass}>이메일</label>
+      <input
+        className={inputClass}
+        type="email"
+        value={form.email}
+        onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))}
+        placeholder="선택"
+      />
+      {error ? <p className="mb-3 text-[13px] text-red-600">{error}</p> : null}
+    </>
+  );
+
   return (
     <div className="space-y-4">
       {sharedCatalog && title ? (
@@ -293,126 +406,97 @@ export function MemberPartnerMng({
               </p>
             ) : null}
           </div>
-          <Button
-            type="button"
-            className="shrink-0"
-            onClick={() =>
-              formOpen && editingId == null ? resetForm() : openCreateForm()
-            }
-          >
-            {formOpen && editingId == null ? "등록 닫기" : "거래처 등록"}
+          <Button type="button" className="shrink-0" onClick={openCreateForm}>
+            거래처 등록
           </Button>
         </div>
       ) : null}
-      {formOpen ? (
+
+      {sharedCatalog ? (
+        <BottomSheet
+          open={sheetOpen}
+          title={editingId != null ? "거래처 수정" : "거래처 등록"}
+          subtitle={editingId != null ? form.name : undefined}
+          onClose={closeSheet}
+          footer={
+            <div className="mx-auto flex max-w-[720px] justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={closeSheet}
+              >
+                취소
+              </Button>
+              <Button type="submit" form={PARTNER_FORM_ID} disabled={saving}>
+                {submitLabel}
+              </Button>
+            </div>
+          }
+        >
+          <form
+            id={PARTNER_FORM_ID}
+            onSubmit={handleSubmit}
+            className="mx-auto max-w-[720px] px-5 pb-6 pt-1"
+          >
+            {formFields}
+          </form>
+        </BottomSheet>
+      ) : (
         <form
+          id={PARTNER_FORM_ID}
           onSubmit={handleSubmit}
           className="rounded-xl border border-[#E2E8F0] bg-white p-4"
         >
           <h4 className="mb-3 text-[15px] font-semibold text-[#1A202C]">
             {editingId != null ? "거래처 수정" : "거래처 등록"}
           </h4>
-          <label className={labelClass}>거래처명 *</label>
-          <input
-            className={inputClass}
-            value={form.name}
-            onChange={(e) => {
-              // 영문 상태로 친 글자는 완성된 글자일 때 한글로 (KFC 같은 영문 이름은 그대로)
-              const name = hangulInputValue(e, { syllablesOnly: true });
-              setForm((c) => ({ ...c, name }));
-            }}
-            required
-          />
-          <label className={labelClass}>담당자명 *</label>
-          <input
-            className={inputClass}
-            value={form.contactName}
-            onChange={(e) => {
-              // 담당자 이름: 영문 상태로 친 글자는 바로 한글로
-              const contactName = hangulInputValue(e);
-              setForm((c) => ({ ...c, contactName }));
-            }}
-            required
-          />
-          <label className={labelClass}>연락처 *</label>
-          <input
-            className={inputClass}
-            inputMode="numeric"
-            maxLength={13}
-            value={form.phone}
-            onChange={(e) =>
-              setForm((c) => ({
-                ...c,
-                phone: formatPhoneInput(e.target.value),
-              }))
-            }
-            required
-          />
-          <label className={labelClass}>주소 *</label>
-          <div className="mb-2 flex gap-2">
-            <input
-              className={`${inputClass} mb-0`}
-              value={form.address}
-              readOnly
-              required
-              placeholder="주소 검색 버튼으로 입력해 주세요"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              disabled={searchingAddress}
-              onClick={() => void handleAddressSearch()}
-              className="shrink-0"
-            >
-              주소검색
-            </Button>
-          </div>
-          <label className={labelClass}>상세주소</label>
-          <input
-            className={inputClass}
-            value={form.addressDetail}
-            onChange={(e) => {
-              // 완성된 글자일 때만 한글로 (B1, A동 같은 표기는 그대로)
-              const addressDetail = hangulInputValue(e, {
-                syllablesOnly: true,
-              });
-              setForm((c) => ({ ...c, addressDetail }));
-            }}
-            placeholder="동/호수 등"
-          />
-          <label className={labelClass}>이메일</label>
-          <input
-            className={inputClass}
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))}
-            placeholder="선택"
-          />
-          {error ? (
-            <p className="mb-3 text-[13px] text-red-600">{error}</p>
-          ) : null}
+          {formFields}
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={saving}>
-              {saving ? "저장 중..." : editingId != null ? "수정 저장" : "등록"}
+              {submitLabel}
             </Button>
-            {editingId != null || sharedCatalog ? (
+            {editingId != null ? (
               <Button type="button" variant="outline" onClick={resetForm}>
                 취소
               </Button>
             ) : null}
           </div>
         </form>
-      ) : null}
+      )}
 
-      <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
-        <h4 className="mb-3 text-[15px] font-semibold text-[#1A202C]">
-          등록된 거래처
-          {sharedCatalog && !loading ? (
-            <span className="ml-2 text-[12px] font-normal text-[#64748B]">
-              총 {total.toLocaleString()}건
-            </span>
+      <div
+        ref={listTopRef}
+        className="scroll-mt-4 rounded-xl border border-[#E2E8F0] bg-white p-4"
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-[15px] font-semibold text-[#1A202C]">
+            등록된 거래처
+            {sharedCatalog && !loading ? (
+              <span className="ml-2 text-[12px] font-normal text-[#64748B]">
+                총 {total.toLocaleString()}건
+              </span>
+            ) : null}
+          </h4>
+          {sharedCatalog ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-[#64748b]">
+                거래처보기
+              </span>
+              <div className="w-[96px]">
+                <Dropdown
+                  aria-label="거래처보기"
+                  options={PAGE_SIZE_OPTIONS}
+                  value={String(pageSize)}
+                  onChange={(value) => {
+                    setPageSize(Number(value));
+                    setPage(1);
+                  }}
+                />
+              </div>
+            </div>
           ) : null}
-        </h4>
+        </div>
         {sharedCatalog ? (
           <input
             className={inputClass}
@@ -428,7 +512,7 @@ export function MemberPartnerMng({
         ) : null}
         {loading ? (
           <p className="text-[13px] text-[#64748B]">불러오는 중...</p>
-        ) : visiblePartners.length === 0 ? (
+        ) : partners.length === 0 ? (
           <p className="text-[13px] text-[#64748B]">
             {sharedCatalog && searchQuery
               ? "검색어가 포함된 거래처가 없습니다."
@@ -436,7 +520,7 @@ export function MemberPartnerMng({
           </p>
         ) : (
           <ul className="divide-y divide-[#E2E8F0]">
-            {visiblePartners.map((row) => (
+            {partners.map((row) => (
               <li
                 key={row.id}
                 className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between"
@@ -485,29 +569,13 @@ export function MemberPartnerMng({
             ))}
           </ul>
         )}
-        {sharedCatalog && total > PAGE_SIZE ? (
-          <div className="mt-3 flex items-center justify-center gap-3 text-[13px] text-[#64748B]">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={loading || page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              이전
-            </Button>
-            <span>
-              {page} / {totalPages}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={loading || page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              다음
-            </Button>
+        {sharedCatalog && total > 0 ? (
+          <div className="mt-4 flex justify-center">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={changePage}
+            />
           </div>
         ) : null}
       </div>
