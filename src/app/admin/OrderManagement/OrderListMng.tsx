@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Building2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -68,6 +69,7 @@ type AdminView =
 type NavPrimaryId =
   | "data"
   | "order"
+  | "partners"
   | "ship"
   | "factory"
   | "inventory"
@@ -106,9 +108,14 @@ const FULL_NAV: NavPrimaryItem[] = [
     view: "주문목록",
     children: [
       { id: "order-greeting", label: "인사장관리", view: "인사장관리" },
-      { id: "order-partners", label: "거래처관리", view: "거래처관리" },
       { id: "order-post", label: "우체국택배 업로드용", view: "우체국택배" },
     ],
+  },
+  {
+    id: "partners",
+    label: "거래처관리",
+    icon: Building2,
+    view: "거래처관리",
   },
   {
     id: "ship",
