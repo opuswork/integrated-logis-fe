@@ -24,6 +24,8 @@ import {
   type LineShipInfo,
 } from "@/lib/order-notes";
 
+import { PartnerSearch } from "./PartnerSearch";
+
 import {
   BRANCH_STORES,
   ProductAddDialog,
@@ -458,6 +460,16 @@ function DeliveryInfoView({
     <div className="jy-wrap jy-large-text">
       <V2Header title="배달 주소" onBack={onBack} />
       <p className="jy-meta">{product}</p>
+      <PartnerSearch
+        id="jy-addr-partner"
+        onSelect={(fill) =>
+          update({
+            address: fill.address,
+            addressDetail: fill.addressDetail,
+            phone: fill.phone,
+          })
+        }
+      />
       <AddressInput
         id="jy-addr"
         label="도로명 · 지번 주소"
@@ -669,6 +681,20 @@ function ParcelInfoView({
             <span className="jy-meta">(명단 파일이 있으면 선택)</span>
           ) : null}
         </h2>
+        <PartnerSearch
+          id="jy-recv-partner"
+          onSelect={(fill) =>
+            setInfo((current) => ({
+              ...current,
+              // 받는 사람 이름이 비어 있으면 거래처명으로 채운다
+              receiverName: current.receiverName.trim() ? current.receiverName : fill.name,
+              receiverAddress: fill.address,
+              receiverAddressDetail: fill.addressDetail,
+              receiverPhone: fill.phone,
+            }))
+          }
+        />
+
         <div className="jy-row">
           <input
             className="jy-input"

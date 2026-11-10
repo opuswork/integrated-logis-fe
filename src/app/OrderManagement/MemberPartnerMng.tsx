@@ -11,10 +11,24 @@ export type PartnerRow = {
   id: number;
   name: string;
   contactName: string;
-  phone: string;
+  phone: string | null;
   address: string;
   email: string | null;
+  source?: string;
+  category?: string | null;
+  subCategory?: string | null;
+  centerName?: string | null;
+  salesRepName?: string | null;
 };
+
+type PartnerPage = {
+  items: PartnerRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+const PAGE_SIZE = 50;
 
 type PartnerForm = {
   name: string;
@@ -62,11 +76,45 @@ export function MemberPartnerMng({
   const [form, setForm] = useState<PartnerForm>(EMPTY_FORM);
   const [searchingAddress, setSearchingAddress] = useState(false);
   const [listFilter, setListFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  // 관리자(공유 목록): 검색어 입력이 멈추면 서버 검색
+  useEffect(() => {
+    if (!sharedCatalog) return;
+    const timer = window.setTimeout(() => {
+      setSearchQuery(listFilter.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [listFilter, sharedCatalog]);
 
   const loadPartners = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
+      if (sharedCatalog) {
+        // 엑셀 입력분까지 1만 건 이상이라 서버에서 페이지 단위로 받는다
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: String(PAGE_SIZE),
+        });
+        if (searchQuery) params.set("search", searchQuery);
+        const res = await apiFetch(`/api/partners?${params.toString()}`);
+        const data = (await res.json()) as PartnerPage | { message?: string };
+        if (!res.ok || !("items" in data) || !Array.isArray(data.items)) {
+          throw new Error(
+            "message" in data && data.message
+              ? String(data.message)
+              : "거래처 목록을 불러오지 못했습니다.",
+          );
+        }
+        setPartners(data.items);
+        setTotal(data.total);
+        return;
+      }
+
       const res = await apiFetch("/api/partners");
       const data = (await res.json()) as PartnerRow[] | { message?: string };
       if (!res.ok || !Array.isArray(data)) {
@@ -77,17 +125,21 @@ export function MemberPartnerMng({
         );
       }
       setPartners(data);
+      setTotal(data.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : "거래처 목록을 불러오지 못했습니다.");
       setPartners([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sharedCatalog, page, searchQuery]);
 
   useEffect(() => {
     void loadPartners();
   }, [loadPartners]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const resetForm = () => {
     setEditingId(null);
@@ -100,7 +152,7 @@ export function MemberPartnerMng({
     setForm({
       name: row.name,
       contactName: row.contactName,
-      phone: formatPhoneInput(row.phone),
+      phone: formatPhoneInput(row.phone ?? ""),
       address: row.address,
       addressDetail: "",
       email: row.email ?? "",
@@ -178,11 +230,8 @@ export function MemberPartnerMng({
     }
   };
 
-  const filterQuery = listFilter.trim().toLowerCase();
-  const visiblePartners =
-    sharedCatalog && filterQuery
-      ? partners.filter((row) => row.name.toLowerCase().includes(filterQuery))
-      : partners;
+  // 관리자 목록은 서버에서 이미 검색·페이징된 결과
+  const visiblePartners = partners;
 
   const handleAddressSearch = async () => {
     setSearchingAddress(true);
@@ -302,6 +351,11 @@ export function MemberPartnerMng({
       <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
         <h4 className="mb-3 text-[15px] font-semibold text-[#1A202C]">
           등록된 거래처
+          {sharedCatalog && !loading ? (
+            <span className="ml-2 text-[12px] font-normal text-[#64748B]">
+              총 {total.toLocaleString()}건
+            </span>
+          ) : null}
         </h4>
         {sharedCatalog ? (
           <input
@@ -310,16 +364,16 @@ export function MemberPartnerMng({
             onChange={(e) =>
               setListFilter(hangulInputValue(e, { syllablesOnly: true }))
             }
-            placeholder="거래처명으로 검색"
+            placeholder="거래처명·담당자·주소·중앙으로 검색"
           />
         ) : null}
         {loading ? (
           <p className="text-[13px] text-[#64748B]">불러오는 중...</p>
-        ) : partners.length === 0 ? (
-          <p className="text-[13px] text-[#64748B]">등록된 거래처가 없습니다.</p>
         ) : visiblePartners.length === 0 ? (
           <p className="text-[13px] text-[#64748B]">
-            검색어가 포함된 거래처가 없습니다.
+            {sharedCatalog && searchQuery
+              ? "검색어가 포함된 거래처가 없습니다."
+              : "등록된 거래처가 없습니다."}
           </p>
         ) : (
           <ul className="divide-y divide-[#E2E8F0]">
@@ -329,9 +383,19 @@ export function MemberPartnerMng({
                 className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between"
               >
                 <div className="min-w-0 text-[13px] text-[#1A202C]">
-                  <p className="font-semibold">{row.name}</p>
+                  <p className="flex flex-wrap items-center gap-1.5 font-semibold">
+                    <span>{row.name}</span>
+                    {row.category || row.subCategory ? (
+                      <span className="rounded bg-[#EDF2F7] px-1.5 py-0.5 text-[10.5px] font-bold text-[#718096]">
+                        {[row.category, row.subCategory]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    ) : null}
+                  </p>
                   <p className="text-[#64748B]">
-                    {row.contactName} · {row.phone}
+                    {row.contactName || "-"} · {row.phone || "-"}
+                    {row.centerName ? ` · 중앙 ${row.centerName}` : ""}
                   </p>
                   <p className="mt-0.5 break-words text-[#64748B]">
                     {row.address}
@@ -362,6 +426,31 @@ export function MemberPartnerMng({
             ))}
           </ul>
         )}
+        {sharedCatalog && total > PAGE_SIZE ? (
+          <div className="mt-3 flex items-center justify-center gap-3 text-[13px] text-[#64748B]">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              이전
+            </Button>
+            <span>
+              {page} / {totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              다음
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
