@@ -471,17 +471,11 @@ export function OrderListMng() {
 
     if (activeMenu === "거래처관리") {
       return (
-        <div className="space-y-3">
-          <div>
-            <h3 className="text-lg font-semibold text-ink min-[1040px]:text-[22px]">
-              거래처관리
-            </h3>
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              자주 쓰는 거래처를 등록하면 제품주문서에 자동 입력됩니다.
-            </p>
-          </div>
-          <MemberPartnerMng sharedCatalog />
-        </div>
+        <MemberPartnerMng
+          sharedCatalog
+          title="거래처관리"
+          description="자주 쓰는 거래처를 등록하면 제품주문서에 자동 입력됩니다."
+        />
       );
     }
 
