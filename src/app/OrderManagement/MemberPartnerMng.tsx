@@ -65,13 +65,23 @@ const inputClass =
 
 export function MemberPartnerMng({
   sharedCatalog = false,
+  title,
+  description,
 }: {
   sharedCatalog?: boolean;
+  /** 관리자 화면: 제목 줄 (오른쪽에 거래처 등록 버튼) */
+  title?: string;
+  description?: string;
 } = {}) {
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** 등록·수정 폼 오류 */
   const [error, setError] = useState("");
+  /** 목록 불러오기·삭제 오류 */
+  const [listError, setListError] = useState("");
+  // 관리자 화면은 목록을 먼저 보여주고, 등록 폼은 버튼으로 연다
+  const [formOpen, setFormOpen] = useState(!sharedCatalog);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<PartnerForm>(EMPTY_FORM);
   const [searchingAddress, setSearchingAddress] = useState(false);
@@ -92,7 +102,7 @@ export function MemberPartnerMng({
 
   const loadPartners = useCallback(async () => {
     setLoading(true);
-    setError("");
+    setListError("");
     try {
       if (sharedCatalog) {
         // 엑셀 입력분까지 1만 건 이상이라 서버에서 페이지 단위로 받는다
@@ -127,7 +137,11 @@ export function MemberPartnerMng({
       setPartners(data);
       setTotal(data.length);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "거래처 목록을 불러오지 못했습니다.");
+      setListError(
+        err instanceof Error
+          ? err.message
+          : "거래처 목록을 불러오지 못했습니다.",
+      );
       setPartners([]);
       setTotal(0);
     } finally {
@@ -145,9 +159,19 @@ export function MemberPartnerMng({
     setEditingId(null);
     setForm(EMPTY_FORM);
     setError("");
+    if (sharedCatalog) setFormOpen(false);
+  };
+
+  const openCreateForm = () => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setError("");
+    setFormOpen(true);
   };
 
   const startEdit = (row: PartnerRow) => {
+    setFormOpen(true);
+    if (sharedCatalog) window.scrollTo({ top: 0, behavior: "smooth" });
     setEditingId(row.id);
     setForm({
       name: row.name,
@@ -165,7 +189,10 @@ export function MemberPartnerMng({
     if (!form.contactName.trim()) return "담당자명을 입력해 주세요.";
     if (!form.phone.trim()) return "연락처를 입력해 주세요.";
     if (!form.address.trim()) return "주소를 입력해 주세요.";
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+    if (
+      form.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+    ) {
       return "올바른 이메일 형식이 아닙니다.";
     }
     return null;
@@ -216,7 +243,7 @@ export function MemberPartnerMng({
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("이 거래처를 삭제하시겠습니까?")) return;
-    setError("");
+    setListError("");
     try {
       const res = await apiFetch(`/api/partners/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -226,7 +253,7 @@ export function MemberPartnerMng({
       if (editingId === id) resetForm();
       await loadPartners();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "삭제에 실패했습니다.");
+      setListError(err instanceof Error ? err.message : "삭제에 실패했습니다.");
     }
   };
 
@@ -244,7 +271,9 @@ export function MemberPartnerMng({
         }));
       });
     } catch {
-      window.alert("주소 검색을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      window.alert(
+        "주소 검색을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      );
     } finally {
       setSearchingAddress(false);
     }
@@ -252,101 +281,128 @@ export function MemberPartnerMng({
 
   return (
     <div className="space-y-4">
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-xl border border-[#E2E8F0] bg-white p-4"
-      >
-        <h4 className="mb-3 text-[15px] font-semibold text-[#1A202C]">
-          {editingId != null ? "거래처 수정" : "거래처 등록"}
-        </h4>
-        <label className={labelClass}>거래처명 *</label>
-        <input
-          className={inputClass}
-          value={form.name}
-          onChange={(e) => {
-            // 영문 상태로 친 글자는 완성된 글자일 때 한글로 (KFC 같은 영문 이름은 그대로)
-            const name = hangulInputValue(e, { syllablesOnly: true });
-            setForm((c) => ({ ...c, name }));
-          }}
-          required
-        />
-        <label className={labelClass}>담당자명 *</label>
-        <input
-          className={inputClass}
-          value={form.contactName}
-          onChange={(e) => {
-            // 담당자 이름: 영문 상태로 친 글자는 바로 한글로
-            const contactName = hangulInputValue(e);
-            setForm((c) => ({ ...c, contactName }));
-          }}
-          required
-        />
-        <label className={labelClass}>연락처 *</label>
-        <input
-          className={inputClass}
-          inputMode="numeric"
-          maxLength={13}
-          value={form.phone}
-          onChange={(e) =>
-            setForm((c) => ({
-              ...c,
-              phone: formatPhoneInput(e.target.value),
-            }))
-          }
-          required
-        />
-        <label className={labelClass}>주소 *</label>
-        <div className="mb-2 flex gap-2">
-          <input
-            className={`${inputClass} mb-0`}
-            value={form.address}
-            readOnly
-            required
-            placeholder="주소 검색 버튼으로 입력해 주세요"
-          />
+      {sharedCatalog && title ? (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-ink min-[1040px]:text-[22px]">
+              {title}
+            </h3>
+            {description ? (
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
+          </div>
           <Button
             type="button"
-            variant="outline"
-            disabled={searchingAddress}
-            onClick={() => void handleAddressSearch()}
             className="shrink-0"
+            onClick={() =>
+              formOpen && editingId == null ? resetForm() : openCreateForm()
+            }
           >
-            주소검색
+            {formOpen && editingId == null ? "등록 닫기" : "거래처 등록"}
           </Button>
         </div>
-        <label className={labelClass}>상세주소</label>
-        <input
-          className={inputClass}
-          value={form.addressDetail}
-          onChange={(e) => {
-            // 완성된 글자일 때만 한글로 (B1, A동 같은 표기는 그대로)
-            const addressDetail = hangulInputValue(e, { syllablesOnly: true });
-            setForm((c) => ({ ...c, addressDetail }));
-          }}
-          placeholder="동/호수 등"
-        />
-        <label className={labelClass}>이메일</label>
-        <input
-          className={inputClass}
-          type="email"
-          value={form.email}
-          onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))}
-          placeholder="선택"
-        />
-        {error ? (
-          <p className="mb-3 text-[13px] text-red-600">{error}</p>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={saving}>
-            {saving ? "저장 중..." : editingId != null ? "수정 저장" : "등록"}
-          </Button>
-          {editingId != null ? (
-            <Button type="button" variant="outline" onClick={resetForm}>
-              취소
+      ) : null}
+      {formOpen ? (
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-xl border border-[#E2E8F0] bg-white p-4"
+        >
+          <h4 className="mb-3 text-[15px] font-semibold text-[#1A202C]">
+            {editingId != null ? "거래처 수정" : "거래처 등록"}
+          </h4>
+          <label className={labelClass}>거래처명 *</label>
+          <input
+            className={inputClass}
+            value={form.name}
+            onChange={(e) => {
+              // 영문 상태로 친 글자는 완성된 글자일 때 한글로 (KFC 같은 영문 이름은 그대로)
+              const name = hangulInputValue(e, { syllablesOnly: true });
+              setForm((c) => ({ ...c, name }));
+            }}
+            required
+          />
+          <label className={labelClass}>담당자명 *</label>
+          <input
+            className={inputClass}
+            value={form.contactName}
+            onChange={(e) => {
+              // 담당자 이름: 영문 상태로 친 글자는 바로 한글로
+              const contactName = hangulInputValue(e);
+              setForm((c) => ({ ...c, contactName }));
+            }}
+            required
+          />
+          <label className={labelClass}>연락처 *</label>
+          <input
+            className={inputClass}
+            inputMode="numeric"
+            maxLength={13}
+            value={form.phone}
+            onChange={(e) =>
+              setForm((c) => ({
+                ...c,
+                phone: formatPhoneInput(e.target.value),
+              }))
+            }
+            required
+          />
+          <label className={labelClass}>주소 *</label>
+          <div className="mb-2 flex gap-2">
+            <input
+              className={`${inputClass} mb-0`}
+              value={form.address}
+              readOnly
+              required
+              placeholder="주소 검색 버튼으로 입력해 주세요"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={searchingAddress}
+              onClick={() => void handleAddressSearch()}
+              className="shrink-0"
+            >
+              주소검색
             </Button>
+          </div>
+          <label className={labelClass}>상세주소</label>
+          <input
+            className={inputClass}
+            value={form.addressDetail}
+            onChange={(e) => {
+              // 완성된 글자일 때만 한글로 (B1, A동 같은 표기는 그대로)
+              const addressDetail = hangulInputValue(e, {
+                syllablesOnly: true,
+              });
+              setForm((c) => ({ ...c, addressDetail }));
+            }}
+            placeholder="동/호수 등"
+          />
+          <label className={labelClass}>이메일</label>
+          <input
+            className={inputClass}
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))}
+            placeholder="선택"
+          />
+          {error ? (
+            <p className="mb-3 text-[13px] text-red-600">{error}</p>
           ) : null}
-        </div>
-      </form>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={saving}>
+              {saving ? "저장 중..." : editingId != null ? "수정 저장" : "등록"}
+            </Button>
+            {editingId != null || sharedCatalog ? (
+              <Button type="button" variant="outline" onClick={resetForm}>
+                취소
+              </Button>
+            ) : null}
+          </div>
+        </form>
+      ) : null}
 
       <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
         <h4 className="mb-3 text-[15px] font-semibold text-[#1A202C]">
@@ -366,6 +422,9 @@ export function MemberPartnerMng({
             }
             placeholder="거래처명·담당자·주소·중앙으로 검색"
           />
+        ) : null}
+        {listError ? (
+          <p className="mb-3 text-[13px] text-red-600">{listError}</p>
         ) : null}
         {loading ? (
           <p className="text-[13px] text-[#64748B]">불러오는 중...</p>
