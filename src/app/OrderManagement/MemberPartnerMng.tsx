@@ -30,7 +30,11 @@ export type PartnerRow = {
   source?: string;
   category?: string | null;
   subCategory?: string | null;
+  /** 고객사 구분 (은행(금융) 등) */
+  customerType?: string | null;
   centerName?: string | null;
+  /** 중서남부 */
+  regionGroup?: string | null;
   salesRepName?: string | null;
 };
 
@@ -68,11 +72,31 @@ const EMPTY_FORM: PartnerForm = {
   email: "",
 };
 
+/** 지역번호 길이: 02 → 2, 050x 안심번호 → 4, 그 밖의 0xx → 3, 15xx 대표번호 → 0 */
+function phoneAreaLength(digits: string) {
+  if (digits.startsWith("02")) return 2;
+  if (/^050\d/.test(digits)) return 4;
+  if (/^1[5-9]/.test(digits)) return 0;
+  return 3;
+}
+
+/** 유선(02·0xx·050x)·대표번호(15xx)·휴대폰 번호에 알맞게 하이픈을 넣는다 */
 function formatPhoneInput(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  const area = phoneAreaLength(value.replace(/\D/g, ""));
+  const digits = value.replace(/\D/g, "").slice(0, area === 0 ? 8 : area + 8);
+  if (area === 0) {
+    // 1588-0000
+    return digits.length <= 4
+      ? digits
+      : `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  }
+  const head = digits.slice(0, area);
+  const rest = digits.slice(area);
+  if (!rest) return head;
+  if (rest.length <= 3) return `${head}-${rest}`;
+  // 나머지 7자리 → 3-4, 8자리 → 4-4
+  const mid = rest.length <= 7 ? 3 : 4;
+  return `${head}-${rest.slice(0, mid)}-${rest.slice(mid)}`;
 }
 
 function joinAddress(address: string, detail: string) {
