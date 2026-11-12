@@ -3,11 +3,15 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
 } from "react";
 
+import { Image as ImageIcon, Upload } from "lucide-react";
+
+import { PartnerExcelUploadDialog } from "@/app/admin/OrderManagement/PartnerExcelUploadDialog";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -22,11 +26,17 @@ export type PartnerRow = {
   id: number;
   name: string;
   contactName: string;
+  /** 유선전화 */
   phone: string | null;
+  /** 휴대폰 */
+  mobile?: string | null;
   address: string;
   /** 상세주소 (층·호수·건물명) */
   addressDetail?: string | null;
   email: string | null;
+  /** 거래처 증거자료 (명함·계약서 이미지) */
+  evidenceImageUrl?: string | null;
+  evidenceImageName?: string | null;
   source?: string;
   category?: string | null;
   subCategory?: string | null;
@@ -56,7 +66,13 @@ const PARTNER_FORM_ID = "partner-form";
 
 type PartnerForm = {
   name: string;
+  category: string;
+  subCategory: string;
+  centerName: string;
   contactName: string;
+  /** 휴대폰 */
+  mobile: string;
+  /** 유선전화 */
   phone: string;
   address: string;
   addressDetail: string;
@@ -65,12 +81,38 @@ type PartnerForm = {
 
 const EMPTY_FORM: PartnerForm = {
   name: "",
+  category: "",
+  subCategory: "",
+  centerName: "",
   contactName: "",
+  mobile: "",
   phone: "",
   address: "",
   addressDetail: "",
   email: "",
 };
+
+type PartnerOptions = {
+  categories: string[];
+  subCategories: string[];
+  centers: string[];
+};
+
+const EVIDENCE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif";
+const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** 휴대폰: 010-1234-5678 */
+function formatMobileInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  const mid = digits.length === 10 ? 3 : 4;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 3 + mid)}-${digits.slice(3 + mid)}`;
+}
+
+function isMobile(value: string) {
+  return /^01[016789]\d{7,8}$/.test(value.replace(/\D/g, ""));
+}
 
 /** 지역번호 길이: 02 → 2, 050x 안심번호 → 4, 그 밖의 0xx → 3, 15xx 대표번호 → 0 */
 function phoneAreaLength(digits: string) {
@@ -101,6 +143,43 @@ function formatPhoneInput(value: string) {
 
 function joinAddress(address: string, detail: string) {
   return [address.trim(), detail.trim()].filter(Boolean).join(" ");
+}
+
+/** 연락처 칸: 휴대폰·유선전화를 두 줄로 (예전 행은 휴대폰이 유선 칸에 있을 수 있다) */
+function ContactLines({ row }: { row: PartnerRow }) {
+  if (!row.mobile && !row.phone) return <>-</>;
+  return (
+    <div className="space-y-0.5 leading-tight">
+      {row.mobile ? <p>{row.mobile}</p> : null}
+      {row.phone ? <p className="text-[#64748B]">{row.phone}</p> : null}
+    </div>
+  );
+}
+
+/** 증거자료 이미지 링크 (새 탭) */
+function EvidenceLink({
+  row,
+  withLabel = false,
+}: {
+  row: PartnerRow;
+  withLabel?: boolean;
+}) {
+  if (!row.evidenceImageUrl) {
+    return <span className="text-[#CBD5E1]">-</span>;
+  }
+  return (
+    <a
+      href={row.evidenceImageUrl}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(event) => event.stopPropagation()}
+      title={row.evidenceImageName ?? "증거자료 보기"}
+      className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#3182CE] hover:underline"
+    >
+      <ImageIcon className="size-4" strokeWidth={1.8} />
+      {withLabel ? "증거자료 보기" : <span className="sr-only">증거자료 보기</span>}
+    </a>
+  );
 }
 
 const labelClass = "mb-[5px] block text-[12px] font-bold text-[#64748B]";
@@ -136,6 +215,55 @@ export function MemberPartnerMng({
   const [total, setTotal] = useState(0);
   const listTopRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  /** 구분·구분2·중앙 추천값 */
+  const [options, setOptions] = useState<PartnerOptions>({
+    categories: [],
+    subCategories: [],
+    centers: [],
+  });
+  /** 증거자료: 저장된 이미지, 새로 고른 파일, 지우기 */
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [evidenceRemoved, setEvidenceRemoved] = useState(false);
+  const evidenceInputRef = useRef<HTMLInputElement>(null);
+  /** 관리자: 거래처 일괄 등록 다이얼로그 */
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkNotice, setBulkNotice] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/partners/options");
+        if (!res.ok) return;
+        const data = (await res.json()) as PartnerOptions;
+        if (!cancelled) setOptions(data);
+      } catch {
+        /* 추천값이 없어도 직접 입력할 수 있다 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 새로 고른 이미지 미리보기 주소 (바뀌거나 화면을 떠나면 정리)
+  const evidencePreview = useMemo(
+    () => (evidenceFile ? URL.createObjectURL(evidenceFile) : null),
+    [evidenceFile],
+  );
+  useEffect(
+    () => () => {
+      if (evidencePreview) URL.revokeObjectURL(evidencePreview);
+    },
+    [evidencePreview],
+  );
+
+  const resetEvidence = (url: string | null = null) => {
+    setEvidenceUrl(url);
+    setEvidenceFile(null);
+    setEvidenceRemoved(false);
+  };
 
   // 관리자(공유 목록): 검색어 입력이 멈추면 서버 검색
   useEffect(() => {
@@ -214,6 +342,7 @@ export function MemberPartnerMng({
   const resetForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    resetEvidence();
     setError("");
     setSheetOpen(false);
   };
@@ -226,20 +355,30 @@ export function MemberPartnerMng({
   const openCreateForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    resetEvidence();
     setError("");
     setSheetOpen(true);
   };
 
   const startEdit = (row: PartnerRow) => {
     setEditingId(row.id);
+    // 예전 행은 휴대폰이 유선전화 칸에 있을 수 있다
+    const phoneIsMobile = !row.mobile && isMobile(row.phone ?? "");
     setForm({
       name: row.name,
+      category: row.category ?? "",
+      subCategory: row.subCategory ?? "",
+      centerName: row.centerName ?? "",
       contactName: row.contactName,
-      phone: formatPhoneInput(row.phone ?? ""),
+      mobile: formatMobileInput(
+        (phoneIsMobile ? row.phone : row.mobile) ?? "",
+      ),
+      phone: phoneIsMobile ? "" : formatPhoneInput(row.phone ?? ""),
       address: row.address,
       addressDetail: row.addressDetail ?? "",
       email: row.email ?? "",
     });
+    resetEvidence(row.evidenceImageUrl ?? null);
     setError("");
     if (sharedCatalog) setSheetOpen(true);
   };
@@ -252,7 +391,15 @@ export function MemberPartnerMng({
   const validate = (): string | null => {
     if (!form.name.trim()) return "거래처명을 입력해 주세요.";
     if (!form.contactName.trim()) return "담당자명을 입력해 주세요.";
-    if (!form.phone.trim()) return "연락처를 입력해 주세요.";
+    if (!form.mobile.trim() && !form.phone.trim()) {
+      return "휴대폰 또는 유선전화를 입력해 주세요.";
+    }
+    if (form.mobile.trim() && !isMobile(form.mobile)) {
+      return "휴대폰은 010-0000-0000 형식으로 입력해 주세요.";
+    }
+    if (form.phone.trim() && isMobile(form.phone)) {
+      return "휴대폰 번호는 휴대폰 칸에 입력해 주세요.";
+    }
     if (!form.address.trim()) return "주소를 입력해 주세요.";
     if (
       form.email.trim() &&
@@ -275,11 +422,23 @@ export function MemberPartnerMng({
     setError("");
     const payload = {
       name: form.name.trim(),
+      category: form.category.trim() || null,
+      subCategory: form.subCategory.trim() || null,
+      centerName: form.centerName.trim() || null,
       contactName: form.contactName.trim(),
-      phone: form.phone.trim(),
+      mobile: form.mobile.trim() || null,
+      phone: form.phone.trim() || null,
       address: form.address.trim(),
       addressDetail: form.addressDetail.trim() || null,
       email: form.email.trim() || null,
+    };
+    const messageOf = (data: unknown, fallback: string) => {
+      if (data && typeof data === "object" && "message" in data) {
+        const message = (data as { message?: string | string[] }).message;
+        if (Array.isArray(message)) return message.join(" ");
+        if (message) return String(message);
+      }
+      return fallback;
     };
 
     try {
@@ -291,12 +450,33 @@ export function MemberPartnerMng({
         },
       );
       const data = (await res.json()) as PartnerRow | { message?: string };
-      if (!res.ok) {
-        throw new Error(
-          typeof data === "object" && data && "message" in data && data.message
-            ? String(data.message)
-            : "저장에 실패했습니다.",
-        );
+      if (!res.ok) throw new Error(messageOf(data, "저장에 실패했습니다."));
+      const savedId = editingId ?? (data as PartnerRow).id;
+
+      // 증거자료: 거래처를 저장한 다음 올리거나 지운다
+      if (evidenceFile) {
+        const formData = new FormData();
+        formData.append("image", evidenceFile);
+        const up = await apiFetch(`/api/partners/${savedId}/evidence`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!up.ok) {
+          // 거래처는 저장됐으니 수정 화면으로 이어서 다시 올릴 수 있게 한다
+          setEditingId(savedId);
+          setEvidenceUrl(null);
+          await loadPartners();
+          throw new Error(
+            `거래처는 저장했지만 증거자료를 올리지 못했습니다. ${messageOf(
+              await up.json().catch(() => null),
+              "",
+            )}`.trim(),
+          );
+        }
+      } else if (evidenceRemoved && editingId != null) {
+        await apiFetch(`/api/partners/${savedId}/evidence`, {
+          method: "DELETE",
+        });
       }
       resetForm();
       await loadPartners();
@@ -413,14 +593,20 @@ export function MemberPartnerMng({
     {
       key: "phone",
       header: "연락처",
-      className: "w-[120px]",
-      render: (row) => row.phone || "-",
+      className: "w-[124px]",
+      render: (row) => <ContactLines row={row} />,
     },
     {
       key: "address",
       header: "주소",
       className: "break-words",
       render: (row) => joinAddress(row.address, row.addressDetail ?? "") || "-",
+    },
+    {
+      key: "evidence",
+      header: "증거자료",
+      className: "w-[72px]",
+      render: (row) => <EvidenceLink row={row} />,
     },
     {
       key: "action",
@@ -443,13 +629,24 @@ export function MemberPartnerMng({
           ) : null}
         </p>
         <p className="text-[#64748B]">
-          {row.contactName || "-"} · {row.phone || "-"}
-          {row.centerName ? ` · 중앙 ${row.centerName}` : ""}
+          {[
+            row.contactName || "-",
+            row.mobile ? `휴대폰 ${row.mobile}` : null,
+            row.phone ? `유선 ${row.phone}` : null,
+            row.centerName ? `중앙 ${row.centerName}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
         <p className="mt-0.5 break-words text-[#64748B]">
           {joinAddress(row.address, row.addressDetail ?? "")}
         </p>
         {row.email ? <p className="text-[#64748B]">{row.email}</p> : null}
+        {row.evidenceImageUrl ? (
+          <div className="mt-1">
+            <EvidenceLink row={row} withLabel />
+          </div>
+        ) : null}
       </div>
       {actionButtons(row)}
     </div>
@@ -469,6 +666,60 @@ export function MemberPartnerMng({
         }}
         required
       />
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={labelClass}>구분</label>
+          <input
+            className={inputClass}
+            list="partner-category-options"
+            value={form.category}
+            onChange={(e) => {
+              const category = hangulInputValue(e, { syllablesOnly: true });
+              setForm((c) => ({ ...c, category }));
+            }}
+            placeholder="예: 은행"
+          />
+        </div>
+        <div>
+          <label className={labelClass}>구분2</label>
+          <input
+            className={inputClass}
+            list="partner-subcategory-options"
+            value={form.subCategory}
+            onChange={(e) => {
+              const subCategory = hangulInputValue(e, { syllablesOnly: true });
+              setForm((c) => ({ ...c, subCategory }));
+            }}
+            placeholder="예: NH농협은행"
+          />
+        </div>
+      </div>
+      <label className={labelClass}>중앙</label>
+      <input
+        className={inputClass}
+        list="partner-center-options"
+        value={form.centerName}
+        onChange={(e) => {
+          const centerName = hangulInputValue(e, { syllablesOnly: true });
+          setForm((c) => ({ ...c, centerName }));
+        }}
+        placeholder="예: 서울5"
+      />
+      <datalist id="partner-category-options">
+        {options.categories.map((value) => (
+          <option key={value} value={value} />
+        ))}
+      </datalist>
+      <datalist id="partner-subcategory-options">
+        {options.subCategories.map((value) => (
+          <option key={value} value={value} />
+        ))}
+      </datalist>
+      <datalist id="partner-center-options">
+        {options.centers.map((value) => (
+          <option key={value} value={value} />
+        ))}
+      </datalist>
       <label className={labelClass}>담당자명 *</label>
       <input
         className={inputClass}
@@ -480,20 +731,45 @@ export function MemberPartnerMng({
         }}
         required
       />
-      <label className={labelClass}>연락처 *</label>
-      <input
-        className={inputClass}
-        inputMode="numeric"
-        maxLength={13}
-        value={form.phone}
-        onChange={(e) =>
-          setForm((c) => ({
-            ...c,
-            phone: formatPhoneInput(e.target.value),
-          }))
-        }
-        required
-      />
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={labelClass}>휴대폰</label>
+          <input
+            className={inputClass}
+            type="tel"
+            inputMode="numeric"
+            maxLength={13}
+            value={form.mobile}
+            onChange={(e) =>
+              setForm((c) => ({
+                ...c,
+                mobile: formatMobileInput(e.target.value),
+              }))
+            }
+            placeholder="010-0000-0000"
+          />
+        </div>
+        <div>
+          <label className={labelClass}>유선전화</label>
+          <input
+            className={inputClass}
+            type="tel"
+            inputMode="numeric"
+            maxLength={13}
+            value={form.phone}
+            onChange={(e) =>
+              setForm((c) => ({
+                ...c,
+                phone: formatPhoneInput(e.target.value),
+              }))
+            }
+            placeholder="02-000-0000"
+          />
+        </div>
+      </div>
+      <p className="-mt-2 mb-3 text-[11.5px] text-[#94A3B8]">
+        휴대폰·유선전화 중 하나는 꼭 입력해 주세요.
+      </p>
       <label className={labelClass}>주소 *</label>
       <div className="mb-2 flex gap-2">
         <input
@@ -534,6 +810,71 @@ export function MemberPartnerMng({
         onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))}
         placeholder="선택"
       />
+      <label className={labelClass}>거래처 증거자료 (명함·계약서 이미지)</label>
+      <div className="mb-3 flex items-center gap-3">
+        {evidencePreview || (evidenceUrl && !evidenceRemoved) ? (
+          <a
+            href={evidencePreview ?? evidenceUrl ?? undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="block shrink-0"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- Blob·로컬 업로드 이미지 */}
+            <img
+              src={evidencePreview ?? evidenceUrl ?? undefined}
+              alt="거래처 증거자료"
+              className="size-16 rounded-md border border-[#E2E8F0] object-cover"
+            />
+          </a>
+        ) : (
+          <div className="flex size-16 shrink-0 items-center justify-center rounded-md border border-dashed border-[#CBD5E1] text-[#CBD5E1]">
+            <ImageIcon className="size-5" strokeWidth={1.5} />
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => evidenceInputRef.current?.click()}
+          >
+            {evidencePreview || (evidenceUrl && !evidenceRemoved)
+              ? "이미지 바꾸기"
+              : "이미지 선택"}
+          </Button>
+          {evidencePreview || (evidenceUrl && !evidenceRemoved) ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEvidenceFile(null);
+                setEvidenceRemoved(true);
+              }}
+            >
+              지우기
+            </Button>
+          ) : null}
+        </div>
+        <input
+          ref={evidenceInputRef}
+          type="file"
+          accept={EVIDENCE_ACCEPT}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            if (file.size > EVIDENCE_MAX_BYTES) {
+              setError("증거자료 이미지는 10MB 이하로 올려 주세요.");
+              return;
+            }
+            setError("");
+            setEvidenceFile(file);
+            setEvidenceRemoved(false);
+          }}
+        />
+      </div>
       {error ? <p className="mb-3 text-[13px] text-red-600">{error}</p> : null}
     </>
   );
@@ -552,10 +893,39 @@ export function MemberPartnerMng({
               </p>
             ) : null}
           </div>
-          <Button type="button" className="shrink-0" onClick={openCreateForm}>
-            거래처 등록
-          </Button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Button type="button" onClick={openCreateForm}>
+              거래처 등록
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setBulkNotice("");
+                setBulkOpen(true);
+              }}
+            >
+              <Upload className="size-3.5" strokeWidth={2} />
+              거래처 일괄 등록
+            </Button>
+          </div>
         </div>
+      ) : null}
+
+      {sharedCatalog ? (
+        <PartnerExcelUploadDialog
+          open={bulkOpen}
+          onClose={() => setBulkOpen(false)}
+          onUploaded={(saved) => {
+            setBulkNotice(`거래처 ${saved.toLocaleString()}건을 일괄 등록했습니다.`);
+            void loadPartners();
+          }}
+        />
+      ) : null}
+      {bulkNotice ? (
+        <p className="rounded-lg border border-[#C6F6D5] bg-[#F0FFF4] px-3.5 py-2.5 text-[13px] text-[#2F855A]">
+          {bulkNotice}
+        </p>
       ) : null}
 
       {sharedCatalog ? (
@@ -694,7 +1064,7 @@ export function MemberPartnerMng({
             {loading ? (
               <TableSkeleton
                 rows={Math.min(pageSize, 12)}
-                columns={7}
+                columns={9}
                 className="border-0"
               />
             ) : (

@@ -48,3 +48,4 @@ storybook-static
 /public/assets/voice_recordings/*
 !/public/assets/voice_recordings/.gitkeep
 /public/assets/order_attachments/*
+/public/assets/partner_evidence/*
