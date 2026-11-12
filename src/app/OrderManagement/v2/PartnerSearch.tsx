@@ -8,7 +8,10 @@ import { apiFetch } from "@/lib/api";
 export type PartnerHit = {
   id: number;
   name: string;
+  /** 유선전화 */
   phone: string | null;
+  /** 휴대폰 */
+  mobile?: string | null;
   address: string;
   addressDetail?: string | null;
   category?: string | null;
@@ -110,7 +113,8 @@ export function PartnerSearch({
       name: hit.name,
       address,
       addressDetail,
-      phone: pickPartnerPhone(hit.phone),
+      // 휴대폰이 있으면 휴대폰, 없으면 유선전화
+      phone: pickPartnerPhone(hit.mobile || hit.phone),
     });
     setPicked(hit.name);
     setQuery(hit.name);
@@ -165,7 +169,9 @@ export function PartnerSearch({
                 >
                   <span className="jy-partner-name">{hit.name}</span>
                   <span className="jy-partner-sub">
-                    {[hit.address, hit.addressDetail, hit.phone].filter(Boolean).join(" · ")}
+                    {[hit.address, hit.addressDetail, hit.mobile || hit.phone]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 </button>
               </li>
